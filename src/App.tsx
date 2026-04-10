@@ -11,14 +11,24 @@ import LoginPage from "@/pages/auth/LoginPage";
 import OnboardingPage from "@/pages/auth/OnboardingPage";
 import DashboardPage from "@/pages/dashboard/DashboardPage";
 import RoomsPage from "@/pages/rooms/RoomsPage";
+import GuestsPage from "@/pages/guests/GuestsPage";
+import ReservationsPage from "@/pages/reservations/ReservationsPage";
+import CheckInOutPage from "@/pages/checkinout/CheckInOutPage";
+import SiestesPage from "@/pages/siestes/SiestesPage";
+import MainCourantePage from "@/pages/maincourante/MainCourantePage";
+import RestaurantPage from "@/pages/restaurant/RestaurantPage";
+import KitchenDisplayPage from "@/pages/restaurant/KitchenDisplayPage";
+import InventoryPage from "@/pages/inventory/InventoryPage";
+import BillingPage from "@/pages/billing/BillingPage";
+import CashExpensesPage from "@/pages/cashexpenses/CashExpensesPage";
+import HousekeepingPage from "@/pages/housekeeping/HousekeepingPage";
+import ReportsPage from "@/pages/reports/ReportsPage";
+import FeedbackPage from "@/pages/feedback/FeedbackPage";
+import QRCodesPage from "@/pages/qrcodes/QRCodesPage";
+import SettingsPage from "@/pages/settings/SettingsPage";
+import AuditLogPage from "@/pages/audit/AuditLogPage";
 import AccessDeniedPage from "@/pages/AccessDeniedPage";
 import NotFound from "@/pages/NotFound";
-import {
-  GuestsPage, ReservationsPage, CheckInOutPage, SiestesPage,
-  MainCourantePage, RestaurantPage, KitchenDisplayPage, InventoryPage,
-  BillingPage, CashExpensesPage, HousekeepingPage, ReportsPage,
-  FeedbackPage, QRCodesPage, SettingsPage, AuditLogPage,
-} from "@/pages/PlaceholderPages";
 
 const queryClient = new QueryClient();
 
