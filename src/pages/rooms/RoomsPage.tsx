@@ -17,18 +17,6 @@ import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { supabase } from '@/integrations/supabase/client';
 import { formatFCFA } from '@/utils/formatters';
 import { toast } from 'sonner';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
-
-const roomSchema = z.object({
-  room_number: z.string().min(1, 'Numéro requis').max(20),
-  floor: z.coerce.number().min(0).max(100),
-  capacity: z.coerce.number().min(1).max(50),
-  price_per_night: z.coerce.number().min(0),
-  status: z.string(),
-  description: z.string().max(500).optional(),
-});
 
 const RoomsPage = () => {
   useRoleGuard(['admin','manager','receptionist']);
@@ -38,11 +26,7 @@ const RoomsPage = () => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editRoom, setEditRoom] = useState<any>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
-
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm({
-    resolver: zodResolver(roomSchema),
-    defaultValues: { floor: 1, capacity: 2, price_per_night: 0, status: 'available' },
-  });
+  const [form, setForm] = useState({ room_number: '', floor: 1, capacity: 2, price_per_night: 0, status: 'available', description: '' });
 
   const { data: rooms, isLoading } = useQuery({
     queryKey: ['rooms', hotel?.id],
@@ -54,20 +38,18 @@ const RoomsPage = () => {
   });
 
   const saveMutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async () => {
       if (editRoom) {
-        const { error } = await supabase.from('rooms').update(data).eq('id', editRoom.id);
+        const { error } = await supabase.from('rooms').update(form as any).eq('id', editRoom.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('rooms').insert({ ...data, hotel_id: hotel!.id } as any);
+        const { error } = await supabase.from('rooms').insert({ ...form, hotel_id: hotel!.id } as any);
         if (error) throw error;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
       setDialogOpen(false);
-      setEditRoom(null);
-      reset();
       toast.success(editRoom ? 'Chambre modifiée' : 'Chambre ajoutée');
     },
     onError: (e: any) => toast.error(e.message),
@@ -88,23 +70,21 @@ const RoomsPage = () => {
 
   const openEdit = (room: any) => {
     setEditRoom(room);
-    reset({ room_number: room.room_number, floor: room.floor, capacity: room.capacity, price_per_night: room.price_per_night, status: room.status, description: room.description || '' });
+    setForm({ room_number: room.room_number, floor: room.floor, capacity: room.capacity, price_per_night: room.price_per_night, status: room.status, description: room.description || '' });
     setDialogOpen(true);
   };
 
   const openAdd = () => {
     setEditRoom(null);
-    reset({ room_number: '', floor: 1, capacity: 2, price_per_night: 0, status: 'available', description: '' });
+    setForm({ room_number: '', floor: 1, capacity: 2, price_per_night: 0, status: 'available', description: '' });
     setDialogOpen(true);
   };
 
   const filtered = statusFilter === 'all' ? rooms : rooms?.filter((r: any) => r.status === statusFilter);
 
   const statusColors: Record<string, string> = {
-    available: 'border-l-success',
-    occupied: 'border-l-destructive',
-    housekeeping: 'border-l-warning',
-    maintenance: 'border-l-info',
+    available: 'border-l-success', occupied: 'border-l-destructive',
+    housekeeping: 'border-l-warning', maintenance: 'border-l-info',
     out_of_order: 'border-l-muted-foreground',
   };
 
@@ -142,12 +122,8 @@ const RoomsPage = () => {
                   <p className="font-semibold text-foreground fcfa">{formatFCFA(room.price_per_night)}/nuit</p>
                 </div>
                 <div className="flex gap-2 mt-4">
-                  <Button variant="outline" size="sm" onClick={() => openEdit(room)}>
-                    <Pencil className="h-3 w-3 mr-1" />Modifier
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-destructive" onClick={() => setDeleteId(room.id)}>
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => openEdit(room)}><Pencil className="h-3 w-3 mr-1" />Modifier</Button>
+                  <Button variant="outline" size="sm" className="text-destructive" onClick={() => setDeleteId(room.id)}><Trash2 className="h-3 w-3" /></Button>
                 </div>
               </CardContent>
             </Card>
@@ -160,16 +136,15 @@ const RoomsPage = () => {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>{editRoom ? 'Modifier la chambre' : 'Ajouter une chambre'}</DialogTitle></DialogHeader>
-          <form onSubmit={handleSubmit((d) => saveMutation.mutate(d))} className="space-y-4">
-            <div><Label>Numéro *</Label><Input {...register('room_number')} />
-              {errors.room_number && <p className="text-sm text-destructive mt-1">{errors.room_number.message}</p>}</div>
+          <form onSubmit={(e) => { e.preventDefault(); saveMutation.mutate(); }} className="space-y-4">
+            <div><Label>Numéro *</Label><Input value={form.room_number} onChange={e => setForm(f => ({...f, room_number: e.target.value}))} /></div>
             <div className="grid grid-cols-2 gap-4">
-              <div><Label>Étage</Label><Input type="number" {...register('floor')} /></div>
-              <div><Label>Capacité</Label><Input type="number" {...register('capacity')} /></div>
+              <div><Label>Étage</Label><Input type="number" value={form.floor} onChange={e => setForm(f => ({...f, floor: Number(e.target.value)}))} /></div>
+              <div><Label>Capacité</Label><Input type="number" value={form.capacity} onChange={e => setForm(f => ({...f, capacity: Number(e.target.value)}))} /></div>
             </div>
-            <div><Label>Prix/nuit (FCFA)</Label><Input type="number" {...register('price_per_night')} /></div>
+            <div><Label>Prix/nuit (FCFA)</Label><Input type="number" value={form.price_per_night} onChange={e => setForm(f => ({...f, price_per_night: Number(e.target.value)}))} /></div>
             <div><Label>Statut</Label>
-              <Select defaultValue={editRoom?.status || 'available'} onValueChange={(v) => setValue('status', v)}>
+              <Select value={form.status} onValueChange={(v) => setForm(f => ({...f, status: v}))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="available">Disponible</SelectItem>
@@ -180,7 +155,7 @@ const RoomsPage = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div><Label>Description</Label><Input {...register('description')} /></div>
+            <div><Label>Description</Label><Input value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} /></div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
               <Button type="submit" disabled={saveMutation.isPending}>{saveMutation.isPending ? 'Enregistrement...' : 'Enregistrer'}</Button>
@@ -189,12 +164,9 @@ const RoomsPage = () => {
         </DialogContent>
       </Dialog>
 
-      <ConfirmDialog
-        open={!!deleteId}
-        onOpenChange={() => setDeleteId(null)}
+      <ConfirmDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}
         description={<p>Cette action est irréversible. La chambre sera définitivement supprimée.</p>}
-        onConfirm={() => deleteId && deleteMutation.mutate(deleteId)}
-      />
+        onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} />
     </div>
   );
 };
