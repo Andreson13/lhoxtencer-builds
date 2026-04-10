@@ -32,6 +32,8 @@ const schema = z.object({
   is_minibar: z.boolean().default(false),
 });
 
+type InventoryForm = z.infer<typeof schema>;
+
 const InventoryPage = () => {
   useRoleGuard(['admin', 'manager', 'receptionist']);
   const { hotel } = useHotel();
@@ -40,7 +42,7 @@ const InventoryPage = () => {
   const [editing, setEditing] = useState<any>(null);
   const [search, setSearch] = useState('');
 
-  const { register, handleSubmit, reset, setValue, control, formState: { errors } } = useForm({ resolver: zodResolver(schema), defaultValues: { unit: 'unité', minimum_stock: 5, current_stock: 0, buying_price: 0, selling_price: 0 } });
+  const { register, handleSubmit, reset, setValue, control, formState: { errors } } = useForm<InventoryForm>({ resolver: zodResolver(schema), defaultValues: { unit: 'unité', minimum_stock: 5, current_stock: 0, buying_price: 0, selling_price: 0, name: '', is_minibar: false } });
 
   const { data: items, isLoading } = useQuery({
     queryKey: ['inventory', hotel?.id],

@@ -84,20 +84,26 @@ const MainCourantePage = () => {
 
   const updateFieldMutation = useMutation({
     mutationFn: async ({ id, field, value }: { id: string; field: string; value: number }) => {
-      const numericFields = ['hebergement', 'bar', 'restaurant', 'divers', 'deduction', 'encaissement'];
-      if (!numericFields.includes(field)) return;
       const entry = entries?.find(e => e.id === id);
       if (!entry) return;
-      const updated = { ...entry, [field]: value };
-      const caTotal = (updated.hebergement || 0) + (updated.bar || 0) + (updated.restaurant || 0) + (updated.divers || 0);
-      const aReporter = caTotal + (updated.report_veille || 0) - (updated.deduction || 0) - (updated.encaissement || 0);
+      const h = field === 'hebergement' ? value : (entry.hebergement || 0);
+      const b = field === 'bar' ? value : (entry.bar || 0);
+      const r = field === 'restaurant' ? value : (entry.restaurant || 0);
+      const d = field === 'divers' ? value : (entry.divers || 0);
+      const ded = field === 'deduction' ? value : (entry.deduction || 0);
+      const enc = field === 'encaissement' ? value : (entry.encaissement || 0);
+      const caTotal = h + b + r + d;
+      const aReporter = caTotal + (entry.report_veille || 0) - ded - enc;
 
-      const { error } = await supabase.from('main_courante').update({
-        [field]: value,
+      const updatePayload: Record<string, any> = {
+        hebergement: h, bar: b, restaurant: r, divers: d,
+        deduction: ded, encaissement: enc,
         ca_total_jour: caTotal,
         a_reporter: aReporter,
         updated_at: new Date().toISOString(),
-      }).eq('id', id);
+      };
+
+      const { error } = await supabase.from('main_courante').update(updatePayload as any).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['main-courante'] }),

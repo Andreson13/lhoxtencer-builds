@@ -35,6 +35,8 @@ const schema = z.object({
   notes: z.string().optional(),
 });
 
+type SiesteForm = z.infer<typeof schema>;
+
 const SiestesPage = () => {
   useRoleGuard(['admin', 'manager', 'receptionist']);
   const { profile } = useAuth();
@@ -42,7 +44,7 @@ const SiestesPage = () => {
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm({
+  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<SiesteForm>({
     resolver: zodResolver(schema),
     defaultValues: { duration_hours: hotel?.sieste_default_duration_hours || 3, amount_paid: 0, arrival_time: new Date().toTimeString().slice(0, 5) },
   });

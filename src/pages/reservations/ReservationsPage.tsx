@@ -112,7 +112,7 @@ const ReservationsPage = () => {
         const { error } = await supabase.from('reservations').update(payload).eq('id', editing.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('reservations').insert(payload);
+        const { error } = await supabase.from('reservations').insert([payload]);
         if (error) throw error;
       }
     },

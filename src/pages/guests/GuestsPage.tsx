@@ -115,7 +115,7 @@ const GuestsPage = () => {
         const { error } = await supabase.from('guests').update(payload).eq('id', editingGuest.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('guests').insert(payload);
+        const { error } = await supabase.from('guests').insert([payload]);
         if (error) throw error;
       }
     },
