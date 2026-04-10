@@ -96,7 +96,7 @@ const ReservationsPage = () => {
 
   const saveMutation = useMutation({
     mutationFn: async (values: FormData) => {
-      const payload = {
+      const payload: any = {
         ...values,
         hotel_id: hotel!.id,
         number_of_nights: nights,
@@ -112,7 +112,7 @@ const ReservationsPage = () => {
         const { error } = await supabase.from('reservations').update(payload).eq('id', editing.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('reservations').insert([payload]);
+        const { error } = await supabase.from('reservations').insert(payload);
         if (error) throw error;
       }
     },
