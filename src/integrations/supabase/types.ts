@@ -1497,6 +1497,7 @@ export type Database = {
           order_number: string
           ready_at: string | null
           room_id: string | null
+          room_number: string | null
           started_at: string | null
           status: string | null
           total_amount: number | null
@@ -1518,6 +1519,7 @@ export type Database = {
           order_number: string
           ready_at?: string | null
           room_id?: string | null
+          room_number?: string | null
           started_at?: string | null
           status?: string | null
           total_amount?: number | null
@@ -1539,6 +1541,7 @@ export type Database = {
           order_number?: string
           ready_at?: string | null
           room_id?: string | null
+          room_number?: string | null
           started_at?: string | null
           status?: string | null
           total_amount?: number | null
@@ -1590,6 +1593,48 @@ export type Database = {
           },
         ]
       }
+      room_categories: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          description: string | null
+          display_order: number | null
+          features: string[] | null
+          hotel_id: string
+          id: string
+          name: string
+          portal_visible: boolean | null
+          price_per_night: number
+          price_sieste: number | null
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          description?: string | null
+          display_order?: number | null
+          features?: string[] | null
+          hotel_id: string
+          id?: string
+          name: string
+          portal_visible?: boolean | null
+          price_per_night?: number
+          price_sieste?: number | null
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          description?: string | null
+          display_order?: number | null
+          features?: string[] | null
+          hotel_id?: string
+          id?: string
+          name?: string
+          portal_visible?: boolean | null
+          price_per_night?: number
+          price_sieste?: number | null
+        }
+        Relationships: []
+      }
       room_types: {
         Row: {
           base_price: number
@@ -1628,6 +1673,7 @@ export type Database = {
       rooms: {
         Row: {
           capacity: number | null
+          category_id: string | null
           created_at: string | null
           description: string | null
           features: string[] | null
@@ -1643,6 +1689,7 @@ export type Database = {
         }
         Insert: {
           capacity?: number | null
+          category_id?: string | null
           created_at?: string | null
           description?: string | null
           features?: string[] | null
@@ -1658,6 +1705,7 @@ export type Database = {
         }
         Update: {
           capacity?: number | null
+          category_id?: string | null
           created_at?: string | null
           description?: string | null
           features?: string[] | null
@@ -1672,6 +1720,13 @@ export type Database = {
           status?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "rooms_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "room_categories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "rooms_hotel_id_fkey"
             columns: ["hotel_id"]
