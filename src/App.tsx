@@ -11,6 +11,7 @@ import LoginPage from "@/pages/auth/LoginPage";
 import OnboardingPage from "@/pages/auth/OnboardingPage";
 import DashboardPage from "@/pages/dashboard/DashboardPage";
 import RoomsPage from "@/pages/rooms/RoomsPage";
+import RoomCategoriesPage from "@/pages/rooms/RoomCategoriesPage";
 import GuestsPage from "@/pages/guests/GuestsPage";
 import ReservationsPage from "@/pages/reservations/ReservationsPage";
 import CheckInOutPage from "@/pages/checkinout/CheckInOutPage";
@@ -67,6 +68,7 @@ const App = () => (
                   <Route path="/guests" element={<GuestsPage />} />
                   <Route path="/reservations" element={<ReservationsPage />} />
                   <Route path="/rooms" element={<RoomsPage />} />
+                  <Route path="/room-categories" element={<RoomCategoriesPage />} />
                   <Route path="/check-in-out" element={<CheckInOutPage />} />
                   <Route path="/siestes" element={<SiestesPage />} />
                   <Route path="/main-courante" element={<MainCourantePage />} />

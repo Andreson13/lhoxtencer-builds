@@ -3,9 +3,9 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, CalendarCheck, BedDouble, LogIn,
   Coffee, BookOpen, UtensilsCrossed, ChefHat, Package,
-  Receipt, CreditCard, Wallet, Sparkles, BarChart3,
+  Receipt, Wallet, Sparkles, BarChart3,
   MessageSquare, QrCode, Settings, ScrollText, Building2,
-  Globe, Lock
+  Globe, Layers, CreditCard
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
@@ -13,25 +13,51 @@ import { useI18n } from '@/contexts/I18nContext';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 
-const navItems = [
-  { key: 'nav.dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['admin','manager','receptionist','accountant','restaurant','kitchen','housekeeping'] },
-  { key: 'nav.guests', path: '/guests', icon: Users, roles: ['admin','manager','receptionist'] },
-  { key: 'nav.reservations', path: '/reservations', icon: CalendarCheck, roles: ['admin','manager','receptionist'] },
-  { key: 'nav.rooms', path: '/rooms', icon: BedDouble, roles: ['admin','manager','receptionist'] },
-  { key: 'nav.checkinout', path: '/check-in-out', icon: LogIn, roles: ['admin','manager','receptionist'] },
-  { key: 'nav.siestes', path: '/siestes', icon: Coffee, roles: ['admin','manager','receptionist'] },
-  { key: 'nav.maincourante', path: '/main-courante', icon: BookOpen, roles: ['admin','manager','receptionist'] },
-  { key: 'nav.restaurant', path: '/restaurant', icon: UtensilsCrossed, roles: ['admin','manager','receptionist','restaurant'] },
-  { key: 'nav.kitchen', path: '/kitchen', icon: ChefHat, roles: ['admin','manager','kitchen'] },
-  { key: 'nav.inventory', path: '/inventory', icon: Package, roles: ['admin','manager','receptionist'] },
-  { key: 'nav.billing', path: '/billing', icon: Receipt, roles: ['admin','manager','receptionist','accountant'] },
-  { key: 'nav.cashexpenses', path: '/cash-expenses', icon: Wallet, roles: ['admin','manager','receptionist','accountant'] },
-  { key: 'nav.housekeeping', path: '/housekeeping', icon: Sparkles, roles: ['admin','manager','housekeeping'] },
-  { key: 'nav.reports', path: '/reports', icon: BarChart3, roles: ['admin','manager','accountant'] },
-  { key: 'nav.feedback', path: '/feedback', icon: MessageSquare, roles: ['admin','manager'] },
-  { key: 'nav.qrcodes', path: '/qr-codes', icon: QrCode, roles: ['admin','manager'] },
-  { key: 'nav.settings', path: '/settings', icon: Settings, roles: ['admin','manager'] },
-  { key: 'nav.audit', path: '/audit', icon: ScrollText, roles: ['admin','manager'] },
+const navGroups = [
+  {
+    label: 'Réception',
+    items: [
+      { key: 'nav.dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['admin','manager','receptionist','accountant','restaurant','kitchen','housekeeping'] },
+      { key: 'nav.guests', path: '/guests', icon: Users, roles: ['admin','manager','receptionist'] },
+      { key: 'nav.reservations', path: '/reservations', icon: CalendarCheck, roles: ['admin','manager','receptionist'] },
+      { key: 'nav.rooms', path: '/rooms', icon: BedDouble, roles: ['admin','manager','receptionist'] },
+      { key: 'nav.categories', path: '/room-categories', icon: Layers, roles: ['admin','manager'] },
+      { key: 'nav.checkinout', path: '/check-in-out', icon: LogIn, roles: ['admin','manager','receptionist'] },
+      { key: 'nav.siestes', path: '/siestes', icon: Coffee, roles: ['admin','manager','receptionist'] },
+      { key: 'nav.maincourante', path: '/main-courante', icon: BookOpen, roles: ['admin','manager','receptionist'] },
+    ],
+  },
+  {
+    label: 'Opérations',
+    items: [
+      { key: 'nav.restaurant', path: '/restaurant', icon: UtensilsCrossed, roles: ['admin','manager','receptionist','restaurant'] },
+      { key: 'nav.kitchen', path: '/kitchen', icon: ChefHat, roles: ['admin','manager','kitchen'] },
+      { key: 'nav.inventory', path: '/inventory', icon: Package, roles: ['admin','manager','receptionist'] },
+      { key: 'nav.housekeeping', path: '/housekeeping', icon: Sparkles, roles: ['admin','manager','housekeeping'] },
+    ],
+  },
+  {
+    label: 'Finance',
+    items: [
+      { key: 'nav.cashexpenses', path: '/cash-expenses', icon: Wallet, roles: ['admin','manager','receptionist','accountant'] },
+      { key: 'nav.billing', path: '/billing', icon: Receipt, roles: ['admin','manager','receptionist','accountant'] },
+    ],
+  },
+  {
+    label: 'Gestion',
+    items: [
+      { key: 'nav.reports', path: '/reports', icon: BarChart3, roles: ['admin','manager','accountant'] },
+      { key: 'nav.feedback', path: '/feedback', icon: MessageSquare, roles: ['admin','manager'] },
+      { key: 'nav.qrcodes', path: '/qr-codes', icon: QrCode, roles: ['admin','manager'] },
+      { key: 'nav.audit', path: '/audit', icon: ScrollText, roles: ['admin','manager'] },
+    ],
+  },
+  {
+    label: 'Configuration',
+    items: [
+      { key: 'nav.settings', path: '/settings', icon: Settings, roles: ['admin','manager'] },
+    ],
+  },
 ];
 
 interface SidebarProps {
@@ -44,10 +70,6 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
   const { hotel } = useHotel();
   const { t, lang, setLang } = useI18n();
   const location = useLocation();
-
-  const visibleItems = navItems.filter(item =>
-    profile?.is_super_admin || item.roles.includes(profile?.role || '')
-  );
 
   return (
     <aside
@@ -69,18 +91,33 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
       {/* Nav */}
       <ScrollArea className="flex-1 py-2">
         <nav className="sidebar-nav px-2">
-          {visibleItems.map((item) => {
-            const active = location.pathname === item.path;
+          {navGroups.map((group) => {
+            const visibleItems = group.items.filter(item =>
+              profile?.is_super_admin || item.roles.includes(profile?.role || '')
+            );
+            if (visibleItems.length === 0) return null;
             return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`sidebar-link ${active ? 'active' : ''}`}
-                title={collapsed ? t(item.key) : undefined}
-              >
-                <item.icon className="h-5 w-5 shrink-0" />
-                {!collapsed && <span className="truncate">{t(item.key)}</span>}
-              </Link>
+              <div key={group.label} className="mb-3">
+                {!collapsed && (
+                  <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+                    {group.label}
+                  </p>
+                )}
+                {visibleItems.map((item) => {
+                  const active = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      className={`sidebar-link ${active ? 'active' : ''}`}
+                      title={collapsed ? t(item.key) : undefined}
+                    >
+                      <item.icon className="h-5 w-5 shrink-0" />
+                      {!collapsed && <span className="truncate">{t(item.key)}</span>}
+                    </Link>
+                  );
+                })}
+              </div>
             );
           })}
           {profile?.is_super_admin && (
