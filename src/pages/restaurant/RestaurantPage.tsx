@@ -18,8 +18,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { UtensilsCrossed, Plus, Pencil, Trash2, Clock } from 'lucide-react';
+import { UtensilsCrossed, Plus, Pencil, Trash2 } from 'lucide-react';
 import { generateOrderNumber } from '@/utils/formatters';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -45,6 +46,7 @@ const RestaurantPage = () => {
   const [orderRoom, setOrderRoom] = useState<string>('');
   const [isWalkin, setIsWalkin] = useState(false);
   const [walkinName, setWalkinName] = useState('');
+  const [walkinTable, setWalkinTable] = useState('');
 
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm({ resolver: zodResolver(menuSchema) });
 
@@ -75,11 +77,20 @@ const RestaurantPage = () => {
     enabled: !!hotel?.id,
   });
 
-  const { data: rooms } = useQuery({
-    queryKey: ['rooms-occupied', hotel?.id],
+  // FIX 8: Fetch occupied rooms with active stay guest names
+  const { data: occupiedRooms } = useQuery({
+    queryKey: ['rooms-occupied-with-guests', hotel?.id],
     queryFn: async () => {
-      const { data } = await supabase.from('rooms').select('id, room_number').eq('hotel_id', hotel!.id).eq('status', 'occupied');
-      return data || [];
+      const { data: roomsData } = await supabase.from('rooms').select('id, room_number').eq('hotel_id', hotel!.id).eq('status', 'occupied');
+      if (!roomsData?.length) return [];
+      // Get active stays for these rooms
+      const roomIds = roomsData.map(r => r.id);
+      const { data: stays } = await supabase.from('stays').select('room_id, guests(last_name, first_name)').eq('hotel_id', hotel!.id).eq('status', 'active').in('room_id', roomIds);
+      return roomsData.map(r => {
+        const stay = stays?.find(s => s.room_id === r.id);
+        const guest = (stay as any)?.guests;
+        return { ...r, guestName: guest ? `${guest.last_name} ${guest.first_name}` : '' };
+      });
     },
     enabled: !!hotel?.id,
   });
@@ -93,6 +104,7 @@ const RestaurantPage = () => {
         room_id: orderRoom || null,
         is_walkin: isWalkin,
         walkin_name: walkinName || null,
+        walkin_table: walkinTable || null,
         total_amount: totalAmount,
         created_by: profile?.id,
         status: 'pending',
@@ -100,17 +112,13 @@ const RestaurantPage = () => {
       if (error) throw error;
 
       const items = cart.map(c => ({
-        hotel_id: hotel!.id,
-        order_id: order.id,
-        item_id: c.item.id,
-        quantity: c.quantity,
-        unit_price: c.item.price,
-        subtotal: c.item.price * c.quantity,
+        hotel_id: hotel!.id, order_id: order.id, item_id: c.item.id,
+        quantity: c.quantity, unit_price: c.item.price, subtotal: c.item.price * c.quantity,
       }));
       const { error: itemsError } = await supabase.from('restaurant_order_items').insert(items);
       if (itemsError) throw itemsError;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['restaurant-orders'] }); toast.success('Commande créée'); setOrderDialogOpen(false); setCart([]); setOrderRoom(''); setWalkinName(''); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['restaurant-orders'] }); toast.success('Commande créée'); setOrderDialogOpen(false); setCart([]); setOrderRoom(''); setWalkinName(''); setWalkinTable(''); setIsWalkin(false); },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -183,7 +191,7 @@ const RestaurantPage = () => {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-2">
-                    <p className="text-sm">{order.is_walkin ? `Walk-in: ${order.walkin_name || '-'}` : `Chambre`}</p>
+                    <p className="text-sm">{order.is_walkin ? `Walk-in: ${order.walkin_name || '-'}${order.walkin_table ? ` (Table ${order.walkin_table})` : ''}` : `Chambre`}</p>
                     <div className="text-sm space-y-1">
                       {(order as any).restaurant_order_items?.map((oi: any) => (
                         <p key={oi.id}>{oi.quantity}x {oi.restaurant_items?.name} — {formatFCFA(oi.subtotal)}</p>
@@ -209,15 +217,7 @@ const RestaurantPage = () => {
           {menuLoading ? <Skeleton className="h-40 w-full" /> : (
             <div className="rounded-md border">
               <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nom</TableHead>
-                    <TableHead>Catégorie</TableHead>
-                    <TableHead className="text-right">Prix</TableHead>
-                    <TableHead>Disponible</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
+                <TableHeader><TableRow><TableHead>Nom</TableHead><TableHead>Catégorie</TableHead><TableHead className="text-right">Prix</TableHead><TableHead>Disponible</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {menuItems?.map(item => (
                     <TableRow key={item.id}>
@@ -238,24 +238,37 @@ const RestaurantPage = () => {
         </TabsContent>
       </Tabs>
 
-      {/* New Order Dialog */}
+      {/* New Order Dialog - FIX 8 */}
       <Dialog open={orderDialogOpen} onOpenChange={setOrderDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Nouvelle commande</DialogTitle><DialogDescription>Sélectionnez les articles</DialogDescription></DialogHeader>
           <div className="space-y-4">
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <Label>Chambre</Label>
-                <Select onValueChange={v => { setOrderRoom(v); setIsWalkin(false); }}>
-                  <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
-                  <SelectContent>{rooms?.map(r => <SelectItem key={r.id} value={r.id}>{r.room_number}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="flex-1">
-                <Label>Ou Walk-in</Label>
-                <Input placeholder="Nom du client" value={walkinName} onChange={e => { setWalkinName(e.target.value); setIsWalkin(true); setOrderRoom(''); }} />
-              </div>
+            <div className="flex items-center gap-4 mb-2">
+              <Label>Walk-in</Label>
+              <Switch checked={isWalkin} onCheckedChange={v => { setIsWalkin(v); if (v) setOrderRoom(''); }} />
             </div>
+            {!isWalkin ? (
+              <div>
+                <Label>Chambre occupée</Label>
+                {!occupiedRooms?.length ? (
+                  <p className="text-sm text-muted-foreground mt-1">Aucune chambre occupée</p>
+                ) : (
+                  <Select onValueChange={v => setOrderRoom(v)}>
+                    <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
+                    <SelectContent>
+                      {occupiedRooms.map(r => (
+                        <SelectItem key={r.id} value={r.id}>Chambre {r.room_number} — {r.guestName || 'Client'}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <div><Label>Nom du client</Label><Input placeholder="Nom" value={walkinName} onChange={e => setWalkinName(e.target.value)} /></div>
+                <div><Label>N° de table</Label><Input placeholder="Table" value={walkinTable} onChange={e => setWalkinTable(e.target.value)} /></div>
+              </div>
+            )}
             <div>
               <Label>Articles disponibles</Label>
               <div className="grid grid-cols-2 gap-2 mt-2 max-h-48 overflow-y-auto">

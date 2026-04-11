@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
+import { useEnsureMainCourante } from '@/hooks/useMainCourante';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { formatFCFA, formatFullDate } from '@/utils/formatters';
 import { Button } from '@/components/ui/button';
@@ -16,7 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toast } from 'sonner';
-import { BookOpen, ChevronLeft, ChevronRight, Plus, Lock, Unlock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Lock } from 'lucide-react';
 
 const MainCourantePage = () => {
   useRoleGuard(['admin', 'manager', 'receptionist']);
@@ -27,6 +28,15 @@ const MainCourantePage = () => {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [manualEntry, setManualEntry] = useState({ room_number: '', nom_client: '', nombre_personnes: 1 });
 
+  const ensureMC = useEnsureMainCourante();
+
+  // Auto-populate when date changes
+  useEffect(() => {
+    if (hotel?.id) {
+      ensureMC.mutate({ hotelId: hotel.id, date: selectedDate });
+    }
+  }, [hotel?.id, selectedDate]);
+
   const { data: entries, isLoading } = useQuery({
     queryKey: ['main-courante', hotel?.id, selectedDate],
     queryFn: async () => {
@@ -36,51 +46,6 @@ const MainCourantePage = () => {
     },
     enabled: !!hotel?.id,
   });
-
-  // Auto-populate from present guests
-  const { data: presentGuests } = useQuery({
-    queryKey: ['present-guests-mc', hotel?.id],
-    queryFn: async () => {
-      const { data } = await supabase.from('guests').select('*, rooms(room_number)').eq('hotel_id', hotel!.id).eq('status', 'present');
-      return data || [];
-    },
-    enabled: !!hotel?.id,
-  });
-
-  const autoPopulateMutation = useMutation({
-    mutationFn: async () => {
-      if (!presentGuests || !hotel) return;
-      for (const guest of presentGuests) {
-        const roomNumber = (guest as any).rooms?.room_number || '';
-        const existing = entries?.find(e => e.guest_id === guest.id && e.journee === selectedDate);
-        if (!existing) {
-          // Get previous day's a_reporter for this guest
-          const prevDate = new Date(selectedDate);
-          prevDate.setDate(prevDate.getDate() - 1);
-          const { data: prevEntry } = await supabase.from('main_courante').select('a_reporter').eq('hotel_id', hotel.id).eq('guest_id', guest.id).eq('journee', prevDate.toISOString().split('T')[0]).single();
-
-          await supabase.from('main_courante').upsert({
-            hotel_id: hotel.id,
-            journee: selectedDate,
-            room_number: roomNumber,
-            room_id: guest.room_id,
-            guest_id: guest.id,
-            nom_client: `${guest.last_name} ${guest.first_name}`,
-            nombre_personnes: (guest.number_of_adults || 1) + (guest.number_of_children || 0),
-            hebergement: guest.price_per_night || 0,
-            report_veille: prevEntry?.a_reporter || 0,
-          }, { onConflict: 'hotel_id,journee,room_id' });
-        }
-      }
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['main-courante'] }); },
-  });
-
-  useEffect(() => {
-    if (presentGuests && hotel && selectedDate === new Date().toISOString().split('T')[0]) {
-      autoPopulateMutation.mutate();
-    }
-  }, [presentGuests, hotel, selectedDate]);
 
   const updateFieldMutation = useMutation({
     mutationFn: async ({ id, field, value }: { id: string; field: string; value: number }) => {
@@ -95,15 +60,12 @@ const MainCourantePage = () => {
       const caTotal = h + b + r + d;
       const aReporter = caTotal + (entry.report_veille || 0) - ded - enc;
 
-      const updatePayload: Record<string, any> = {
+      const { error } = await supabase.from('main_courante').update({
         hebergement: h, bar: b, restaurant: r, divers: d,
         deduction: ded, encaissement: enc,
-        ca_total_jour: caTotal,
-        a_reporter: aReporter,
+        ca_total_jour: caTotal, a_reporter: aReporter,
         updated_at: new Date().toISOString(),
-      };
-
-      const { error } = await supabase.from('main_courante').update(updatePayload as any).eq('id', id);
+      } as any).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['main-courante'] }),
@@ -122,12 +84,8 @@ const MainCourantePage = () => {
   const addManualMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from('main_courante').insert({
-        hotel_id: hotel!.id,
-        journee: selectedDate,
-        room_number: manualEntry.room_number,
-        nom_client: manualEntry.nom_client,
-        nombre_personnes: manualEntry.nombre_personnes,
-        is_manual: true,
+        hotel_id: hotel!.id, journee: selectedDate, room_number: manualEntry.room_number,
+        nom_client: manualEntry.nom_client, nombre_personnes: manualEntry.nombre_personnes, is_manual: true,
       });
       if (error) throw error;
     },
@@ -161,9 +119,7 @@ const MainCourantePage = () => {
     const [editing, setEditing] = useState(false);
     const [val, setVal] = useState(value);
     const readonly = isClosed || (isPast && !isToday);
-
     if (readonly) return <TableCell className="text-right">{formatFCFA(value)}</TableCell>;
-
     return (
       <TableCell className="text-right">
         <Popover open={editing} onOpenChange={setEditing}>
@@ -204,7 +160,6 @@ const MainCourantePage = () => {
         <Badge variant={isClosed ? 'destructive' : 'default'}>{isClosed ? 'Journée clôturée' : 'Journée ouverte'}</Badge>
       </div>
 
-      {/* Summary cards */}
       <div className="grid grid-cols-4 gap-4">
         <Card><CardContent className="pt-4"><p className="text-sm text-muted-foreground">CA Jour</p><p className="text-xl font-bold">{formatFCFA(totals?.ca_total_jour || 0)}</p></CardContent></Card>
         <Card><CardContent className="pt-4"><p className="text-sm text-muted-foreground">Encaissements</p><p className="text-xl font-bold">{formatFCFA(totals?.encaissement || 0)}</p></CardContent></Card>
@@ -252,7 +207,6 @@ const MainCourantePage = () => {
                   <TableCell className="max-w-32 truncate">{e.observation || '-'}</TableCell>
                 </TableRow>
               ))}
-              {/* Totals row */}
               {entries && entries.length > 0 && (
                 <TableRow className="bg-muted/50 font-bold">
                   <TableCell className="sticky left-0 bg-muted/50 z-10" colSpan={3}>TOTAUX</TableCell>
@@ -275,7 +229,7 @@ const MainCourantePage = () => {
 
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Ajouter une ligne</DialogTitle><DialogDescription>Entrée manuelle walk-in</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Ajouter une ligne</DialogTitle><DialogDescription>Entrée manuelle</DialogDescription></DialogHeader>
           <div className="space-y-4">
             <div><Label>N° Chambre</Label><Input value={manualEntry.room_number} onChange={e => setManualEntry(p => ({ ...p, room_number: e.target.value }))} /></div>
             <div><Label>Nom du client *</Label><Input value={manualEntry.nom_client} onChange={e => setManualEntry(p => ({ ...p, nom_client: e.target.value }))} /></div>

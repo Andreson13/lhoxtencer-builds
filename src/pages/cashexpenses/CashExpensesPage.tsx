@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
+import { useCashSession } from '@/hooks/useCashSession';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -12,7 +13,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -40,20 +40,12 @@ const CashExpensesPage = () => {
   const { profile } = useAuth();
   const { hotel } = useHotel();
   const qc = useQueryClient();
+  const { currentSession } = useCashSession();
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
-  const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
-  const [openingBalance, setOpeningBalance] = useState(0);
+  const [manualCloseOpen, setManualCloseOpen] = useState(false);
+  const [physicalCount, setPhysicalCount] = useState(0);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<ExpenseForm>({ resolver: zodResolver(expenseSchema) });
-
-  const { data: currentSession } = useQuery({
-    queryKey: ['cash-session', hotel?.id],
-    queryFn: async () => {
-      const { data } = await supabase.from('cash_sessions').select('*').eq('hotel_id', hotel!.id).eq('status', 'open').order('opened_at', { ascending: false }).limit(1).single();
-      return data;
-    },
-    enabled: !!hotel?.id,
-  });
 
   const { data: movements } = useQuery({
     queryKey: ['cash-movements', hotel?.id, currentSession?.id],
@@ -73,28 +65,25 @@ const CashExpensesPage = () => {
     enabled: !!hotel?.id,
   });
 
-  const openSessionMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from('cash_sessions').insert({ hotel_id: hotel!.id, opened_by: profile?.id, opening_balance: openingBalance } as any);
-      if (error) throw error;
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['cash-session'] }); toast.success('Session ouverte'); setSessionDialogOpen(false); },
-    onError: (e: any) => toast.error(e.message),
-  });
+  const totalIn = movements?.filter(m => m.type === 'in').reduce((s, m) => s + m.amount, 0) || 0;
+  const totalOut = movements?.filter(m => m.type === 'out').reduce((s, m) => s + m.amount, 0) || 0;
+  const expectedBalance = (currentSession?.opening_balance || 0) + totalIn - totalOut;
 
-  const closeSessionMutation = useMutation({
+  const manualCloseMutation = useMutation({
     mutationFn: async () => {
       if (!currentSession) return;
-      const totalIn = movements?.filter(m => m.type === 'in').reduce((s, m) => s + m.amount, 0) || 0;
-      const totalOut = movements?.filter(m => m.type === 'out').reduce((s, m) => s + m.amount, 0) || 0;
-      const expected = currentSession.opening_balance + totalIn - totalOut;
+      const diff = physicalCount - expectedBalance;
       const { error } = await supabase.from('cash_sessions').update({
         status: 'closed', closed_at: new Date().toISOString(), closed_by: profile?.id,
-        expected_balance: expected, closing_balance: expected, difference: 0,
+        expected_balance: expectedBalance, closing_balance: physicalCount, difference: diff,
       }).eq('id', currentSession.id);
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['cash-session'] }); toast.success('Session fermée'); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cash-session-auto'] });
+      toast.success('Session clôturée manuellement');
+      setManualCloseOpen(false);
+    },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -121,6 +110,24 @@ const CashExpensesPage = () => {
     <div className="page-container space-y-6">
       <PageHeader title="Caisse & Dépenses" subtitle="Gestion de la trésorerie" />
 
+      {/* Auto-opened session status */}
+      {currentSession && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex justify-between items-center">
+              <span>Session du {formatDate(currentSession.opened_at)}</span>
+              <Badge>Ouverte automatiquement</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-4 gap-4">
+            <div><p className="text-sm text-muted-foreground">Solde d'ouverture</p><p className="text-xl font-bold">{formatFCFA(currentSession.opening_balance)}</p></div>
+            <div><p className="text-sm text-muted-foreground">Entrées</p><p className="text-xl font-bold text-green-600">{formatFCFA(totalIn)}</p></div>
+            <div><p className="text-sm text-muted-foreground">Sorties</p><p className="text-xl font-bold text-destructive">{formatFCFA(totalOut)}</p></div>
+            <div><p className="text-sm text-muted-foreground">Solde attendu</p><p className="text-xl font-bold">{formatFCFA(expectedBalance)}</p></div>
+          </CardContent>
+        </Card>
+      )}
+
       <Tabs defaultValue="cash">
         <TabsList>
           <TabsTrigger value="cash"><DollarSign className="h-4 w-4 mr-2" />Caisse</TabsTrigger>
@@ -128,43 +135,26 @@ const CashExpensesPage = () => {
         </TabsList>
 
         <TabsContent value="cash" className="mt-4 space-y-4">
-          {currentSession ? (
-            <>
-              <Card>
-                <CardHeader><CardTitle className="flex justify-between"><span>Session en cours</span><Badge>Ouverte</Badge></CardTitle></CardHeader>
-                <CardContent className="grid grid-cols-3 gap-4">
-                  <div><p className="text-sm text-muted-foreground">Solde d'ouverture</p><p className="text-xl font-bold">{formatFCFA(currentSession.opening_balance)}</p></div>
-                  <div><p className="text-sm text-muted-foreground">Entrées</p><p className="text-xl font-bold text-green-600">{formatFCFA(movements?.filter(m => m.type === 'in').reduce((s, m) => s + m.amount, 0) || 0)}</p></div>
-                  <div><p className="text-sm text-muted-foreground">Sorties</p><p className="text-xl font-bold text-destructive">{formatFCFA(movements?.filter(m => m.type === 'out').reduce((s, m) => s + m.amount, 0) || 0)}</p></div>
-                </CardContent>
-              </Card>
-              <Button variant="destructive" onClick={() => closeSessionMutation.mutate()}>Fermer la session</Button>
-              {movements && movements.length > 0 && (
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Type</TableHead><TableHead>Source</TableHead><TableHead>Description</TableHead><TableHead className="text-right">Montant</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {movements.map(m => (
-                        <TableRow key={m.id}>
-                          <TableCell>{formatDateTime(m.created_at)}</TableCell>
-                          <TableCell><Badge variant={m.type === 'in' ? 'default' : 'destructive'}>{m.type === 'in' ? 'Entrée' : 'Sortie'}</Badge></TableCell>
-                          <TableCell>{m.source}</TableCell>
-                          <TableCell>{m.description || '-'}</TableCell>
-                          <TableCell className="text-right font-semibold">{formatFCFA(m.amount)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </>
-          ) : (
-            <Card>
-              <CardContent className="py-8 text-center">
-                <p className="text-muted-foreground mb-4">Aucune session de caisse ouverte</p>
-                <Button onClick={() => setSessionDialogOpen(true)}><Plus className="h-4 w-4 mr-2" />Ouvrir une session</Button>
-              </CardContent>
-            </Card>
+          {(profile?.role === 'admin' || profile?.role === 'manager') && currentSession && (
+            <Button variant="destructive" onClick={() => { setPhysicalCount(expectedBalance); setManualCloseOpen(true); }}>Clôture manuelle</Button>
+          )}
+          {movements && movements.length > 0 && (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Type</TableHead><TableHead>Source</TableHead><TableHead>Description</TableHead><TableHead className="text-right">Montant</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {movements.map(m => (
+                    <TableRow key={m.id}>
+                      <TableCell>{formatDateTime(m.created_at)}</TableCell>
+                      <TableCell><Badge variant={m.type === 'in' ? 'default' : 'destructive'}>{m.type === 'in' ? 'Entrée' : 'Sortie'}</Badge></TableCell>
+                      <TableCell>{m.source}</TableCell>
+                      <TableCell>{m.description || '-'}</TableCell>
+                      <TableCell className="text-right font-semibold">{formatFCFA(m.amount)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </TabsContent>
 
@@ -203,14 +193,28 @@ const CashExpensesPage = () => {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={sessionDialogOpen} onOpenChange={setSessionDialogOpen}>
+      {/* Manual close dialog */}
+      <Dialog open={manualCloseOpen} onOpenChange={setManualCloseOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Ouvrir une session de caisse</DialogTitle><DialogDescription>Entrez le solde d'ouverture</DialogDescription></DialogHeader>
-          <div><Label>Solde d'ouverture</Label><Input type="number" value={openingBalance} onChange={e => setOpeningBalance(Number(e.target.value))} /></div>
-          <DialogFooter><Button variant="outline" onClick={() => setSessionDialogOpen(false)}>Annuler</Button><Button onClick={() => openSessionMutation.mutate()}>Ouvrir</Button></DialogFooter>
+          <DialogHeader><DialogTitle>Clôture manuelle de la caisse</DialogTitle><DialogDescription>Comptez le cash physique</DialogDescription></DialogHeader>
+          <div className="space-y-4">
+            <div><Label>Solde attendu</Label><Input value={formatFCFA(expectedBalance)} readOnly className="bg-muted" /></div>
+            <div><Label>Comptage physique</Label><Input type="number" value={physicalCount} onChange={e => setPhysicalCount(Number(e.target.value))} /></div>
+            <div>
+              <Label>Différence</Label>
+              <p className={`text-lg font-bold ${physicalCount - expectedBalance >= 0 ? 'text-green-600' : 'text-destructive'}`}>
+                {formatFCFA(physicalCount - expectedBalance)}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setManualCloseOpen(false)}>Annuler</Button>
+            <Button onClick={() => manualCloseMutation.mutate()} disabled={manualCloseMutation.isPending}>Clôturer</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Expense dialog */}
       <Dialog open={expenseDialogOpen} onOpenChange={v => { if (!v) { setExpenseDialogOpen(false); reset(); } }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Nouvelle dépense</DialogTitle><DialogDescription>Enregistrer une dépense</DialogDescription></DialogHeader>
