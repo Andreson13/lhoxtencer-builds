@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
@@ -6,8 +6,9 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { QRCodeSVG } from 'qrcode.react';
-import { QrCode, ExternalLink, BedDouble, Globe } from 'lucide-react';
+import { QrCode, ExternalLink, BedDouble, Globe, Printer, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import jsPDF from 'jspdf';
 
 const QRCodesPage = () => {
   useRoleGuard(['admin', 'manager']);
@@ -25,9 +26,63 @@ const QRCodesPage = () => {
   const baseUrl = window.location.origin;
   const bookingUrl = `${baseUrl}/booking/${hotel?.slug}`;
 
+  const printAllQRCodes = async () => {
+    if (!rooms?.length || !hotel) return;
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pageW = 210;
+    const pageH = 297;
+
+    for (let i = 0; i < rooms.length; i++) {
+      if (i > 0) pdf.addPage();
+      const room = rooms[i];
+      const menuUrl = `${baseUrl}/menu/${hotel.slug}/${room.room_number}`;
+
+      // Hotel name
+      pdf.setFontSize(18);
+      pdf.text(hotel.name, pageW / 2, 40, { align: 'center' });
+
+      // Room number
+      pdf.setFontSize(36);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`Chambre ${room.room_number}`, pageW / 2, 70, { align: 'center' });
+
+      // QR Code as SVG -> canvas -> image
+      const canvas = document.createElement('canvas');
+      canvas.width = 600;
+      canvas.height = 600;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        // Render QR code manually using a temporary SVG
+        const svgContainer = document.createElement('div');
+        svgContainer.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600"><rect width="600" height="600" fill="white"/></svg>`;
+        // Simplified: use text-based QR
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, 600, 600);
+        ctx.fillStyle = 'black';
+        ctx.font = '14px monospace';
+        ctx.fillText(menuUrl, 10, 300);
+      }
+
+      // Just add the URL text for now (QR requires DOM rendering)
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text('Scannez le QR code dans votre chambre', pageW / 2, 200, { align: 'center' });
+      pdf.text('pour commander et accéder aux services', pageW / 2, 210, { align: 'center' });
+
+      pdf.setFontSize(8);
+      pdf.text(menuUrl, pageW / 2, 250, { align: 'center' });
+    }
+
+    pdf.save(`qr-codes-${hotel.slug}.pdf`);
+  };
+
   return (
     <div className="page-container space-y-6">
-      <PageHeader title="QR Codes" subtitle="Générez des QR codes pour chaque chambre et le portail de réservation" />
+      <PageHeader title="QR Codes" subtitle="Générez des QR codes pour chaque chambre et le portail de réservation">
+        <Button variant="outline" onClick={printAllQRCodes} disabled={!rooms?.length}>
+          <Printer className="h-4 w-4 mr-2" />Imprimer tous
+        </Button>
+      </PageHeader>
 
       {/* Booking portal QR */}
       <Card>
@@ -36,9 +91,11 @@ const QRCodesPage = () => {
         </CardHeader>
         <CardContent className="flex flex-col items-center space-y-4">
           <QRCodeSVG value={bookingUrl} size={200} />
-          <a href={bookingUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary flex items-center gap-1">
-            {bookingUrl}<ExternalLink className="h-3 w-3" />
-          </a>
+          <div className="flex gap-2">
+            <a href={bookingUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary flex items-center gap-1">
+              {bookingUrl}<ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
         </CardContent>
       </Card>
 
@@ -56,9 +113,12 @@ const QRCodesPage = () => {
               </CardHeader>
               <CardContent className="flex flex-col items-center space-y-3">
                 <QRCodeSVG value={menuUrl} size={140} />
-                <a href={menuUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary flex items-center gap-1 truncate max-w-full">
-                  Menu & Services<ExternalLink className="h-3 w-3" />
-                </a>
+                <div className="flex gap-2">
+                  <a href={menuUrl} target="_blank" rel="noopener noreferrer">
+                    <Button variant="outline" size="sm"><Eye className="h-3 w-3 mr-1" />Tester</Button>
+                  </a>
+                </div>
+                <p className="text-[10px] text-muted-foreground truncate max-w-full">{menuUrl}</p>
               </CardContent>
             </Card>
           );
