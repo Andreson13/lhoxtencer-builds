@@ -239,6 +239,7 @@ export type Database = {
           approved_by: string | null
           category_id: string | null
           created_at: string | null
+          created_by_name: string | null
           description: string | null
           expense_date: string
           hotel_id: string
@@ -257,6 +258,7 @@ export type Database = {
           approved_by?: string | null
           category_id?: string | null
           created_at?: string | null
+          created_by_name?: string | null
           description?: string | null
           expense_date?: string
           hotel_id: string
@@ -275,6 +277,7 @@ export type Database = {
           approved_by?: string | null
           category_id?: string | null
           created_at?: string | null
+          created_by_name?: string | null
           description?: string | null
           expense_date?: string
           hotel_id?: string
@@ -874,6 +877,7 @@ export type Database = {
           balance_due: number | null
           created_at: string | null
           created_by: string | null
+          created_by_name: string | null
           guest_id: string | null
           hotel_id: string
           id: string
@@ -893,6 +897,7 @@ export type Database = {
           balance_due?: number | null
           created_at?: string | null
           created_by?: string | null
+          created_by_name?: string | null
           guest_id?: string | null
           hotel_id: string
           id?: string
@@ -912,6 +917,7 @@ export type Database = {
           balance_due?: number | null
           created_at?: string | null
           created_by?: string | null
+          created_by_name?: string | null
           guest_id?: string | null
           hotel_id?: string
           id?: string
@@ -1116,6 +1122,8 @@ export type Database = {
         Row: {
           amount: number
           created_at: string | null
+          created_by: string | null
+          created_by_name: string | null
           hotel_id: string
           id: string
           invoice_id: string
@@ -1127,6 +1135,8 @@ export type Database = {
         Insert: {
           amount: number
           created_at?: string | null
+          created_by?: string | null
+          created_by_name?: string | null
           hotel_id: string
           id?: string
           invoice_id: string
@@ -1138,6 +1148,8 @@ export type Database = {
         Update: {
           amount?: number
           created_at?: string | null
+          created_by?: string | null
+          created_by_name?: string | null
           hotel_id?: string
           id?: string
           invoice_id?: string
@@ -1147,6 +1159,13 @@ export type Database = {
           reference_number?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "payments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "payments_hotel_id_fkey"
             columns: ["hotel_id"]
@@ -1723,6 +1742,8 @@ export type Database = {
           arrival_date: string
           arrival_time: string
           created_at: string | null
+          created_by: string | null
+          created_by_name: string | null
           date_of_birth: string | null
           departure_date: string | null
           departure_time: string | null
@@ -1749,6 +1770,8 @@ export type Database = {
           arrival_date?: string
           arrival_time: string
           created_at?: string | null
+          created_by?: string | null
+          created_by_name?: string | null
           date_of_birth?: string | null
           departure_date?: string | null
           departure_time?: string | null
@@ -1775,6 +1798,8 @@ export type Database = {
           arrival_date?: string
           arrival_time?: string
           created_at?: string | null
+          created_by?: string | null
+          created_by_name?: string | null
           date_of_birth?: string | null
           departure_date?: string | null
           departure_time?: string | null
@@ -1798,6 +1823,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "siestes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "siestes_hotel_id_fkey"
             columns: ["hotel_id"]
             isOneToOne: false
@@ -1820,6 +1852,134 @@ export type Database = {
           },
           {
             foreignKeyName: "siestes_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stays: {
+        Row: {
+          actual_check_out: string | null
+          arrangement: string | null
+          check_in_date: string | null
+          check_out_date: string | null
+          created_at: string | null
+          created_by: string | null
+          created_by_name: string | null
+          guest_id: string
+          hotel_id: string
+          id: string
+          invoice_id: string | null
+          notes: string | null
+          number_of_adults: number | null
+          number_of_children: number | null
+          number_of_nights: number | null
+          price_per_night: number | null
+          receptionist_id: string | null
+          receptionist_name: string | null
+          reservation_id: string | null
+          room_id: string | null
+          status: string | null
+          stay_type: string
+          total_price: number | null
+        }
+        Insert: {
+          actual_check_out?: string | null
+          arrangement?: string | null
+          check_in_date?: string | null
+          check_out_date?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          created_by_name?: string | null
+          guest_id: string
+          hotel_id: string
+          id?: string
+          invoice_id?: string | null
+          notes?: string | null
+          number_of_adults?: number | null
+          number_of_children?: number | null
+          number_of_nights?: number | null
+          price_per_night?: number | null
+          receptionist_id?: string | null
+          receptionist_name?: string | null
+          reservation_id?: string | null
+          room_id?: string | null
+          status?: string | null
+          stay_type?: string
+          total_price?: number | null
+        }
+        Update: {
+          actual_check_out?: string | null
+          arrangement?: string | null
+          check_in_date?: string | null
+          check_out_date?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          created_by_name?: string | null
+          guest_id?: string
+          hotel_id?: string
+          id?: string
+          invoice_id?: string | null
+          notes?: string | null
+          number_of_adults?: number | null
+          number_of_children?: number | null
+          number_of_nights?: number | null
+          price_per_night?: number | null
+          receptionist_id?: string | null
+          receptionist_name?: string | null
+          reservation_id?: string | null
+          room_id?: string | null
+          status?: string | null
+          stay_type?: string
+          total_price?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stays_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stays_guest_id_fkey"
+            columns: ["guest_id"]
+            isOneToOne: false
+            referencedRelation: "guests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stays_hotel_id_fkey"
+            columns: ["hotel_id"]
+            isOneToOne: false
+            referencedRelation: "hotels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stays_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stays_receptionist_id_fkey"
+            columns: ["receptionist_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stays_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: false
+            referencedRelation: "reservations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stays_room_id_fkey"
             columns: ["room_id"]
             isOneToOne: false
             referencedRelation: "rooms"

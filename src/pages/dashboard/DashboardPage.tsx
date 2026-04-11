@@ -4,12 +4,14 @@ import { BedDouble, Users, DoorOpen, UserCheck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { StatusBadge } from '@/components/shared/StatusBadge';
 import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
+import { useCashSession } from '@/hooks/useCashSession';
+import { useEnsureMainCourante } from '@/hooks/useMainCourante';
 import { supabase } from '@/integrations/supabase/client';
-import { formatFCFA, formatDate, formatFullDate } from '@/utils/formatters';
+import { formatFCFA, formatFullDate } from '@/utils/formatters';
 import { useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 
 const DashboardPage = () => {
   useRoleGuard(['admin','manager','receptionist','accountant','restaurant','kitchen','housekeeping']);
@@ -17,19 +19,30 @@ const DashboardPage = () => {
   const navigate = useNavigate();
   const hotelId = hotel?.id;
 
+  // Auto-ensure cash session
+  useCashSession();
+
+  // Auto-populate main courante for today
+  const ensureMC = useEnsureMainCourante();
+  useEffect(() => {
+    if (hotelId) {
+      ensureMC.mutate({ hotelId, date: new Date().toISOString().split('T')[0] });
+    }
+  }, [hotelId]);
+
   const { data: rooms, isLoading: loadingRooms } = useQuery({
     queryKey: ['rooms', hotelId],
     queryFn: async () => {
-      const { data } = await supabase.from('rooms').select('*').eq('hotel_id', hotelId!);
+      const { data } = await supabase.from('rooms').select('id, room_number, status, room_type_id, room_types(name)').eq('hotel_id', hotelId!);
       return data || [];
     },
     enabled: !!hotelId,
   });
 
-  const { data: guests, isLoading: loadingGuests } = useQuery({
-    queryKey: ['guests-present', hotelId],
+  const { data: activeStays } = useQuery({
+    queryKey: ['active-stays-count', hotelId],
     queryFn: async () => {
-      const { data } = await supabase.from('guests').select('*, rooms(room_number)').eq('hotel_id', hotelId!).eq('status', 'present');
+      const { data } = await supabase.from('stays').select('id').eq('hotel_id', hotelId!).eq('status', 'active');
       return data || [];
     },
     enabled: !!hotelId,
@@ -38,7 +51,7 @@ const DashboardPage = () => {
   const totalRooms = rooms?.length || 0;
   const occupiedRooms = rooms?.filter((r: any) => r.status === 'occupied').length || 0;
   const availableRooms = rooms?.filter((r: any) => r.status === 'available').length || 0;
-  const presentGuests = guests?.length || 0;
+  const presentGuests = activeStays?.length || 0;
 
   const stats = [
     { label: 'Total Chambres', value: totalRooms, icon: BedDouble, color: 'bg-primary/10 text-primary' },
@@ -62,7 +75,6 @@ const DashboardPage = () => {
         subtitle={hotel ? `${hotel.name} — ${formatFullDate(new Date())}` : ''}
       />
 
-      {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {stats.map((stat) => (
           <Card key={stat.label}>
@@ -85,7 +97,6 @@ const DashboardPage = () => {
         ))}
       </div>
 
-      {/* Room grid */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">État des chambres</CardTitle>
@@ -103,10 +114,10 @@ const DashboardPage = () => {
                 <button
                   key={room.id}
                   onClick={() => navigate('/rooms')}
-                  className={`rounded-lg border-2 p-3 text-center transition-all hover:scale-105 ${statusColors[room.status] || 'bg-muted border-border'}`}
+                  className={`rounded-lg border-2 p-3 text-center transition-all hover:scale-105 w-20 h-20 flex flex-col items-center justify-center ${statusColors[room.status] || 'bg-muted border-border'}`}
                 >
-                  <p className="text-lg font-bold">{room.room_number}</p>
-                  <p className="text-xs capitalize">{room.status}</p>
+                  <p className="text-lg font-bold leading-tight">{room.room_number}</p>
+                  <p className="text-[10px] capitalize leading-tight">{(room as any).room_types?.name || room.status}</p>
                 </button>
               ))}
             </div>
