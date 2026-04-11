@@ -68,6 +68,7 @@ const App = () => (
                   <Route path="/guests" element={<GuestsPage />} />
                   <Route path="/reservations" element={<ReservationsPage />} />
                   <Route path="/rooms" element={<RoomsPage />} />
+                  <Route path="/room-categories" element={<RoomCategoriesPage />} />
                   <Route path="/check-in-out" element={<CheckInOutPage />} />
                   <Route path="/siestes" element={<SiestesPage />} />
                   <Route path="/main-courante" element={<MainCourantePage />} />
