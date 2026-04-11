@@ -29,6 +29,8 @@ import SettingsPage from "@/pages/settings/SettingsPage";
 import AuditLogPage from "@/pages/audit/AuditLogPage";
 import AccessDeniedPage from "@/pages/AccessDeniedPage";
 import NotFound from "@/pages/NotFound";
+import BookingPortalPage from "@/pages/public/BookingPortalPage";
+import MenuPortalPage from "@/pages/public/MenuPortalPage";
 
 const queryClient = new QueryClient();
 
@@ -50,9 +52,15 @@ const App = () => (
             <Sonner />
             <BrowserRouter>
               <Routes>
+                {/* Public routes */}
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/onboarding" element={<OnboardingPage />} />
                 <Route path="/access-denied" element={<AccessDeniedPage />} />
+                <Route path="/booking/:slug" element={<BookingPortalPage />} />
+                <Route path="/menu/:slug" element={<MenuPortalPage />} />
+                <Route path="/menu/:slug/:room" element={<MenuPortalPage />} />
+
+                {/* Protected routes */}
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
                   <Route path="/dashboard" element={<DashboardPage />} />
