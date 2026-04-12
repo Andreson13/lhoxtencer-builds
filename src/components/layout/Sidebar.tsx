@@ -5,7 +5,7 @@ import {
   Coffee, BookOpen, UtensilsCrossed, ChefHat, Package,
   Receipt, Wallet, Sparkles, BarChart3,
   MessageSquare, QrCode, Settings, ScrollText, Building2,
-  Globe, Layers, CreditCard
+  Globe, Layers, CreditCard, UserPlus
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
@@ -17,6 +17,7 @@ const navGroups = [
   {
     label: 'Réception',
     items: [
+      { key: 'nav.accueil', path: '/accueil', icon: UserPlus, roles: ['admin','manager','receptionist'] },
       { key: 'nav.dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['admin','manager','receptionist','accountant','restaurant','kitchen','housekeeping'] },
       { key: 'nav.guests', path: '/guests', icon: Users, roles: ['admin','manager','receptionist'] },
       { key: 'nav.reservations', path: '/reservations', icon: CalendarCheck, roles: ['admin','manager','receptionist'] },

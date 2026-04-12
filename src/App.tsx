@@ -9,6 +9,7 @@ import { I18nProvider } from "@/contexts/I18nContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 import LoginPage from "@/pages/auth/LoginPage";
 import OnboardingPage from "@/pages/auth/OnboardingPage";
+import AccueilClientPage from "@/pages/reception/AccueilClientPage";
 import DashboardPage from "@/pages/dashboard/DashboardPage";
 import RoomsPage from "@/pages/rooms/RoomsPage";
 import RoomCategoriesPage from "@/pages/rooms/RoomCategoriesPage";
@@ -62,8 +63,9 @@ const App = () => (
                 <Route path="/menu/:slug/:room" element={<MenuPortalPage />} />
 
                 {/* Protected routes */}
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/" element={<Navigate to="/accueil" replace />} />
                 <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+                  <Route path="/accueil" element={<AccueilClientPage />} />
                   <Route path="/dashboard" element={<DashboardPage />} />
                   <Route path="/guests" element={<GuestsPage />} />
                   <Route path="/reservations" element={<ReservationsPage />} />

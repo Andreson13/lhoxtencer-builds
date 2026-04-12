@@ -26,7 +26,7 @@ export const updateMainCourante = async (
     await supabase.from('main_courante').update({
       [field]: current + amount,
       updated_at: new Date().toISOString(),
-    }).eq('id', existing.id);
+    } as any).eq('id', existing.id);
   } else {
     await supabase.from('main_courante').insert({
       hotel_id: hotelId,
