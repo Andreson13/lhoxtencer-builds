@@ -1500,6 +1500,7 @@ export type Database = {
           room_number: string | null
           started_at: string | null
           status: string | null
+          stay_id: string | null
           total_amount: number | null
           walkin_name: string | null
           walkin_table: string | null
@@ -1522,6 +1523,7 @@ export type Database = {
           room_number?: string | null
           started_at?: string | null
           status?: string | null
+          stay_id?: string | null
           total_amount?: number | null
           walkin_name?: string | null
           walkin_table?: string | null
@@ -1544,6 +1546,7 @@ export type Database = {
           room_number?: string | null
           started_at?: string | null
           status?: string | null
+          stay_id?: string | null
           total_amount?: number | null
           walkin_name?: string | null
           walkin_table?: string | null
@@ -1591,14 +1594,24 @@ export type Database = {
             referencedRelation: "rooms"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "restaurant_orders_stay_id_fkey"
+            columns: ["stay_id"]
+            isOneToOne: false
+            referencedRelation: "stays"
+            referencedColumns: ["id"]
+          },
         ]
       }
       room_categories: {
         Row: {
+          breakfast_included: boolean | null
+          breakfast_price: number | null
           color: string | null
           created_at: string | null
           description: string | null
           display_order: number | null
+          extra_options: Json | null
           features: string[] | null
           hotel_id: string
           id: string
@@ -1608,10 +1621,13 @@ export type Database = {
           price_sieste: number | null
         }
         Insert: {
+          breakfast_included?: boolean | null
+          breakfast_price?: number | null
           color?: string | null
           created_at?: string | null
           description?: string | null
           display_order?: number | null
+          extra_options?: Json | null
           features?: string[] | null
           hotel_id: string
           id?: string
@@ -1621,10 +1637,13 @@ export type Database = {
           price_sieste?: number | null
         }
         Update: {
+          breakfast_included?: boolean | null
+          breakfast_price?: number | null
           color?: string | null
           created_at?: string | null
           description?: string | null
           display_order?: number | null
+          extra_options?: Json | null
           features?: string[] | null
           hotel_id?: string
           id?: string
@@ -1804,6 +1823,7 @@ export type Database = {
           departure_time: string | null
           duration_hours: number | null
           full_name: string
+          guest_id: string | null
           hotel_id: string
           id: string
           id_issued_on: string | null
@@ -1832,6 +1852,7 @@ export type Database = {
           departure_time?: string | null
           duration_hours?: number | null
           full_name: string
+          guest_id?: string | null
           hotel_id: string
           id?: string
           id_issued_on?: string | null
@@ -1860,6 +1881,7 @@ export type Database = {
           departure_time?: string | null
           duration_hours?: number | null
           full_name?: string
+          guest_id?: string | null
           hotel_id?: string
           id?: string
           id_issued_on?: string | null
@@ -1882,6 +1904,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "siestes_guest_id_fkey"
+            columns: ["guest_id"]
+            isOneToOne: false
+            referencedRelation: "guests"
             referencedColumns: ["id"]
           },
           {
@@ -1918,6 +1947,7 @@ export type Database = {
         Row: {
           actual_check_out: string | null
           arrangement: string | null
+          arrangement_price: number | null
           check_in_date: string | null
           check_out_date: string | null
           created_at: string | null
@@ -1943,6 +1973,7 @@ export type Database = {
         Insert: {
           actual_check_out?: string | null
           arrangement?: string | null
+          arrangement_price?: number | null
           check_in_date?: string | null
           check_out_date?: string | null
           created_at?: string | null
@@ -1968,6 +1999,7 @@ export type Database = {
         Update: {
           actual_check_out?: string | null
           arrangement?: string | null
+          arrangement_price?: number | null
           check_in_date?: string | null
           check_out_date?: string | null
           created_at?: string | null
