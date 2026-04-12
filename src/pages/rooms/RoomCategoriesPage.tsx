@@ -21,6 +21,8 @@ import { toast } from 'sonner';
 
 const featureOptions = ['AC', 'TV', 'WiFi', 'Balcon', 'Vue piscine', 'Minibar', 'Coffre-fort', 'Baignoire', 'Douche', 'Réfrigérateur'];
 
+interface ExtraOption { id: string; name: string; price: number; }
+
 const RoomCategoriesPage = () => {
   useRoleGuard(['admin', 'manager']);
   const { hotel } = useHotel();
@@ -34,7 +36,10 @@ const RoomCategoriesPage = () => {
   const [form, setForm] = useState({
     name: '', description: '', price_per_night: 0, price_sieste: 0,
     features: [] as string[], color: '#6366f1', portal_visible: true,
+    breakfast_included: false, breakfast_price: 0, extra_options: [] as ExtraOption[],
   });
+  const [newOptionName, setNewOptionName] = useState('');
+  const [newOptionPrice, setNewOptionPrice] = useState(0);
 
   const { data: categories, isLoading } = useQuery({
     queryKey: ['room-categories', hotel?.id],
@@ -56,7 +61,13 @@ const RoomCategoriesPage = () => {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const payload: any = { ...form, hotel_id: hotel!.id };
+      const payload: any = {
+        hotel_id: hotel!.id, name: form.name, description: form.description || null,
+        price_per_night: form.price_per_night, price_sieste: form.price_sieste,
+        features: form.features, color: form.color, portal_visible: form.portal_visible,
+        breakfast_included: form.breakfast_included, breakfast_price: form.breakfast_price,
+        extra_options: form.extra_options,
+      };
       if (editing) {
         const { error } = await supabase.from('room_categories').update(payload).eq('id', editing.id);
         if (error) throw error;
@@ -65,47 +76,26 @@ const RoomCategoriesPage = () => {
         if (error) throw error;
       }
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['room-categories'] });
-      toast.success(editing ? 'Catégorie modifiée' : 'Catégorie créée');
-      setDialogOpen(false);
-    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['room-categories'] }); toast.success(editing ? 'Catégorie modifiée' : 'Catégorie créée'); setDialogOpen(false); },
     onError: (e: any) => toast.error(e.message),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('room_categories').delete().eq('id', id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['room-categories'] });
-      toast.success('Catégorie supprimée');
-      setDeleteId(null);
-    },
+    mutationFn: async (id: string) => { const { error } = await supabase.from('room_categories').delete().eq('id', id); if (error) throw error; },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['room-categories'] }); toast.success('Catégorie supprimée'); setDeleteId(null); },
     onError: (e: any) => toast.error(e.message),
   });
 
   const assignRoomsMutation = useMutation({
     mutationFn: async () => {
       if (!managingCategory) return;
-      // Unassign rooms that were in this category but are no longer selected
       const prevRooms = rooms?.filter(r => r.category_id === managingCategory.id).map(r => r.id) || [];
       const toUnassign = prevRooms.filter(id => !selectedRoomIds.includes(id));
       const toAssign = selectedRoomIds.filter(id => !prevRooms.includes(id));
-
-      if (toUnassign.length) {
-        await supabase.from('rooms').update({ category_id: null } as any).in('id', toUnassign);
-      }
-      if (toAssign.length) {
-        await supabase.from('rooms').update({ category_id: managingCategory.id } as any).in('id', toAssign);
-      }
+      if (toUnassign.length) await supabase.from('rooms').update({ category_id: null } as any).in('id', toUnassign);
+      if (toAssign.length) await supabase.from('rooms').update({ category_id: managingCategory.id } as any).in('id', toAssign);
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['all-rooms'] });
-      toast.success('Chambres assignées');
-      setRoomsDialogOpen(false);
-    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['all-rooms'] }); toast.success('Chambres assignées'); setRoomsDialogOpen(false); },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -115,13 +105,16 @@ const RoomCategoriesPage = () => {
       name: cat.name, description: cat.description || '', price_per_night: cat.price_per_night,
       price_sieste: cat.price_sieste || 0, features: cat.features || [], color: cat.color || '#6366f1',
       portal_visible: cat.portal_visible ?? true,
+      breakfast_included: (cat as any).breakfast_included ?? false,
+      breakfast_price: (cat as any).breakfast_price ?? 0,
+      extra_options: ((cat as any).extra_options as ExtraOption[]) || [],
     });
     setDialogOpen(true);
   };
 
   const openAdd = () => {
     setEditing(null);
-    setForm({ name: '', description: '', price_per_night: 0, price_sieste: 0, features: [], color: '#6366f1', portal_visible: true });
+    setForm({ name: '', description: '', price_per_night: 0, price_sieste: 0, features: [], color: '#6366f1', portal_visible: true, breakfast_included: false, breakfast_price: 0, extra_options: [] });
     setDialogOpen(true);
   };
 
@@ -131,12 +124,16 @@ const RoomCategoriesPage = () => {
     setRoomsDialogOpen(true);
   };
 
-  const toggleFeature = (feat: string) => {
-    setForm(f => ({
-      ...f,
-      features: f.features.includes(feat) ? f.features.filter(ff => ff !== feat) : [...f.features, feat],
-    }));
+  const toggleFeature = (feat: string) => setForm(f => ({ ...f, features: f.features.includes(feat) ? f.features.filter(ff => ff !== feat) : [...f.features, feat] }));
+
+  const addExtraOption = () => {
+    if (!newOptionName) return;
+    const opt: ExtraOption = { id: newOptionName.toLowerCase().replace(/\s+/g, '_'), name: newOptionName, price: newOptionPrice };
+    setForm(f => ({ ...f, extra_options: [...f.extra_options, opt] }));
+    setNewOptionName(''); setNewOptionPrice(0);
   };
+
+  const removeExtraOption = (id: string) => setForm(f => ({ ...f, extra_options: f.extra_options.filter(o => o.id !== id) }));
 
   const getRoomCount = (catId: string) => rooms?.filter(r => r.category_id === catId).length || 0;
 
@@ -168,27 +165,22 @@ const RoomCategoriesPage = () => {
               <CardContent className="space-y-3">
                 {cat.description && <p className="text-sm text-muted-foreground">{cat.description}</p>}
                 <div className="flex gap-4">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Prix/nuit</p>
-                    <p className="text-lg font-bold">{formatFCFA(cat.price_per_night)}</p>
-                  </div>
-                  {(cat.price_sieste as number) > 0 && (
-                    <div>
-                      <p className="text-xs text-muted-foreground">Prix sieste</p>
-                      <p className="text-lg font-bold">{formatFCFA(cat.price_sieste)}</p>
-                    </div>
-                  )}
+                  <div><p className="text-xs text-muted-foreground">Prix/nuit</p><p className="text-lg font-bold">{formatFCFA(cat.price_per_night)}</p></div>
+                  {(cat.price_sieste as number) > 0 && <div><p className="text-xs text-muted-foreground">Prix sieste</p><p className="text-lg font-bold">{formatFCFA(cat.price_sieste)}</p></div>}
                 </div>
+                {(cat as any).breakfast_included && <Badge variant="outline" className="text-xs text-green-600 border-green-300">Petit-déjeuner inclus</Badge>}
+                {!(cat as any).breakfast_included && (cat as any).breakfast_price > 0 && <Badge variant="outline" className="text-xs">PDJ: {formatFCFA((cat as any).breakfast_price)}/pers</Badge>}
                 <div className="flex flex-wrap gap-1">
-                  {(cat.features as string[])?.map(f => (
-                    <Badge key={f} variant="outline" className="text-xs">{f}</Badge>
-                  ))}
+                  {(cat.features as string[])?.map(f => <Badge key={f} variant="outline" className="text-xs">{f}</Badge>)}
                 </div>
+                {((cat as any).extra_options as ExtraOption[] || []).length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {((cat as any).extra_options as ExtraOption[]).map(o => <Badge key={o.id} variant="secondary" className="text-xs">{o.name} +{formatFCFA(o.price)}</Badge>)}
+                  </div>
+                )}
                 <div className="flex items-center justify-between pt-2 border-t">
                   <p className="text-sm text-muted-foreground">{getRoomCount(cat.id)} chambre(s)</p>
-                  <Button variant="outline" size="sm" onClick={() => openManageRooms(cat)}>
-                    <BedDouble className="h-3 w-3 mr-1" />Gérer les chambres
-                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => openManageRooms(cat)}><BedDouble className="h-3 w-3 mr-1" />Gérer les chambres</Button>
                 </div>
               </CardContent>
             </Card>
@@ -198,7 +190,7 @@ const RoomCategoriesPage = () => {
 
       {/* Category Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? 'Modifier la catégorie' : 'Nouvelle catégorie'}</DialogTitle>
             <DialogDescription>Définissez le type de chambre et ses tarifs</DialogDescription>
@@ -210,22 +202,42 @@ const RoomCategoriesPage = () => {
               <div><Label>Prix/nuit (FCFA)</Label><Input type="number" value={form.price_per_night} onChange={e => setForm(f => ({ ...f, price_per_night: Number(e.target.value) }))} /></div>
               <div><Label>Prix sieste (FCFA)</Label><Input type="number" value={form.price_sieste} onChange={e => setForm(f => ({ ...f, price_sieste: Number(e.target.value) }))} /></div>
             </div>
-            <div>
-              <Label>Équipements</Label>
+            <div><Label>Équipements</Label>
               <div className="flex flex-wrap gap-2 mt-2">
-                {featureOptions.map(f => (
-                  <Badge key={f} variant={form.features.includes(f) ? 'default' : 'outline'} className="cursor-pointer" onClick={() => toggleFeature(f)}>
-                    {f}
-                  </Badge>
-                ))}
+                {featureOptions.map(f => <Badge key={f} variant={form.features.includes(f) ? 'default' : 'outline'} className="cursor-pointer" onClick={() => toggleFeature(f)}>{f}</Badge>)}
               </div>
             </div>
+
+            {/* Breakfast */}
+            <div className="border rounded-lg p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <Switch checked={form.breakfast_included} onCheckedChange={v => setForm(f => ({ ...f, breakfast_included: v }))} />
+                <Label>Petit-déjeuner inclus</Label>
+              </div>
+              {!form.breakfast_included && (
+                <div><Label>Prix petit-déjeuner par personne (FCFA)</Label><Input type="number" value={form.breakfast_price} onChange={e => setForm(f => ({ ...f, breakfast_price: Number(e.target.value) }))} /></div>
+              )}
+            </div>
+
+            {/* Extra Options */}
+            <div className="border rounded-lg p-3 space-y-3">
+              <Label className="font-semibold">Options supplémentaires</Label>
+              {form.extra_options.map(opt => (
+                <div key={opt.id} className="flex items-center justify-between text-sm bg-muted/50 rounded px-2 py-1">
+                  <span>{opt.name} — {formatFCFA(opt.price)}</span>
+                  <Button variant="ghost" size="sm" onClick={() => removeExtraOption(opt.id)} className="h-6 px-2 text-destructive">×</Button>
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <Input placeholder="Nom option" value={newOptionName} onChange={e => setNewOptionName(e.target.value)} className="flex-1" />
+                <Input type="number" placeholder="Prix" value={newOptionPrice || ''} onChange={e => setNewOptionPrice(Number(e.target.value))} className="w-24" />
+                <Button variant="outline" size="sm" onClick={addExtraOption} disabled={!newOptionName}>+</Button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div><Label>Couleur</Label><Input type="color" value={form.color} onChange={e => setForm(f => ({ ...f, color: e.target.value }))} /></div>
-              <div className="flex items-center gap-2 mt-6">
-                <Switch checked={form.portal_visible} onCheckedChange={v => setForm(f => ({ ...f, portal_visible: v }))} />
-                <Label>Visible sur le portail</Label>
-              </div>
+              <div className="flex items-center gap-2 mt-6"><Switch checked={form.portal_visible} onCheckedChange={v => setForm(f => ({ ...f, portal_visible: v }))} /><Label>Visible sur le portail</Label></div>
             </div>
           </div>
           <DialogFooter>
@@ -248,12 +260,7 @@ const RoomCategoriesPage = () => {
               const otherCatName = otherCat ? categories?.find(c => c.id === room.category_id)?.name : null;
               return (
                 <label key={room.id} className={`flex items-center gap-3 p-2 rounded hover:bg-muted cursor-pointer ${otherCat ? 'opacity-50' : ''}`}>
-                  <Checkbox
-                    checked={selectedRoomIds.includes(room.id)}
-                    onCheckedChange={(checked) => {
-                      setSelectedRoomIds(prev => checked ? [...prev, room.id] : prev.filter(id => id !== room.id));
-                    }}
-                  />
+                  <Checkbox checked={selectedRoomIds.includes(room.id)} onCheckedChange={checked => setSelectedRoomIds(prev => checked ? [...prev, room.id] : prev.filter(id => id !== room.id))} />
                   <span className="font-mono">{room.room_number}</span>
                   <span className="text-sm text-muted-foreground">Étage {room.floor}</span>
                   {otherCatName && <Badge variant="secondary" className="text-xs ml-auto">{otherCatName}</Badge>}
