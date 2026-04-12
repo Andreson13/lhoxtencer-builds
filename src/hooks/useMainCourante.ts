@@ -1,6 +1,14 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
+const toLocalDateKey = (date: Date | string) => {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 export const useEnsureMainCourante = () => {
   const qc = useQueryClient();
 
@@ -16,9 +24,9 @@ export const useEnsureMainCourante = () => {
 
       if (!activeStays?.length) return;
 
-      const prevDate = new Date(date);
+      const prevDate = new Date(`${date}T00:00:00`);
       prevDate.setDate(prevDate.getDate() - 1);
-      const prevDateStr = prevDate.toISOString().split('T')[0];
+      const prevDateStr = toLocalDateKey(prevDate);
 
       for (const stay of activeStays) {
         const guest = (stay as any).guests;
@@ -45,7 +53,7 @@ export const useEnsureMainCourante = () => {
           .eq('journee', prevDateStr)
           .maybeSingle();
 
-        const isCheckInDay = stay.check_in_date?.split('T')[0] === date;
+        const isCheckInDay = toLocalDateKey(stay.check_in_date) === date;
         const hebergement = isCheckInDay ? (stay.price_per_night || 0) : 0;
         const reportVeille = prevEntry?.a_reporter || 0;
 

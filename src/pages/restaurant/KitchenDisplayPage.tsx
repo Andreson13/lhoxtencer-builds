@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { useRealtimeTable } from '@/hooks/useRealtimeTable';
-import { updateMainCourante } from '@/utils/mainCourante';
+import { addChargeToInvoice } from '@/services/transactionService';
 import { formatFCFA } from '@/utils/formatters';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,9 +23,9 @@ const KitchenDisplayPage = () => {
     queryKey: ['kitchen-orders', hotel?.id],
     queryFn: async () => {
       const { data } = await supabase.from('restaurant_orders')
-        .select('*, restaurant_order_items(*, restaurant_items(name, inventory_item_id))')
+        .select('*, guests(first_name, last_name), rooms(room_number), restaurant_order_items(*, restaurant_items(name, inventory_item_id))')
         .eq('hotel_id', hotel!.id)
-        .in('status', ['pending', 'in_preparation'])
+        .in('status', ['pending', 'in_preparation', 'ready'])
         .order('created_at');
       return data || [];
     },
@@ -40,6 +40,8 @@ const KitchenDisplayPage = () => {
       if (status === 'ready') updates.ready_at = new Date().toISOString();
       if (status === 'delivered') {
         updates.delivered_at = new Date().toISOString();
+        updates.started_at = order?.started_at || updates.delivered_at;
+        updates.ready_at = order?.ready_at || updates.delivered_at;
 
         // FIX 10: Stock auto-deduction on delivery
         if (order?.restaurant_order_items) {
@@ -70,29 +72,43 @@ const KitchenDisplayPage = () => {
           }
         }
 
-        // FIX 11: Update main_courante restaurant column if billed to room
-        if (order?.billed_to_room && order?.guest_id && order?.room_number && hotel) {
-          const today = new Date().toISOString().split('T')[0];
-          const guestName = order.room_number ? `Chambre ${order.room_number}` : 'Client';
-          await updateMainCourante(hotel.id, today, order.guest_id, order.room_number, guestName, 'restaurant', order.total_amount || 0);
-
-          // Add to guest invoice
-          if (order.invoice_id) {
-            await supabase.from('invoice_items').insert({
-              hotel_id: hotel.id, invoice_id: order.invoice_id,
-              description: `Restaurant — Commande #${order.order_number}`,
-              item_type: 'restaurant', quantity: 1,
-              unit_price: order.total_amount || 0, subtotal: order.total_amount || 0,
-            });
-            // Update invoice total
-            const { data: inv } = await supabase.from('invoices').select('total_amount, balance_due').eq('id', order.invoice_id).maybeSingle();
-            if (inv) {
-              await supabase.from('invoices').update({
-                total_amount: (inv.total_amount || 0) + (order.total_amount || 0),
-                balance_due: (inv.balance_due || 0) + (order.total_amount || 0),
-              }).eq('id', order.invoice_id);
-            }
+        if (order?.status !== 'delivered' && order?.billed_to_room && order?.stay_id && order?.invoice_id && order?.guest_id && hotel) {
+          // Ensure guest_id is available (fetch from stay if order doesn't have it)
+          let guestId = order?.guest_id;
+          if (!guestId && order?.stay_id) {
+            const { data: stay } = await supabase.from('stays').select('guest_id').eq('id', order.stay_id).maybeSingle();
+            if (stay?.guest_id) guestId = stay.guest_id;
           }
+
+          if (guestId) {
+          const chargeDescription = `Restaurant — Commande #${order.order_number}`;
+          const { data: existingCharge } = await supabase
+            .from('invoice_items')
+            .select('id')
+            .eq('invoice_id', order.invoice_id)
+            .eq('description', chargeDescription)
+            .maybeSingle();
+
+          if (!existingCharge) {
+            await addChargeToInvoice({
+              hotelId: hotel.id,
+              invoiceId: order.invoice_id,
+              stayId: order.stay_id,
+              guestId: guestId,
+              description: chargeDescription,
+              itemType: 'restaurant',
+              quantity: 1,
+              unitPrice: order.total_amount || 0,
+            });
+          }
+          }
+
+          await supabase.from('notifications').insert({
+            hotel_id: hotel.id,
+            type: 'restaurant_delivered',
+            title: 'Commande livrée',
+            message: `Commande ${order.order_number} livrée et ajoutée à la facture`,
+          });
         }
       }
 
@@ -104,14 +120,15 @@ const KitchenDisplayPage = () => {
 
   const pendingOrders = orders?.filter(o => o.status === 'pending') || [];
   const inPrepOrders = orders?.filter(o => o.status === 'in_preparation') || [];
+  const readyOrders = orders?.filter(o => o.status === 'ready') || [];
 
   const getElapsed = (createdAt: string) => Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
 
   const OrderCard = ({ order }: { order: any }) => {
     const elapsed = getElapsed(order.created_at);
     const isLate = elapsed > 30;
-    const guestLabel = order.room_number
-      ? `Chambre ${order.room_number}${order.walkin_name ? ' — ' + order.walkin_name : ''}`
+    const guestLabel = order.room_number || (order as any).rooms?.room_number
+      ? `Chambre ${(order as any).rooms?.room_number || order.room_number}${((order as any).guests?.last_name && (order as any).guests?.first_name) ? ` — ${(order as any).guests.last_name} ${(order as any).guests.first_name}` : ''}${order.walkin_name ? ' — ' + order.walkin_name : ''}`
       : order.is_walkin
         ? `Walk-in${order.walkin_name ? ' — ' + order.walkin_name : ''}${order.walkin_table ? ' (Table ' + order.walkin_table + ')' : ''}`
         : 'Commande interne';
@@ -138,10 +155,10 @@ const KitchenDisplayPage = () => {
           {order.notes && <p className="text-xs text-muted-foreground italic mb-3">Note: {order.notes}</p>}
           <div className="flex gap-2">
             {order.status === 'pending' && (
-              <Button size="sm" onClick={() => updateStatus.mutate({ id: order.id, status: 'in_preparation' })} className="flex-1"><Play className="h-3 w-3 mr-1" />Commencer</Button>
+              <Button size="sm" onClick={() => updateStatus.mutate({ id: order.id, status: 'in_preparation', order })} className="flex-1"><Play className="h-3 w-3 mr-1" />Commencer</Button>
             )}
             {order.status === 'in_preparation' && (
-              <Button size="sm" onClick={() => updateStatus.mutate({ id: order.id, status: 'ready' })} className="flex-1"><CheckCircle className="h-3 w-3 mr-1" />Prêt</Button>
+              <Button size="sm" onClick={() => updateStatus.mutate({ id: order.id, status: 'ready', order })} className="flex-1"><CheckCircle className="h-3 w-3 mr-1" />Prêt</Button>
             )}
             {order.status === 'ready' && (
               <Button size="sm" variant="outline" onClick={() => updateStatus.mutate({ id: order.id, status: 'delivered', order })} className="flex-1">Livré</Button>
@@ -156,9 +173,9 @@ const KitchenDisplayPage = () => {
     <div className="page-container">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2"><ChefHat className="h-6 w-6" /><h1 className="text-2xl font-bold">Cuisine</h1></div>
-        <Badge variant="outline">{(pendingOrders.length + inPrepOrders.length)} commande(s) active(s)</Badge>
+        <Badge variant="outline">{(pendingOrders.length + inPrepOrders.length + readyOrders.length)} commande(s) active(s)</Badge>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div>
           <h2 className="text-lg font-semibold mb-3 flex items-center gap-2"><Badge variant="destructive">{pendingOrders.length}</Badge>En attente</h2>
           <div className="space-y-4">{pendingOrders.map(o => <OrderCard key={o.id} order={o} />)}</div>
@@ -166,6 +183,10 @@ const KitchenDisplayPage = () => {
         <div>
           <h2 className="text-lg font-semibold mb-3 flex items-center gap-2"><Badge>{inPrepOrders.length}</Badge>En préparation</h2>
           <div className="space-y-4">{inPrepOrders.map(o => <OrderCard key={o.id} order={o} />)}</div>
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold mb-3 flex items-center gap-2"><Badge className="bg-green-600">{readyOrders.length}</Badge>Prêtes</h2>
+          <div className="space-y-4">{readyOrders.map(o => <OrderCard key={o.id} order={o} />)}</div>
         </div>
       </div>
     </div>

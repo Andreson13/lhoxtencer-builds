@@ -1,6 +1,6 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { BedDouble, Users, DoorOpen, UserCheck } from 'lucide-react';
+import { BedDouble, Users, DoorOpen, UserCheck, Wallet } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -48,6 +48,19 @@ const DashboardPage = () => {
     enabled: !!hotelId,
   });
 
+  const { data: pendingPayments } = useQuery({
+    queryKey: ['pending-payments', hotelId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('stays')
+        .select('id, invoices(balance_due)')
+        .eq('hotel_id', hotelId!)
+        .eq('status', 'active');
+      return (data || []).reduce((sum: number, row: any) => sum + (row.invoices?.balance_due || 0), 0);
+    },
+    enabled: !!hotelId,
+  });
+
   const totalRooms = rooms?.length || 0;
   const occupiedRooms = rooms?.filter((r: any) => r.status === 'occupied').length || 0;
   const availableRooms = rooms?.filter((r: any) => r.status === 'available').length || 0;
@@ -58,6 +71,7 @@ const DashboardPage = () => {
     { label: 'Occupées', value: occupiedRooms, icon: DoorOpen, color: 'bg-destructive/10 text-destructive' },
     { label: 'Disponibles', value: availableRooms, icon: BedDouble, color: 'bg-success/10 text-success' },
     { label: 'Clients Présents', value: presentGuests, icon: UserCheck, color: 'bg-info/10 text-info' },
+    { label: 'Paiements en attente', value: formatFCFA(pendingPayments || 0), icon: Wallet, color: 'bg-orange-100 text-orange-700' },
   ];
 
   const statusColors: Record<string, string> = {

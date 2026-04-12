@@ -242,7 +242,7 @@ const ReservationsPage = () => {
             <div className="rounded-md border">
               <Table>
                 <TableHeader><TableRow>
-                  <TableHead>N° Réservation</TableHead><TableHead>Client</TableHead><TableHead>Chambre</TableHead><TableHead>Arrivée</TableHead><TableHead>Départ</TableHead><TableHead>Nuits</TableHead><TableHead className="text-right">Montant</TableHead><TableHead>Statut</TableHead><TableHead className="text-right">Actions</TableHead>
+                  <TableHead>N° Réservation</TableHead><TableHead>Client</TableHead><TableHead>Chambre</TableHead><TableHead>Arrivée</TableHead><TableHead>Départ</TableHead><TableHead>Nuits</TableHead><TableHead className="text-right">Montant</TableHead><TableHead>Paiement</TableHead><TableHead>Statut</TableHead><TableHead className="text-right">Actions</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
                   {filtered.map(r => (
@@ -254,6 +254,13 @@ const ReservationsPage = () => {
                       <TableCell>{formatDate(r.check_out_date)}</TableCell>
                       <TableCell>{r.number_of_nights || '-'}</TableCell>
                       <TableCell className="text-right">{formatFCFA(r.total_price)}</TableCell>
+                      <TableCell>
+                        {(r.deposit_paid || 0) <= 0
+                          ? <Badge variant="destructive">En attente</Badge>
+                          : (r.deposit_paid || 0) < (r.total_price || 0)
+                            ? <Badge className="bg-orange-500">Partiel</Badge>
+                            : <Badge className="bg-green-600">Payé</Badge>}
+                      </TableCell>
                       <TableCell><StatusBadge status={r.status || 'pending'} /></TableCell>
                       <TableCell className="text-right space-x-1">
                         {r.status === 'pending' && <Button variant="outline" size="sm" onClick={() => statusMutation.mutate({ id: r.id, status: 'confirmed' })}><Check className="h-3 w-3 mr-1" />Confirmer</Button>}

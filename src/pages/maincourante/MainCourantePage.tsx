@@ -5,7 +5,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { useEnsureMainCourante } from '@/hooks/useMainCourante';
+import { reconcileMainCouranteForDate } from '@/services/transactionService';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { PaymentDialog } from '@/components/shared/PaymentDialog';
 import { formatFCFA, formatFullDate } from '@/utils/formatters';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,14 +21,35 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { toast } from 'sonner';
 import { ChevronLeft, ChevronRight, Plus, Lock } from 'lucide-react';
 
+const toSafeNumber = (value: unknown) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const formatSupabaseError = (error: any) => {
+  if (!error) return 'Erreur inconnue';
+  const parts = [error.message, error.details, error.hint].filter(Boolean);
+  return parts.length ? parts.join(' | ') : String(error);
+};
+
 const MainCourantePage = () => {
+  const getLocalDateKey = () => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
   useRoleGuard(['admin', 'manager', 'receptionist']);
   const { profile } = useAuth();
   const { hotel } = useHotel();
   const qc = useQueryClient();
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(getLocalDateKey());
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [manualEntry, setManualEntry] = useState({ room_number: '', nom_client: '', nombre_personnes: 1 });
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [paymentContext, setPaymentContext] = useState<any>(null);
 
   const ensureMC = useEnsureMainCourante();
 
@@ -40,6 +63,7 @@ const MainCourantePage = () => {
   const { data: entries, isLoading } = useQuery({
     queryKey: ['main-courante', hotel?.id, selectedDate],
     queryFn: async () => {
+      await reconcileMainCouranteForDate(hotel!.id, selectedDate);
       const { data, error } = await supabase.from('main_courante').select('*').eq('hotel_id', hotel!.id).eq('journee', selectedDate).order('room_number');
       if (error) throw error;
       return data;
@@ -50,26 +74,33 @@ const MainCourantePage = () => {
   const updateFieldMutation = useMutation({
     mutationFn: async ({ id, field, value }: { id: string; field: string; value: number }) => {
       const entry = entries?.find(e => e.id === id);
-      if (!entry) return;
-      const h = field === 'hebergement' ? value : (entry.hebergement || 0);
-      const b = field === 'bar' ? value : (entry.bar || 0);
-      const r = field === 'restaurant' ? value : (entry.restaurant || 0);
-      const d = field === 'divers' ? value : (entry.divers || 0);
-      const ded = field === 'deduction' ? value : (entry.deduction || 0);
-      const enc = field === 'encaissement' ? value : (entry.encaissement || 0);
+      if (!entry) throw new Error('Ligne introuvable pour mise a jour');
+      const h = field === 'hebergement' ? toSafeNumber(value) : toSafeNumber(entry.hebergement);
+      const b = field === 'bar' ? toSafeNumber(value) : toSafeNumber(entry.bar);
+      const r = field === 'restaurant' ? toSafeNumber(value) : toSafeNumber(entry.restaurant);
+      const d = field === 'divers' ? toSafeNumber(value) : toSafeNumber(entry.divers);
+      const ded = field === 'deduction' ? toSafeNumber(value) : toSafeNumber(entry.deduction);
+      const enc = field === 'encaissement' ? toSafeNumber(value) : toSafeNumber(entry.encaissement);
       const caTotal = h + b + r + d;
-      const aReporter = caTotal + (entry.report_veille || 0) - ded - enc;
+      const aReporter = caTotal + toSafeNumber(entry.report_veille) - ded - enc;
 
-      const { error } = await supabase.from('main_courante').update({
+      const payload = {
         hebergement: h, bar: b, restaurant: r, divers: d,
         deduction: ded, encaissement: enc,
-        ca_total_jour: caTotal, a_reporter: aReporter,
         updated_at: new Date().toISOString(),
-      } as any).eq('id', id);
-      if (error) throw error;
+      } as any;
+
+      const { error } = await supabase.from('main_courante').update(payload).eq('id', id);
+      if (error) {
+        console.error('main_courante PATCH failed', { id, field, value, payload, error });
+        throw new Error(formatSupabaseError(error));
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['main-courante'] }),
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => {
+      const msg = formatSupabaseError(e);
+      toast.error(`Main Courante: ${msg.length > 220 ? `${msg.slice(0, 220)}...` : msg}`);
+    },
   });
 
   const closeDayMutation = useMutation({
@@ -100,8 +131,9 @@ const MainCourantePage = () => {
   };
 
   const isClosed = entries?.some(e => e.day_closed);
-  const isToday = selectedDate === new Date().toISOString().split('T')[0];
-  const isPast = selectedDate < new Date().toISOString().split('T')[0];
+  const todayKey = getLocalDateKey();
+  const isToday = selectedDate === todayKey;
+  const isPast = selectedDate < todayKey;
 
   const totals = entries?.reduce((acc, e) => ({
     hebergement: acc.hebergement + (e.hebergement || 0),
@@ -120,6 +152,45 @@ const MainCourantePage = () => {
     const [val, setVal] = useState(value);
     const readonly = isClosed || (isPast && !isToday);
     if (readonly) return <TableCell className="text-right">{formatFCFA(value)}</TableCell>;
+
+    if (field === 'encaissement') {
+      return (
+        <TableCell className="text-right">
+          <button
+            className="text-right w-full hover:bg-muted/50 px-1 rounded cursor-pointer"
+            onClick={async () => {
+              const { data: invoice } = await supabase
+                .from('invoices')
+                .select('id, invoice_number, balance_due, stay_id')
+                .eq('hotel_id', hotel!.id)
+                .eq('guest_id', entry.guest_id)
+                .in('status', ['open', 'partial'])
+                .order('created_at', { ascending: false })
+                .maybeSingle();
+
+              if (!invoice || !invoice.balance_due || invoice.balance_due <= 0) {
+                toast.info('Aucun solde ouvert pour ce client');
+                return;
+              }
+
+              setPaymentContext({
+                invoiceId: invoice.id,
+                stayId: invoice.stay_id || entry.stay_id,
+                guestId: entry.guest_id,
+                currentBalance: invoice.balance_due,
+                invoiceNumber: invoice.invoice_number,
+                roomNumber: entry.room_number,
+                guestName: entry.nom_client,
+              });
+              setPaymentDialogOpen(true);
+            }}
+          >
+            {formatFCFA(value)}
+          </button>
+        </TableCell>
+      );
+    }
+
     return (
       <TableCell className="text-right">
         <Popover open={editing} onOpenChange={setEditing}>
@@ -241,6 +312,21 @@ const MainCourantePage = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {paymentContext && (
+        <PaymentDialog
+          open={paymentDialogOpen}
+          onOpenChange={setPaymentDialogOpen}
+          invoiceId={paymentContext.invoiceId}
+          stayId={paymentContext.stayId}
+          guestId={paymentContext.guestId}
+          currentBalance={paymentContext.currentBalance}
+          invoiceNumber={paymentContext.invoiceNumber}
+          roomNumber={paymentContext.roomNumber}
+          guestName={paymentContext.guestName}
+          onSuccess={() => qc.invalidateQueries({ queryKey: ['main-courante'] })}
+        />
+      )}
     </div>
   );
 };

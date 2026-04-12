@@ -1,0 +1,5 @@
+# SPA fallback (VERY IMPORTANT)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

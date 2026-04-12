@@ -5,8 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { formatFCFA, generateInvoiceNumber } from '@/utils/formatters';
-import { recordCashMovement } from '@/utils/cashMovement';
-import { updateMainCourante } from '@/utils/mainCourante';
+import { getOrCreateInvoice, addChargeToInvoice, recordPayment } from '@/services/transactionService';
 import { withAudit } from '@/utils/auditLog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -106,20 +105,10 @@ const AccueilClientPage = () => {
         guestId = g.id;
       }
 
-      // Create invoice
-      const { data: invoice, error: invErr } = await supabase.from('invoices').insert({
-        hotel_id: hotel.id, guest_id: guestId, invoice_number: generateInvoiceNumber(),
-        subtotal: finalPrice, total_amount: finalPrice, balance_due: payNow ? 0 : finalPrice,
-        amount_paid: payNow ? finalPrice : 0,
-        created_by: profile.id, created_by_name: profile.full_name,
-        status: payNow ? 'paid' : 'open',
-      } as any).select().single();
-      if (invErr) throw invErr;
-
-      // Create stay
+      // Create stay first, then attach invoice for full transaction chain linking
       const stayData: any = {
         hotel_id: hotel.id, guest_id: guestId, stay_type: serviceType === 'sieste' ? 'sieste' : 'night',
-        room_id: selectedRoomId, status: 'active', invoice_id: invoice.id,
+        room_id: selectedRoomId, status: 'active', payment_status: 'pending',
         receptionist_id: profile.id, receptionist_name: profile.full_name,
         created_by: profile.id, created_by_name: profile.full_name,
         number_of_adults: numAdults, number_of_children: numChildren,
@@ -138,18 +127,25 @@ const AccueilClientPage = () => {
       const { data: stay, error: stayErr } = await supabase.from('stays').insert(stayData).select().single();
       if (stayErr) throw stayErr;
 
-      // Invoice item
-      const desc = serviceType === 'sieste' ? `Sieste — ${durationHours}h` : `Hébergement — ${nights} nuit(s)`;
-      await supabase.from('invoice_items').insert({
-        hotel_id: hotel.id, invoice_id: invoice.id, description: desc,
-        item_type: serviceType === 'sieste' ? 'sieste' : 'room',
-        quantity: serviceType === 'sieste' ? 1 : nights,
-        unit_price: serviceType === 'sieste' ? finalPrice : (selectedCategory?.price_per_night || 0),
-        subtotal: finalPrice,
-      });
-
       // Room occupied
       await supabase.from('rooms').update({ status: 'occupied' }).eq('id', selectedRoomId);
+
+      const invoice = await getOrCreateInvoice(hotel.id, stay.id, guestId);
+
+      const chargeDescription = serviceType === 'sieste'
+        ? `Sieste — ${durationHours}h`
+        : `Hébergement — ${selectedCategory?.name || 'Chambre'} — ${nights} nuit(s)`;
+
+      await addChargeToInvoice({
+        hotelId: hotel.id,
+        invoiceId: invoice.id,
+        stayId: stay.id,
+        guestId,
+        description: chargeDescription,
+        itemType: serviceType === 'sieste' ? 'sieste' : 'room',
+        quantity: serviceType === 'sieste' ? 1 : nights,
+        unitPrice: serviceType === 'sieste' ? finalPrice : (finalPrice / Math.max(nights, 1)),
+      });
 
       // If sieste, also create sieste record
       if (serviceType === 'sieste') {
@@ -163,25 +159,19 @@ const AccueilClientPage = () => {
         } as any);
       }
 
-      // Payment
       if (payNow) {
-        await supabase.from('payments').insert({
-          hotel_id: hotel.id, invoice_id: invoice.id, amount: finalPrice,
-          payment_method: paymentMethods[0] || 'cash', recorded_by: profile.id,
-          created_by: profile.id, created_by_name: profile.full_name,
-        } as any);
-        await recordCashMovement(hotel.id, 'in', serviceType === 'sieste' ? 'sieste' : 'hebergement',
-          `${serviceType === 'sieste' ? 'Sieste' : 'Hébergement'} — ${guestName}`,
-          finalPrice, paymentMethods[0] || 'cash', invoice.id, profile.id);
-      }
-
-      // Main courante
-      const today = new Date().toISOString().split('T')[0];
-      const room = availableRooms?.find(r => r.id === selectedRoomId);
-      await updateMainCourante(hotel.id, today, guestId, room?.room_number || '', guestName,
-        serviceType === 'sieste' ? 'divers' : 'hebergement', finalPrice);
-      if (payNow) {
-        await updateMainCourante(hotel.id, today, guestId, room?.room_number || '', guestName, 'encaissement', finalPrice);
+        await recordPayment({
+          hotelId: hotel.id,
+          invoiceId: invoice.id,
+          stayId: stay.id,
+          guestId,
+          amount: finalPrice,
+          paymentMethod: paymentMethods[0] || 'cash',
+          userId: profile.id,
+          userName: profile.full_name || '',
+          roomNumber: selectedRoom?.room_number,
+          guestName,
+        });
       }
 
       await withAudit(hotel.id, profile.id, profile.full_name || '', 'check_in', 'stays', stay.id, null, { guest_id: guestId, room_id: selectedRoomId, service: serviceType });

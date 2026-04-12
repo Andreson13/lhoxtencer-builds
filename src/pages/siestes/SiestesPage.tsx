@@ -6,8 +6,9 @@ import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { PaymentDialog } from '@/components/shared/PaymentDialog';
 import { formatFCFA } from '@/utils/formatters';
-import { recordCashMovement } from '@/utils/cashMovement';
+import { getOrCreateInvoice, addChargeToInvoice, recordPayment } from '@/services/transactionService';
 import { withAudit } from '@/utils/auditLog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,13 +34,20 @@ const SiestesPage = () => {
   const [siesteForm, setSiesteForm] = useState({
     room_id: '', arrival_time: '', duration_hours: 3, amount_paid: 0, payment_method: 'cash', notes: '',
   });
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [paymentContext, setPaymentContext] = useState<any>(null);
 
   const today = new Date().toISOString().split('T')[0];
 
   const { data: siestes, isLoading } = useQuery({
     queryKey: ['siestes', hotel?.id, today],
     queryFn: async () => {
-      const { data } = await supabase.from('siestes').select('*, rooms(room_number)').eq('hotel_id', hotel!.id).eq('arrival_date', today).order('arrival_time');
+      const { data } = await supabase
+        .from('siestes')
+        .select('*, rooms(room_number), invoices(balance_due, status, invoice_number), stays(id, guest_id)')
+        .eq('hotel_id', hotel!.id)
+        .eq('arrival_date', today)
+        .order('arrival_time');
       return data || [];
     },
     enabled: !!hotel?.id,
@@ -92,7 +100,37 @@ const SiestesPage = () => {
         ? existingGuests?.find(g => g.id === selectedGuestId)?.last_name + ' ' + existingGuests?.find(g => g.id === selectedGuestId)?.first_name
         : `${newGuest.last_name} ${newGuest.first_name}`;
 
-      // Create sieste
+      // Create stay and invoice chain
+      const { data: stay, error: stayErr } = await supabase.from('stays').insert({
+        hotel_id: hotel.id,
+        guest_id: guestId,
+        stay_type: 'sieste',
+        room_id: siesteForm.room_id || null,
+        check_in_date: new Date().toISOString(),
+        number_of_adults: 1,
+        number_of_children: 0,
+        total_price: siesteForm.amount_paid || 0,
+        status: 'active',
+        payment_status: 'pending',
+        receptionist_id: profile.id,
+        receptionist_name: profile.full_name,
+        created_by: profile.id,
+        created_by_name: profile.full_name,
+      } as any).select().single();
+      if (stayErr) throw stayErr;
+
+      const invoice = await getOrCreateInvoice(hotel.id, stay.id, guestId);
+      await addChargeToInvoice({
+        hotelId: hotel.id,
+        invoiceId: invoice.id,
+        stayId: stay.id,
+        guestId,
+        description: `Sieste — ${siesteForm.duration_hours || 3}h`,
+        itemType: 'sieste',
+        quantity: 1,
+        unitPrice: siesteForm.amount_paid || 0,
+      });
+
       const { data: sieste, error } = await supabase.from('siestes').insert({
         hotel_id: hotel.id,
         full_name: fullName,
@@ -104,6 +142,7 @@ const SiestesPage = () => {
         amount_paid: siesteForm.amount_paid,
         payment_method: siesteForm.payment_method || null,
         notes: siesteForm.notes || null,
+        invoice_id: invoice.id,
         recorded_by: profile.id,
         created_by: profile.id,
         created_by_name: profile.full_name,
@@ -115,15 +154,20 @@ const SiestesPage = () => {
         await supabase.from('rooms').update({ status: 'occupied' }).eq('id', siesteForm.room_id);
       }
 
-      // Record cash movement
       if (siesteForm.amount_paid > 0) {
         const room = rooms?.find(r => r.id === siesteForm.room_id);
-        await recordCashMovement(
-          hotel.id, 'in', 'sieste',
-          `Sieste${room ? ' chambre ' + room.room_number : ''} — ${fullName}`,
-          siesteForm.amount_paid, siesteForm.payment_method || 'cash',
-          sieste.id, profile.id,
-        );
+        await recordPayment({
+          hotelId: hotel.id,
+          invoiceId: invoice.id,
+          stayId: stay.id,
+          guestId,
+          amount: siesteForm.amount_paid,
+          paymentMethod: siesteForm.payment_method || 'cash',
+          userId: profile.id,
+          userName: profile.full_name || '',
+          roomNumber: room?.room_number,
+          guestName: fullName,
+        });
       }
 
       await withAudit(hotel.id, profile.id, profile.full_name || '', 'create_sieste', 'siestes', sieste.id, null, { guest_id: guestId });
@@ -189,7 +233,8 @@ const SiestesPage = () => {
                 <TableHead>Durée</TableHead>
                 <TableHead>Temps restant</TableHead>
                 <TableHead className="text-right">Montant</TableHead>
-                <TableHead>Statut</TableHead>
+                <TableHead>Paiement</TableHead>
+                <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -212,7 +257,27 @@ const SiestesPage = () => {
                       )}
                     </TableCell>
                     <TableCell className="text-right">{formatFCFA(s.amount_paid)}</TableCell>
-                    <TableCell>{s.departure_time ? <Badge variant="secondary">Parti</Badge> : <Badge>En cours</Badge>}</TableCell>
+                    <TableCell>
+                      {(s as any).invoices?.balance_due > 0
+                        ? <Badge variant="destructive">En attente</Badge>
+                        : <Badge className="bg-green-600">Payé</Badge>}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {((s as any).invoices?.balance_due || 0) > 0 && s.invoice_id && (s as any).stays?.id && s.guest_id && (
+                        <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => {
+                          setPaymentContext({
+                            invoiceId: s.invoice_id,
+                            stayId: (s as any).stays.id,
+                            guestId: s.guest_id,
+                            currentBalance: (s as any).invoices?.balance_due || 0,
+                            invoiceNumber: (s as any).invoices?.invoice_number,
+                            roomNumber: (s as any).rooms?.room_number,
+                            guestName: s.full_name,
+                          });
+                          setPaymentDialogOpen(true);
+                        }}>Marquer comme payé</Button>
+                      )}
+                    </TableCell>
                   </TableRow>
                 );
               })}
@@ -302,6 +367,25 @@ const SiestesPage = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {paymentContext && (
+        <PaymentDialog
+          open={paymentDialogOpen}
+          onOpenChange={setPaymentDialogOpen}
+          invoiceId={paymentContext.invoiceId}
+          stayId={paymentContext.stayId}
+          guestId={paymentContext.guestId}
+          currentBalance={paymentContext.currentBalance}
+          invoiceNumber={paymentContext.invoiceNumber}
+          roomNumber={paymentContext.roomNumber}
+          guestName={paymentContext.guestName}
+          onSuccess={() => {
+            qc.invalidateQueries({ queryKey: ['siestes'] });
+            qc.invalidateQueries({ queryKey: ['stays'] });
+            qc.invalidateQueries({ queryKey: ['invoices'] });
+          }}
+        />
+      )}
     </div>
   );
 };

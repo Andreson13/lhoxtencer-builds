@@ -53,7 +53,26 @@ const ReportsPage = () => {
   const { data: orders } = useQuery({
     queryKey: ['report-orders', hotel?.id, month, year],
     queryFn: async () => {
-      const { data } = await supabase.from('restaurant_orders').select('*, restaurant_order_items(*, restaurant_items(name, category_id))').eq('hotel_id', hotel!.id).gte('created_at', startDate).lt('created_at', endDate);
+      const { data } = await supabase
+        .from('restaurant_orders')
+        .select('*, guests(first_name, last_name), rooms(room_number), restaurant_order_items(*, restaurant_items(name, category_id))')
+        .eq('hotel_id', hotel!.id)
+        .gte('created_at', startDate)
+        .lt('created_at', endDate);
+      return data || [];
+    },
+    enabled: !!hotel?.id,
+  });
+
+  const { data: mainCouranteRows } = useQuery({
+    queryKey: ['report-main-courante', hotel?.id, month, year],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('main_courante')
+        .select('ca_total_jour, encaissement')
+        .eq('hotel_id', hotel!.id)
+        .gte('journee', startDate)
+        .lt('journee', endDate);
       return data || [];
     },
     enabled: !!hotel?.id,
@@ -85,6 +104,8 @@ const ReportsPage = () => {
   const totalCheckIns = stays?.length || 0;
   const totalCheckOuts = stays?.filter(s => s.status === 'checked_out').length || 0;
   const totalNightsSold = stays?.reduce((s, st) => s + (st.number_of_nights || 0), 0) || 0;
+  const mainCouranteCA = mainCouranteRows?.reduce((sum, row) => sum + (row.ca_total_jour || 0), 0) || 0;
+  const mainCouranteEncaissement = mainCouranteRows?.reduce((sum, row) => sum + (row.encaissement || 0), 0) || 0;
 
   const restaurantRevenue = orders?.reduce((s, o) => s + (o.total_amount || 0), 0) || 0;
   const avgOrderValue = orders?.length ? Math.round(restaurantRevenue / orders.length) : 0;
@@ -146,8 +167,14 @@ const ReportsPage = () => {
             <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">Check-ins</CardTitle></CardHeader><CardContent><p className="text-xl font-bold">{totalCheckIns}</p></CardContent></Card>
             <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">Check-outs</CardTitle></CardHeader><CardContent><p className="text-xl font-bold">{totalCheckOuts}</p></CardContent></Card>
             <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">Nuits vendues</CardTitle></CardHeader><CardContent><p className="text-xl font-bold">{totalNightsSold}</p></CardContent></Card>
-            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">Encaissé</CardTitle></CardHeader><CardContent><p className="text-xl font-bold">{formatFCFA(totalPaid)}</p></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">Encaissé (Main courante)</CardTitle></CardHeader><CardContent><p className="text-xl font-bold">{formatFCFA(mainCouranteEncaissement)}</p></CardContent></Card>
           </div>
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-sm text-muted-foreground">CA Main courante</p>
+              <p className="text-2xl font-bold">{formatFCFA(mainCouranteCA)}</p>
+            </CardContent>
+          </Card>
           {stays && stays.length > 0 && (
             <Card>
               <CardHeader><CardTitle>Séjours du mois</CardTitle></CardHeader>
@@ -194,6 +221,35 @@ const ReportsPage = () => {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+          {orders && orders.length > 0 && (
+            <Card>
+              <CardHeader><CardTitle>Détail des commandes</CardTitle></CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Commande</TableHead>
+                      <TableHead>Chambre</TableHead>
+                      <TableHead>Client</TableHead>
+                      <TableHead>Statut</TableHead>
+                      <TableHead className="text-right">Montant</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orders.slice(0, 25).map((o: any) => (
+                      <TableRow key={o.id}>
+                        <TableCell className="font-mono">{o.order_number}</TableCell>
+                        <TableCell>{o.rooms?.room_number || o.room_number || '-'}</TableCell>
+                        <TableCell>{o.guests ? `${o.guests.last_name || ''} ${o.guests.first_name || ''}`.trim() : (o.walkin_name || '-')}</TableCell>
+                        <TableCell><Badge variant="outline">{o.status || '-'}</Badge></TableCell>
+                        <TableCell className="text-right">{formatFCFA(o.total_amount || 0)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* FINANCIER TAB */}

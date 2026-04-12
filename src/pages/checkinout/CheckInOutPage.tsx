@@ -6,6 +6,7 @@ import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { formatFCFA, formatDate, generateInvoiceNumber } from '@/utils/formatters';
+import { getOrCreateInvoice, addChargeToInvoice } from '@/services/transactionService';
 import { withAudit } from '@/utils/auditLog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -103,24 +104,9 @@ const CheckInOutPage = () => {
         guestId = newGuest.id;
       }
 
-      // Create invoice
       const nights = reservation.number_of_nights || 1;
       const total = reservation.total_price || 0;
-      const { data: invoice, error: invErr } = await supabase.from('invoices').insert({
-        hotel_id: hotel.id,
-        guest_id: guestId,
-        reservation_id: reservation.id,
-        invoice_number: generateInvoiceNumber(),
-        subtotal: total,
-        total_amount: total,
-        balance_due: total - (reservation.deposit_paid || 0),
-        amount_paid: reservation.deposit_paid || 0,
-        created_by: profile.id,
-        created_by_name: profile.full_name,
-      } as any).select().single();
-      if (invErr) throw invErr;
 
-      // Create stay
       const { data: stay, error: stayErr } = await supabase.from('stays').insert({
         hotel_id: hotel.id,
         guest_id: guestId,
@@ -135,7 +121,7 @@ const CheckInOutPage = () => {
         price_per_night: total / Math.max(nights, 1),
         total_price: total,
         status: 'active',
-        invoice_id: invoice.id,
+        payment_status: 'pending',
         receptionist_id: profile.id,
         receptionist_name: profile.full_name,
         created_by: profile.id,
@@ -143,15 +129,16 @@ const CheckInOutPage = () => {
       } as any).select().single();
       if (stayErr) throw stayErr;
 
-      // Add room charge
-      await supabase.from('invoice_items').insert({
-        hotel_id: hotel.id,
-        invoice_id: invoice.id,
-        description: `Hébergement - ${nights} nuit(s)`,
-        item_type: 'room',
+      const invoice = await getOrCreateInvoice(hotel.id, stay.id, guestId);
+      await addChargeToInvoice({
+        hotelId: hotel.id,
+        invoiceId: invoice.id,
+        stayId: stay.id,
+        guestId,
+        description: `Hébergement — ${nights} nuit(s)`,
+        itemType: 'room',
         quantity: nights,
-        unit_price: total / Math.max(nights, 1),
-        subtotal: total,
+        unitPrice: total / Math.max(nights, 1),
       });
 
       // Update reservation status
@@ -197,17 +184,6 @@ const CheckInOutPage = () => {
       const nights = walkinStay.check_out_date ? Math.max(1, Math.ceil((new Date(walkinStay.check_out_date).getTime() - new Date(walkinStay.check_in_date).getTime()) / 86400000)) : 1;
       const total = ppn * nights;
 
-      const { data: invoice } = await supabase.from('invoices').insert({
-        hotel_id: hotel.id,
-        guest_id: guestId,
-        invoice_number: generateInvoiceNumber(),
-        subtotal: total,
-        total_amount: total,
-        balance_due: total,
-        created_by: profile.id,
-        created_by_name: profile.full_name,
-      } as any).select().single();
-
       const { data: stay } = await supabase.from('stays').insert({
         hotel_id: hotel.id,
         guest_id: guestId!,
@@ -219,21 +195,23 @@ const CheckInOutPage = () => {
         price_per_night: ppn,
         total_price: total,
         status: 'active',
-        invoice_id: invoice?.id,
+        payment_status: 'pending',
         receptionist_id: profile.id,
         receptionist_name: profile.full_name,
         created_by: profile.id,
         created_by_name: profile.full_name,
       } as any).select().single();
 
-      await supabase.from('invoice_items').insert({
-        hotel_id: hotel.id,
-        invoice_id: invoice?.id,
-        description: `Hébergement - ${nights} nuit(s)`,
-        item_type: 'room',
+      const invoice = await getOrCreateInvoice(hotel.id, stay?.id, guestId!);
+      await addChargeToInvoice({
+        hotelId: hotel.id,
+        invoiceId: invoice.id,
+        stayId: stay?.id,
+        guestId: guestId!,
+        description: `Hébergement — ${nights} nuit(s)`,
+        itemType: 'room',
         quantity: nights,
-        unit_price: ppn,
-        subtotal: total,
+        unitPrice: ppn,
       });
 
       await supabase.from('rooms').update({ status: 'occupied' }).eq('id', walkinStay.room_id);
@@ -257,9 +235,20 @@ const CheckInOutPage = () => {
     mutationFn: async (stay: any) => {
       if (!hotel || !profile) throw new Error('Missing context');
 
+      let invoice: any = null;
+      if (stay.invoice_id) {
+        const { data } = await supabase
+          .from('invoices')
+          .select('id, guest_id, balance_due')
+          .eq('id', stay.invoice_id)
+          .maybeSingle();
+        invoice = data;
+      }
+
       await supabase.from('stays').update({
         status: 'checked_out',
         actual_check_out: new Date().toISOString(),
+        payment_status: invoice?.balance_due <= 0 ? 'paid' : invoice?.balance_due > 0 ? 'partial' : 'pending',
       }).eq('id', stay.id);
 
       // Room goes to housekeeping via trigger, but safety:
@@ -267,9 +256,26 @@ const CheckInOutPage = () => {
         await supabase.from('rooms').update({ status: 'housekeeping' }).eq('id', stay.room_id);
       }
 
-      // Close invoice if exists
-      if (stay.invoice_id) {
-        await supabase.from('invoices').update({ status: 'paid' }).eq('id', stay.invoice_id);
+      if (stay.room_id) {
+        await supabase.from('housekeeping_tasks').insert({ hotel_id: hotel.id, room_id: stay.room_id } as any);
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      await supabase
+        .from('main_courante')
+        .update({ observation: 'DÉPART' } as any)
+        .eq('hotel_id', hotel.id)
+        .eq('journee', today)
+        .eq('guest_id', stay.guest_id);
+
+      if (invoice?.balance_due > 0) {
+        await supabase.from('debts').upsert({
+          hotel_id: hotel.id,
+          guest_id: stay.guest_id,
+          invoice_id: stay.invoice_id,
+          amount_due: invoice.balance_due,
+          checkout_date: new Date().toISOString(),
+        } as any);
       }
 
       await withAudit(hotel.id, profile.id, profile.full_name || '', 'check_out', 'stays', stay.id, { status: 'active' }, { status: 'checked_out' });

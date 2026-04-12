@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
-import { recordCashMovement } from '@/utils/cashMovement';
-import { updateMainCourante } from '@/utils/mainCourante';
 import { formatFCFA } from '@/utils/formatters';
+import { recordPayment } from '@/services/transactionService';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,66 +16,44 @@ interface PaymentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   invoiceId: string;
-  invoiceNumber: string;
-  balanceDue: number;
-  totalAmount: number;
-  amountPaid: number;
+  stayId: string;
+  guestId: string;
+  currentBalance: number;
+  invoiceNumber?: string;
   guestName?: string;
-  guestId?: string | null;
   roomNumber?: string;
-  source?: string;
+  onSuccess?: () => void;
 }
 
 export const PaymentDialog = ({
-  open, onOpenChange, invoiceId, invoiceNumber, balanceDue, totalAmount, amountPaid,
-  guestName, guestId, roomNumber, source = 'payment',
+  open, onOpenChange, invoiceId, stayId, guestId, currentBalance,
+  invoiceNumber, guestName, roomNumber, onSuccess,
 }: PaymentDialogProps) => {
   const { profile } = useAuth();
   const { hotel } = useHotel();
   const qc = useQueryClient();
-  const [amount, setAmount] = useState(balanceDue);
+  const [amount, setAmount] = useState(currentBalance);
   const [method, setMethod] = useState('cash');
   const [reference, setReference] = useState('');
 
-  React.useEffect(() => { setAmount(balanceDue); }, [balanceDue]);
+  React.useEffect(() => { setAmount(currentBalance); }, [currentBalance]);
 
   const mutation = useMutation({
     mutationFn: async () => {
       if (!hotel || !profile || amount <= 0) throw new Error('Invalid');
-
-      // Insert payment
-      const { error: payErr } = await supabase.from('payments').insert({
-        hotel_id: hotel.id,
-        invoice_id: invoiceId,
+      await recordPayment({
+        hotelId: hotel.id,
+        invoiceId,
+        stayId,
+        guestId,
         amount,
-        payment_method: method,
-        reference_number: reference || null,
-        recorded_by: profile.id,
-        created_by: profile.id,
-        created_by_name: profile.full_name,
-      } as any);
-      if (payErr) throw payErr;
-
-      // Update invoice
-      const newPaid = amountPaid + amount;
-      const newBalance = Math.max(0, totalAmount - newPaid);
-      const newStatus = newBalance <= 0 ? 'paid' : 'partial';
-      await supabase.from('invoices').update({
-        amount_paid: newPaid, balance_due: newBalance, status: newStatus,
-      }).eq('id', invoiceId);
-
-      // Record cash movement
-      await recordCashMovement(
-        hotel.id, 'in', source,
-        `Paiement facture #${invoiceNumber}${guestName ? ' — ' + guestName : ''}`,
-        amount, method, invoiceId, profile.id,
-      );
-
-      // Update main courante
-      if (roomNumber) {
-        const today = new Date().toISOString().split('T')[0];
-        await updateMainCourante(hotel.id, today, guestId || null, roomNumber, guestName || '', 'encaissement', amount);
-      }
+        paymentMethod: method,
+        referenceNumber: reference || undefined,
+        userId: profile.id,
+        userName: profile.full_name || '',
+        roomNumber,
+        guestName,
+      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['invoices'] });
@@ -85,6 +61,7 @@ export const PaymentDialog = ({
       qc.invalidateQueries({ queryKey: ['cash-movements'] });
       qc.invalidateQueries({ queryKey: ['main-courante'] });
       toast.success(`Paiement enregistré — ${formatFCFA(amount)} reçus`);
+      onSuccess?.();
       onOpenChange(false);
     },
     onError: (e: any) => toast.error(e.message),
@@ -95,13 +72,13 @@ export const PaymentDialog = ({
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Banknote className="h-5 w-5" />Marquer comme payé</DialogTitle>
-          <DialogDescription>Facture {invoiceNumber}{guestName ? ` — ${guestName}` : ''}</DialogDescription>
+          <DialogDescription>Facture {invoiceNumber || invoiceId}{guestName ? ` — ${guestName}` : ''}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div>
             <Label>Montant (FCFA)</Label>
             <Input type="number" value={amount} onChange={e => setAmount(Number(e.target.value))} />
-            <p className="text-xs text-muted-foreground mt-1">Solde restant: {formatFCFA(balanceDue)}</p>
+            <p className="text-xs text-muted-foreground mt-1">Solde restant: {formatFCFA(currentBalance)}</p>
           </div>
           <div>
             <Label>Mode de paiement</Label>

@@ -59,6 +59,16 @@ const RoomsPage = () => {
       if (editRoom) {
         const { error } = await supabase.from('rooms').update(payload).eq('id', editRoom.id);
         if (error) throw error;
+
+        // If the room is set directly to available, remove open housekeeping tasks to avoid redundancy.
+        if (form.status === 'available') {
+          await supabase
+            .from('housekeeping_tasks')
+            .delete()
+            .eq('hotel_id', hotel!.id)
+            .eq('room_id', editRoom.id)
+            .in('status', ['pending', 'in_progress', 'inspection']);
+        }
       } else {
         const { error } = await supabase.from('rooms').insert(payload);
         if (error) throw error;

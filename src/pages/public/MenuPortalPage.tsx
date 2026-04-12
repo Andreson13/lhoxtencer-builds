@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { addChargeToInvoice } from '@/services/transactionService';
 import { formatFCFA } from '@/utils/formatters';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,7 +15,9 @@ import { toast } from 'sonner';
 import { Star, Send, UtensilsCrossed, Check, ShoppingCart, Plus, Minus, Bell, User } from 'lucide-react';
 
 const MenuPortalPage = () => {
-  const { slug, room } = useParams<{ slug: string; room?: string }>();
+  const params = useParams<{ slug?: string; room?: string; hotelSlug?: string; roomNumber?: string }>();
+  const slug = params.slug || params.hotelSlug;
+  const room = params.room || params.roomNumber;
   const [feedbackRating, setFeedbackRating] = useState(0);
   const [feedbackComment, setFeedbackComment] = useState('');
   const [feedbackSent, setFeedbackSent] = useState(false);
@@ -39,11 +42,15 @@ const MenuPortalPage = () => {
     queryKey: ['active-stay-room', hotel?.id, room],
     queryFn: async () => {
       if (!room || !hotel) return null;
-      // Find the room
-      const { data: roomData } = await supabase.from('rooms').select('id').eq('hotel_id', hotel.id).eq('room_number', room).maybeSingle();
+      const { data: roomData } = await supabase.from('rooms').select('id, room_number').eq('hotel_id', hotel.id).eq('room_number', room).maybeSingle();
       if (!roomData) return null;
-      // Find active stay
-      const { data: stay } = await supabase.from('stays').select('id, guest_id, invoice_id, guests(first_name, last_name)').eq('hotel_id', hotel.id).eq('room_id', roomData.id).eq('status', 'active').maybeSingle();
+      const { data: stay } = await supabase
+        .from('stays')
+        .select('id, guest_id, invoice_id, guests(first_name, last_name), rooms(room_number)')
+        .eq('hotel_id', hotel.id)
+        .eq('status', 'active')
+        .eq('room_id', roomData.id)
+        .maybeSingle();
       return stay ? { ...stay, room_id: roomData.id } : null;
     },
     enabled: !!hotel?.id && !!room,
@@ -127,6 +134,28 @@ const MenuPortalPage = () => {
       }));
       const { error: itemsErr } = await supabase.from('restaurant_order_items').insert(items);
       if (itemsErr) throw itemsErr;
+
+      if (activeStay?.invoice_id && activeStay?.id && activeStay?.guest_id) {
+        await addChargeToInvoice({
+          hotelId: hotel!.id,
+          invoiceId: activeStay.invoice_id,
+          stayId: activeStay.id,
+          guestId: activeStay.guest_id,
+          description: `Restaurant — Commande #${orderNum}`,
+          itemType: 'restaurant',
+          quantity: 1,
+          unitPrice: totalAmount,
+        });
+
+        await supabase
+          .from('restaurant_orders')
+          .update({
+            guest_id: activeStay.guest_id,
+            stay_id: activeStay.id,
+            invoice_id: activeStay.invoice_id,
+          } as any)
+          .eq('id', order.id);
+      }
 
       return orderNum;
     },

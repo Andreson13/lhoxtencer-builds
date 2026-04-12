@@ -22,6 +22,7 @@ import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { UtensilsCrossed, Plus, Pencil, Trash2 } from 'lucide-react';
 import { generateOrderNumber } from '@/utils/formatters';
+import { addChargeToInvoice } from '@/services/transactionService';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -53,7 +54,12 @@ const RestaurantPage = () => {
   const { data: orders, isLoading: ordersLoading } = useQuery({
     queryKey: ['restaurant-orders', hotel?.id],
     queryFn: async () => {
-      const { data } = await supabase.from('restaurant_orders').select('*, restaurant_order_items(*, restaurant_items(name))').eq('hotel_id', hotel!.id).order('created_at', { ascending: false }).limit(50);
+      const { data } = await supabase
+        .from('restaurant_orders')
+        .select('*, guests(first_name, last_name), rooms(room_number), restaurant_order_items(*, restaurant_items(name)), stay_id, guest_id, invoice_id, billed_to_room')
+        .eq('hotel_id', hotel!.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
       return data || [];
     },
     enabled: !!hotel?.id,
@@ -98,10 +104,31 @@ const RestaurantPage = () => {
   const createOrderMutation = useMutation({
     mutationFn: async () => {
       const totalAmount = cart.reduce((s, c) => s + c.item.price * c.quantity, 0);
+      // Fetch stay/guest/invoice info if room selected (orderRoom is room UUID, not number)
+      let stayId: string | null = null;
+      let guestId: string | null = null;
+      let invoiceId: string | null = null;
+      if (orderRoom && !isWalkin) {
+        const { data: stayData } = await supabase
+          .from('stays')
+          .select('id, guest_id, invoice_id, guests(first_name, last_name)')
+          .eq('room_id', orderRoom)
+          .eq('status', 'active')
+          .maybeSingle();
+        if (stayData) {
+          stayId = stayData.id;
+          guestId = stayData.guest_id;
+          invoiceId = stayData.invoice_id;
+        }
+      }
       const { data: order, error } = await supabase.from('restaurant_orders').insert({
         hotel_id: hotel!.id,
         order_number: generateOrderNumber(),
-        room_id: orderRoom || null,
+        room_id: !isWalkin && orderRoom ? orderRoom : null,
+        stay_id: stayId,
+        guest_id: guestId,
+        invoice_id: invoiceId,
+        billed_to_room: !!stayId,
         is_walkin: isWalkin,
         walkin_name: walkinName || null,
         walkin_table: walkinTable || null,
@@ -123,13 +150,64 @@ const RestaurantPage = () => {
   });
 
   const updateOrderStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+    mutationFn: async ({ id, status, order }: { id: string; status: string; order?: any }) => {
       const updates: any = { status };
       if (status === 'in_preparation') updates.started_at = new Date().toISOString();
       if (status === 'ready') updates.ready_at = new Date().toISOString();
-      if (status === 'delivered') updates.delivered_at = new Date().toISOString();
+      if (status === 'delivered') {
+        updates.delivered_at = new Date().toISOString();
+        // Normalize transitions when delivered is chosen directly.
+        updates.started_at = order?.started_at || updates.delivered_at;
+        updates.ready_at = order?.ready_at || updates.delivered_at;
+      }
       const { error } = await supabase.from('restaurant_orders').update(updates).eq('id', id);
       if (error) throw error;
+
+      if (
+        status === 'delivered' &&
+        order?.status !== 'delivered' &&
+        order?.billed_to_room &&
+        order?.stay_id &&
+        order?.invoice_id &&
+        order?.stay_id
+      ) {
+        // Ensure guest_id is available (fetch from stay if order doesn't have it)
+        let guestId = order?.guest_id;
+        if (!guestId && order?.stay_id) {
+          const { data: stay } = await supabase.from('stays').select('guest_id').eq('id', order.stay_id).maybeSingle();
+          if (stay?.guest_id) guestId = stay.guest_id;
+        }
+
+        if (guestId) {
+        const chargeDescription = `Restaurant — Commande #${order.order_number}`;
+        const { data: existingCharge } = await supabase
+          .from('invoice_items')
+          .select('id')
+          .eq('invoice_id', order.invoice_id)
+          .eq('description', chargeDescription)
+          .maybeSingle();
+
+        if (!existingCharge) {
+          await addChargeToInvoice({
+            hotelId: hotel!.id,
+            invoiceId: order.invoice_id,
+            stayId: order.stay_id,
+            guestId: guestId,
+            description: chargeDescription,
+            itemType: 'restaurant',
+            quantity: 1,
+            unitPrice: order.total_amount || 0,
+          });
+        }
+        }
+
+        await supabase.from('notifications').insert({
+          hotel_id: hotel!.id,
+          type: 'restaurant_delivered',
+          title: 'Commande livrée',
+          message: `Commande ${order.order_number} livrée et ajoutée à la facture chambre`,
+        });
+      }
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['restaurant-orders'] }); toast.success('Statut mis à jour'); },
   });
@@ -191,7 +269,11 @@ const RestaurantPage = () => {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-2">
-                    <p className="text-sm">{order.is_walkin ? `Walk-in: ${order.walkin_name || '-'}${order.walkin_table ? ` (Table ${order.walkin_table})` : ''}` : `Chambre`}</p>
+                    <p className="text-sm">
+                      {order.is_walkin
+                        ? `Walk-in: ${order.walkin_name || '-'}${order.walkin_table ? ` (Table ${order.walkin_table})` : ''}`
+                        : `Chambre ${(order as any).rooms?.room_number || order.room_number || '-'} — ${((order as any).guests?.last_name && (order as any).guests?.first_name) ? `${(order as any).guests.last_name} ${(order as any).guests.first_name}` : 'Client'}`}
+                    </p>
                     <div className="text-sm space-y-1">
                       {(order as any).restaurant_order_items?.map((oi: any) => (
                         <p key={oi.id}>{oi.quantity}x {oi.restaurant_items?.name} — {formatFCFA(oi.subtotal)}</p>
@@ -199,9 +281,9 @@ const RestaurantPage = () => {
                     </div>
                     <p className="font-semibold">{formatFCFA(order.total_amount)}</p>
                     <div className="flex gap-2 mt-2">
-                      {order.status === 'pending' && <Button size="sm" onClick={() => updateOrderStatus.mutate({ id: order.id, status: 'in_preparation' })}>Commencer</Button>}
-                      {order.status === 'in_preparation' && <Button size="sm" onClick={() => updateOrderStatus.mutate({ id: order.id, status: 'ready' })}>Prêt</Button>}
-                      {order.status === 'ready' && <Button size="sm" onClick={() => updateOrderStatus.mutate({ id: order.id, status: 'delivered' })}>Livré</Button>}
+                      {order.status === 'pending' && <Button size="sm" onClick={() => updateOrderStatus.mutate({ id: order.id, status: 'in_preparation', order })}>Commencer</Button>}
+                      {order.status === 'in_preparation' && <Button size="sm" onClick={() => updateOrderStatus.mutate({ id: order.id, status: 'ready', order })}>Prêt</Button>}
+                      {order.status === 'ready' && <Button size="sm" onClick={() => updateOrderStatus.mutate({ id: order.id, status: 'delivered', order })}>Livré</Button>}
                     </div>
                   </CardContent>
                 </Card>

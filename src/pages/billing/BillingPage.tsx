@@ -7,6 +7,7 @@ import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { PaymentDialog } from '@/components/shared/PaymentDialog';
 import { formatFCFA, formatDate, generateInvoiceNumber } from '@/utils/formatters';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,39 +27,15 @@ const BillingPage = () => {
   const qc = useQueryClient();
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
-  const [paymentAmount, setPaymentAmount] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState('cash');
 
   const { data: invoices, isLoading } = useQuery({
     queryKey: ['invoices', hotel?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from('invoices').select('*, invoice_items(*), guests(last_name, first_name)').eq('hotel_id', hotel!.id).order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('invoices').select('*, invoice_items(*), guests(last_name, first_name), stays(id, guest_id, rooms(room_number))').eq('hotel_id', hotel!.id).order('created_at', { ascending: false });
       if (error) throw error;
       return data;
     },
     enabled: !!hotel?.id,
-  });
-
-  const recordPaymentMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedInvoice) return;
-      const { error: payError } = await supabase.from('payments').insert({
-        hotel_id: hotel!.id,
-        invoice_id: selectedInvoice.id,
-        amount: paymentAmount,
-        payment_method: paymentMethod,
-        recorded_by: profile?.id,
-      } as any);
-      if (payError) throw payError;
-
-      const newPaid = (selectedInvoice.amount_paid || 0) + paymentAmount;
-      const newBalance = (selectedInvoice.total_amount || 0) - newPaid;
-      const newStatus = newBalance <= 0 ? 'paid' : 'partial';
-      const { error: invError } = await supabase.from('invoices').update({ amount_paid: newPaid, balance_due: Math.max(0, newBalance), status: newStatus }).eq('id', selectedInvoice.id);
-      if (invError) throw invError;
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['invoices'] }); toast.success('Paiement enregistré'); setPaymentDialogOpen(false); setSelectedInvoice(null); },
-    onError: (e: any) => toast.error(e.message),
   });
 
   return (
@@ -104,7 +81,7 @@ const BillingPage = () => {
                       <p className="text-destructive font-semibold">Solde: {formatFCFA(inv.balance_due)}</p>
                     </div>
                     {inv.status !== 'paid' && inv.status !== 'cancelled' && (
-                      <Button onClick={() => { setSelectedInvoice(inv); setPaymentAmount(inv.balance_due || 0); setPaymentDialogOpen(true); }}>
+                      <Button onClick={() => { setSelectedInvoice(inv); setPaymentDialogOpen(true); }}>
                         <CreditCard className="h-4 w-4 mr-2" />Enregistrer un paiement
                       </Button>
                     )}
@@ -115,30 +92,23 @@ const BillingPage = () => {
           ))}
         </Accordion>
       )}
-
-      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Enregistrer un paiement</DialogTitle><DialogDescription>Facture {selectedInvoice?.invoice_number}</DialogDescription></DialogHeader>
-          <div className="space-y-4">
-            <div><Label>Montant</Label><Input type="number" value={paymentAmount} onChange={e => setPaymentAmount(Number(e.target.value))} /></div>
-            <div><Label>Mode de paiement</Label>
-              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="mtn_momo">MTN MoMo</SelectItem>
-                  <SelectItem value="orange_money">Orange Money</SelectItem>
-                  <SelectItem value="bank_transfer">Virement</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>Annuler</Button>
-            <Button onClick={() => recordPaymentMutation.mutate()} disabled={recordPaymentMutation.isPending || paymentAmount <= 0}>Enregistrer</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {selectedInvoice && (
+        <PaymentDialog
+          open={paymentDialogOpen}
+          onOpenChange={setPaymentDialogOpen}
+          invoiceId={selectedInvoice.id}
+          stayId={selectedInvoice.stay_id || selectedInvoice.stays?.id}
+          guestId={selectedInvoice.guest_id || selectedInvoice.stays?.guest_id}
+          currentBalance={selectedInvoice.balance_due || 0}
+          invoiceNumber={selectedInvoice.invoice_number}
+          guestName={(selectedInvoice as any).guests ? `${(selectedInvoice as any).guests.last_name} ${(selectedInvoice as any).guests.first_name}` : undefined}
+          roomNumber={(selectedInvoice as any).stays?.rooms?.room_number || undefined}
+          onSuccess={() => {
+            qc.invalidateQueries({ queryKey: ['invoices'] });
+            setSelectedInvoice(null);
+          }}
+        />
+      )}
     </div>
   );
 };
