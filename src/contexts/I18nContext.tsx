@@ -4,6 +4,7 @@ type Lang = 'fr' | 'en';
 
 const translations: Record<string, Record<Lang, string>> = {
   // Navigation
+  'nav.accueil': { fr: 'Accueil client', en: 'Guest Reception' },
   'nav.dashboard': { fr: 'Tableau de bord', en: 'Dashboard' },
   'nav.guests': { fr: 'Clients', en: 'Guests' },
   'nav.reservations': { fr: 'Réservations', en: 'Reservations' },
