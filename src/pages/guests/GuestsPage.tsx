@@ -96,8 +96,10 @@ const GuestsPage = () => {
   const stayCheckIn = stayForm.watch('check_in_date');
   const stayCheckOut = stayForm.watch('check_out_date');
   const stayPPN = stayForm.watch('price_per_night');
+  const stayType = stayForm.watch('stay_type');
+  const stayRoomId = stayForm.watch('room_id');
   const nights = stayCheckIn && stayCheckOut ? Math.max(1, Math.ceil((new Date(stayCheckOut).getTime() - new Date(stayCheckIn).getTime()) / 86400000)) : 0;
-  const totalPrice = nights * (stayPPN || 0);
+  const totalPrice = stayType === 'sieste' ? (stayPPN || 0) : nights * (stayPPN || 0);
 
   // Fetch guests with stay counts
   const { data: guests, isLoading } = useQuery({
@@ -131,7 +133,7 @@ const GuestsPage = () => {
   const { data: rooms } = useQuery({
     queryKey: ['rooms-available', hotel?.id],
     queryFn: async () => {
-      const { data } = await supabase.from('rooms').select('id, room_number, price_per_night').eq('hotel_id', hotel!.id).eq('status', 'available');
+      const { data } = await supabase.from('rooms').select('id, room_number, price_per_night, category_id, room_categories(price_sieste)').eq('hotel_id', hotel!.id).eq('status', 'available');
       return data || [];
     },
     enabled: !!hotel?.id,
@@ -716,7 +718,14 @@ const GuestsPage = () => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Type de séjour</Label>
-                <Select onValueChange={v => stayForm.setValue('stay_type', v)} defaultValue="night">
+                <Select onValueChange={v => {
+                  stayForm.setValue('stay_type', v);
+                  const currentRoom = rooms?.find((r: any) => r.id === stayRoomId);
+                  if (currentRoom) {
+                    const siestePrice = (currentRoom as any).room_categories?.price_sieste ?? 0;
+                    stayForm.setValue('price_per_night', v === 'sieste' ? siestePrice : currentRoom.price_per_night);
+                  }
+                }} defaultValue="night">
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="night">Nuit</SelectItem>
@@ -728,18 +737,22 @@ const GuestsPage = () => {
                 <Label>Chambre *</Label>
                 <Select onValueChange={v => {
                   stayForm.setValue('room_id', v);
-                  const room = rooms?.find(r => r.id === v);
-                  if (room) stayForm.setValue('price_per_night', room.price_per_night);
+                  const room = rooms?.find((r: any) => r.id === v);
+                  if (room) {
+                    const currentType = stayForm.getValues('stay_type');
+                    const siestePrice = (room as any).room_categories?.price_sieste ?? 0;
+                    stayForm.setValue('price_per_night', currentType === 'sieste' ? siestePrice : room.price_per_night);
+                  }
                 }}>
                   <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
-                  <SelectContent>{rooms?.map(r => <SelectItem key={r.id} value={r.id}>{r.room_number} — {formatFCFA(r.price_per_night)}</SelectItem>)}</SelectContent>
+                  <SelectContent>{rooms?.map((r: any) => <SelectItem key={r.id} value={r.id}>{r.room_number} — {formatFCFA(r.price_per_night)}</SelectItem>)}</SelectContent>
                 </Select>
                 {stayForm.formState.errors.room_id && <p className="text-sm text-destructive mt-1">{stayForm.formState.errors.room_id.message}</p>}
               </div>
               <div><Label>Arrivée *</Label><Input type="date" {...stayForm.register('check_in_date')} /></div>
               <div><Label>Départ *</Label><Input type="date" {...stayForm.register('check_out_date')} /></div>
-              <div><Label>Prix/nuit</Label><Input type="number" {...stayForm.register('price_per_night')} /></div>
-              <div><Label>Nuits</Label><Input value={nights} readOnly className="bg-muted" /></div>
+              <div><Label>{stayType === 'sieste' ? 'Prix sieste' : 'Prix/nuit'}</Label><Input type="number" {...stayForm.register('price_per_night')} /></div>
+              {stayType !== 'sieste' && <div><Label>Nuits</Label><Input value={nights} readOnly className="bg-muted" /></div>}
               <div><Label>Total</Label><Input value={formatFCFA(totalPrice)} readOnly className="bg-muted" /></div>
               <div><Label>Adultes</Label><Input type="number" {...stayForm.register('number_of_adults')} /></div>
               <div><Label>Enfants</Label><Input type="number" {...stayForm.register('number_of_children')} /></div>
