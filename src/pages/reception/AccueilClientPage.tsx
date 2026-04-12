@@ -1,0 +1,493 @@
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { useHotel } from '@/contexts/HotelContext';
+import { useRoleGuard } from '@/hooks/useRoleGuard';
+import { formatFCFA, generateInvoiceNumber } from '@/utils/formatters';
+import { recordCashMovement } from '@/utils/cashMovement';
+import { updateMainCourante } from '@/utils/mainCourante';
+import { withAudit } from '@/utils/auditLog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
+import { toast } from 'sonner';
+import { Search, Moon, Clock, CalendarCheck, User, BedDouble, Check, ArrowRight } from 'lucide-react';
+
+const AccueilClientPage = () => {
+  useRoleGuard(['admin', 'manager', 'receptionist']);
+  const { profile } = useAuth();
+  const { hotel } = useHotel();
+  const qc = useQueryClient();
+
+  // State
+  const [guestSearch, setGuestSearch] = useState('');
+  const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
+  const [selectedGuestData, setSelectedGuestData] = useState<any>(null);
+  const [newGuest, setNewGuest] = useState({ last_name: '', first_name: '', phone: '', nationality: 'Camerounaise', id_number: '', id_type: 'CNI' });
+  const [serviceType, setServiceType] = useState<'night' | 'sieste' | 'reservation' | null>(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const [checkInDate, setCheckInDate] = useState(new Date().toISOString().split('T')[0]);
+  const [checkOutDate, setCheckOutDate] = useState('');
+  const [arrivalTime, setArrivalTime] = useState(new Date().toTimeString().slice(0, 5));
+  const [durationHours, setDurationHours] = useState(3);
+  const [numAdults, setNumAdults] = useState(1);
+  const [numChildren, setNumChildren] = useState(0);
+  const [negotiatedPrice, setNegotiatedPrice] = useState<number | null>(null);
+  const [payNow, setPayNow] = useState(false);
+  const [paymentMethods, setPaymentMethods] = useState<string[]>(['cash']);
+  const [success, setSuccess] = useState<{ room: string; guest: string } | null>(null);
+
+  // Queries
+  const { data: existingGuests } = useQuery({
+    queryKey: ['guest-search-accueil', hotel?.id, guestSearch],
+    queryFn: async () => {
+      if (guestSearch.length < 2) return [];
+      const { data } = await supabase.from('guests').select('id, last_name, first_name, phone, id_number, nationality')
+        .eq('hotel_id', hotel!.id)
+        .or(`last_name.ilike.%${guestSearch}%,first_name.ilike.%${guestSearch}%,phone.ilike.%${guestSearch}%,id_number.ilike.%${guestSearch}%`)
+        .limit(10);
+      return data || [];
+    },
+    enabled: !!hotel?.id && guestSearch.length >= 2,
+  });
+
+  const { data: categories } = useQuery({
+    queryKey: ['room-categories-accueil', hotel?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('room_categories').select('*').eq('hotel_id', hotel!.id).order('display_order');
+      return data || [];
+    },
+    enabled: !!hotel?.id,
+  });
+
+  const { data: availableRooms } = useQuery({
+    queryKey: ['rooms-available-accueil', hotel?.id, selectedCategoryId],
+    queryFn: async () => {
+      let q = supabase.from('rooms').select('id, room_number, floor, category_id').eq('hotel_id', hotel!.id).eq('status', 'available');
+      if (selectedCategoryId) q = q.eq('category_id', selectedCategoryId);
+      const { data } = await q.order('room_number');
+      return data || [];
+    },
+    enabled: !!hotel?.id,
+  });
+
+  const selectedCategory = categories?.find(c => c.id === selectedCategoryId);
+  const selectedRoom = availableRooms?.find(r => r.id === selectedRoomId);
+  const nights = checkInDate && checkOutDate ? Math.max(1, Math.ceil((new Date(checkOutDate).getTime() - new Date(checkInDate).getTime()) / 86400000)) : 1;
+  const basePrice = serviceType === 'sieste'
+    ? (selectedCategory?.price_sieste || 0)
+    : (selectedCategory?.price_per_night || 0) * nights;
+  const finalPrice = negotiatedPrice != null && negotiatedPrice > 0 ? negotiatedPrice : basePrice;
+
+  const finalizeMutation = useMutation({
+    mutationFn: async () => {
+      if (!hotel || !profile) throw new Error('Missing context');
+      if (!selectedRoomId) throw new Error('Sélectionnez une chambre');
+      if (!serviceType) throw new Error('Sélectionnez un type de service');
+
+      // Create or find guest
+      let guestId = selectedGuestId;
+      let guestName = selectedGuestData ? `${selectedGuestData.last_name} ${selectedGuestData.first_name}` : `${newGuest.last_name} ${newGuest.first_name}`;
+      if (!guestId) {
+        if (!newGuest.last_name || !newGuest.first_name) throw new Error('Nom et prénom requis');
+        const { data: g, error } = await supabase.from('guests').insert({
+          hotel_id: hotel.id, last_name: newGuest.last_name, first_name: newGuest.first_name,
+          phone: newGuest.phone || null, nationality: newGuest.nationality || null,
+          id_number: newGuest.id_number || null, id_type: newGuest.id_type || null,
+        }).select().single();
+        if (error) throw error;
+        guestId = g.id;
+      }
+
+      // Create invoice
+      const { data: invoice, error: invErr } = await supabase.from('invoices').insert({
+        hotel_id: hotel.id, guest_id: guestId, invoice_number: generateInvoiceNumber(),
+        subtotal: finalPrice, total_amount: finalPrice, balance_due: payNow ? 0 : finalPrice,
+        amount_paid: payNow ? finalPrice : 0,
+        created_by: profile.id, created_by_name: profile.full_name,
+        status: payNow ? 'paid' : 'open',
+      } as any).select().single();
+      if (invErr) throw invErr;
+
+      // Create stay
+      const stayData: any = {
+        hotel_id: hotel.id, guest_id: guestId, stay_type: serviceType === 'sieste' ? 'sieste' : 'night',
+        room_id: selectedRoomId, status: 'active', invoice_id: invoice.id,
+        receptionist_id: profile.id, receptionist_name: profile.full_name,
+        created_by: profile.id, created_by_name: profile.full_name,
+        number_of_adults: numAdults, number_of_children: numChildren,
+        total_price: finalPrice,
+      };
+      if (serviceType === 'night') {
+        stayData.check_in_date = new Date(checkInDate).toISOString();
+        stayData.check_out_date = checkOutDate ? new Date(checkOutDate).toISOString() : null;
+        stayData.number_of_nights = nights;
+        stayData.price_per_night = selectedCategory?.price_per_night || 0;
+      } else {
+        stayData.check_in_date = new Date().toISOString();
+      }
+      if (negotiatedPrice != null && negotiatedPrice > 0) stayData.arrangement_price = negotiatedPrice;
+
+      const { data: stay, error: stayErr } = await supabase.from('stays').insert(stayData).select().single();
+      if (stayErr) throw stayErr;
+
+      // Invoice item
+      const desc = serviceType === 'sieste' ? `Sieste — ${durationHours}h` : `Hébergement — ${nights} nuit(s)`;
+      await supabase.from('invoice_items').insert({
+        hotel_id: hotel.id, invoice_id: invoice.id, description: desc,
+        item_type: serviceType === 'sieste' ? 'sieste' : 'room',
+        quantity: serviceType === 'sieste' ? 1 : nights,
+        unit_price: serviceType === 'sieste' ? finalPrice : (selectedCategory?.price_per_night || 0),
+        subtotal: finalPrice,
+      });
+
+      // Room occupied
+      await supabase.from('rooms').update({ status: 'occupied' }).eq('id', selectedRoomId);
+
+      // If sieste, also create sieste record
+      if (serviceType === 'sieste') {
+        await supabase.from('siestes').insert({
+          hotel_id: hotel.id, guest_id: guestId, full_name: guestName,
+          room_id: selectedRoomId, arrival_date: new Date().toISOString().split('T')[0],
+          arrival_time: arrivalTime, duration_hours: durationHours,
+          amount_paid: payNow ? finalPrice : 0, payment_method: paymentMethods[0] || 'cash',
+          recorded_by: profile.id, created_by: profile.id, created_by_name: profile.full_name,
+          invoice_id: invoice.id,
+        } as any);
+      }
+
+      // Payment
+      if (payNow) {
+        await supabase.from('payments').insert({
+          hotel_id: hotel.id, invoice_id: invoice.id, amount: finalPrice,
+          payment_method: paymentMethods[0] || 'cash', recorded_by: profile.id,
+          created_by: profile.id, created_by_name: profile.full_name,
+        } as any);
+        await recordCashMovement(hotel.id, 'in', serviceType === 'sieste' ? 'sieste' : 'hebergement',
+          `${serviceType === 'sieste' ? 'Sieste' : 'Hébergement'} — ${guestName}`,
+          finalPrice, paymentMethods[0] || 'cash', invoice.id, profile.id);
+      }
+
+      // Main courante
+      const today = new Date().toISOString().split('T')[0];
+      const room = availableRooms?.find(r => r.id === selectedRoomId);
+      await updateMainCourante(hotel.id, today, guestId, room?.room_number || '', guestName,
+        serviceType === 'sieste' ? 'divers' : 'hebergement', finalPrice);
+      if (payNow) {
+        await updateMainCourante(hotel.id, today, guestId, room?.room_number || '', guestName, 'encaissement', finalPrice);
+      }
+
+      await withAudit(hotel.id, profile.id, profile.full_name || '', 'check_in', 'stays', stay.id, null, { guest_id: guestId, room_id: selectedRoomId, service: serviceType });
+
+      return { room: room?.room_number || '', guest: guestName };
+    },
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['rooms'] });
+      qc.invalidateQueries({ queryKey: ['stays'] });
+      qc.invalidateQueries({ queryKey: ['guests'] });
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+      qc.invalidateQueries({ queryKey: ['siestes'] });
+      setSuccess(result);
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const resetAll = () => {
+    setGuestSearch(''); setSelectedGuestId(null); setSelectedGuestData(null);
+    setNewGuest({ last_name: '', first_name: '', phone: '', nationality: 'Camerounaise', id_number: '', id_type: 'CNI' });
+    setServiceType(null); setSelectedCategoryId(null); setSelectedRoomId(null);
+    setCheckInDate(new Date().toISOString().split('T')[0]); setCheckOutDate('');
+    setArrivalTime(new Date().toTimeString().slice(0, 5)); setDurationHours(3);
+    setNumAdults(1); setNumChildren(0); setNegotiatedPrice(null);
+    setPayNow(false); setPaymentMethods(['cash']); setSuccess(null);
+  };
+
+  // Success screen
+  if (success) {
+    return (
+      <div className="page-container flex items-center justify-center min-h-[60vh]">
+        <Card className="max-w-md w-full text-center">
+          <CardContent className="py-12 space-y-4">
+            <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+              <Check className="h-8 w-8 text-green-600" />
+            </div>
+            <h2 className="text-2xl font-bold">Check-in réussi !</h2>
+            <p className="text-lg">Chambre <span className="font-bold text-primary">{success.room}</span></p>
+            <p className="text-muted-foreground">{success.guest}</p>
+            <div className="flex gap-3 justify-center pt-4">
+              <Button variant="outline" onClick={resetAll}><User className="h-4 w-4 mr-2" />Nouvel arrivant</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const canFinalize = (selectedGuestId || (newGuest.last_name && newGuest.first_name)) && serviceType && selectedRoomId;
+
+  return (
+    <div className="page-container">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* Left panel */}
+        <div className="lg:col-span-3 space-y-6">
+          <h1 className="text-2xl font-bold">Accueil client</h1>
+
+          {/* Section A — Client */}
+          <Card>
+            <CardHeader><CardTitle className="text-base">1. Client</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="Rechercher un client existant (nom, téléphone, ID)..." className="pl-10"
+                  value={guestSearch} onChange={e => { setGuestSearch(e.target.value); setSelectedGuestId(null); setSelectedGuestData(null); }} />
+              </div>
+              {existingGuests && existingGuests.length > 0 && !selectedGuestId && (
+                <div className="border rounded-md max-h-40 overflow-y-auto">
+                  {existingGuests.map(g => (
+                    <button key={g.id} onClick={() => { setSelectedGuestId(g.id); setSelectedGuestData(g); setGuestSearch(`${g.last_name} ${g.first_name}`); }}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex justify-between">
+                      <span className="font-medium">{g.last_name} {g.first_name}</span>
+                      <span className="text-muted-foreground">{g.phone || g.id_number || ''}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {selectedGuestData && (
+                <div className="bg-muted/50 rounded-lg p-3 text-sm">
+                  <p className="font-semibold">{selectedGuestData.last_name} {selectedGuestData.first_name}</p>
+                  <p className="text-muted-foreground">{selectedGuestData.phone || '-'} • {selectedGuestData.nationality || '-'} • {selectedGuestData.id_number || '-'}</p>
+                </div>
+              )}
+              {!selectedGuestId && (
+                <div className="grid grid-cols-2 gap-3 border-t pt-3">
+                  <div><Label>Nom *</Label><Input value={newGuest.last_name} onChange={e => setNewGuest(p => ({ ...p, last_name: e.target.value }))} /></div>
+                  <div><Label>Prénom *</Label><Input value={newGuest.first_name} onChange={e => setNewGuest(p => ({ ...p, first_name: e.target.value }))} /></div>
+                  <div><Label>Téléphone</Label><Input value={newGuest.phone} onChange={e => setNewGuest(p => ({ ...p, phone: e.target.value }))} /></div>
+                  <div><Label>Nationalité</Label><Input value={newGuest.nationality} onChange={e => setNewGuest(p => ({ ...p, nationality: e.target.value }))} /></div>
+                  <div><Label>N° ID</Label><Input value={newGuest.id_number} onChange={e => setNewGuest(p => ({ ...p, id_number: e.target.value }))} /></div>
+                  <div><Label>Type ID</Label>
+                    <Select value={newGuest.id_type} onValueChange={v => setNewGuest(p => ({ ...p, id_type: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="CNI">CNI</SelectItem>
+                        <SelectItem value="Passeport">Passeport</SelectItem>
+                        <SelectItem value="Permis">Permis de conduire</SelectItem>
+                        <SelectItem value="Autre">Autre</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Section B — Service Type */}
+          <Card>
+            <CardHeader><CardTitle className="text-base">2. Service</CardTitle></CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-3">
+                <button onClick={() => setServiceType('night')}
+                  className={`border-2 rounded-lg p-4 text-center transition-all ${serviceType === 'night' ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground/30'}`}>
+                  <Moon className="h-6 w-6 mx-auto mb-2" />
+                  <p className="font-semibold">Nuit</p>
+                </button>
+                <button onClick={() => setServiceType('sieste')}
+                  className={`border-2 rounded-lg p-4 text-center transition-all ${serviceType === 'sieste' ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground/30'}`}>
+                  <Clock className="h-6 w-6 mx-auto mb-2" />
+                  <p className="font-semibold">Sieste</p>
+                </button>
+                <button onClick={() => setServiceType('reservation')}
+                  className={`border-2 rounded-lg p-4 text-center transition-all ${serviceType === 'reservation' ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground/30'}`}>
+                  <CalendarCheck className="h-6 w-6 mx-auto mb-2" />
+                  <p className="font-semibold text-xs">Réservation existante</p>
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Section C — Category & Room */}
+          {serviceType && serviceType !== 'reservation' && (
+            <Card>
+              <CardHeader><CardTitle className="text-base">3. Catégorie & Chambre</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {categories?.map(cat => (
+                    <button key={cat.id} onClick={() => { setSelectedCategoryId(cat.id); setSelectedRoomId(null); }}
+                      className={`border-2 rounded-lg p-3 text-left transition-all ${selectedCategoryId === cat.id ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground/30'}`}
+                      style={{ borderLeftColor: cat.color || undefined, borderLeftWidth: 4 }}>
+                      <p className="font-semibold text-sm">{cat.name}</p>
+                      <p className="text-lg font-bold">{formatFCFA(serviceType === 'sieste' ? (cat.price_sieste || 0) : cat.price_per_night)}</p>
+                      {cat.description && <p className="text-xs text-muted-foreground">{cat.description}</p>}
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {(cat.features as string[])?.slice(0, 3).map(f => <Badge key={f} variant="outline" className="text-[10px]">{f}</Badge>)}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                {selectedCategoryId && (
+                  <div>
+                    <Label className="text-sm font-semibold">Chambres disponibles</Label>
+                    {!availableRooms?.length ? (
+                      <p className="text-sm text-muted-foreground mt-2">Aucune chambre disponible dans cette catégorie</p>
+                    ) : (
+                      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mt-2">
+                        {availableRooms.map(r => (
+                          <button key={r.id} onClick={() => setSelectedRoomId(r.id)}
+                            className={`border-2 rounded-lg p-2 text-center transition-all ${selectedRoomId === r.id ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground/30'}`}>
+                            <p className="font-bold">{r.room_number}</p>
+                            <p className="text-[10px] text-muted-foreground">Étage {r.floor}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Section D — Details */}
+          {serviceType && serviceType !== 'reservation' && selectedRoomId && (
+            <Card>
+              <CardHeader><CardTitle className="text-base">4. Détails</CardTitle></CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4">
+                  {serviceType === 'night' ? (
+                    <>
+                      <div><Label>Arrivée</Label><Input type="date" value={checkInDate} onChange={e => setCheckInDate(e.target.value)} /></div>
+                      <div><Label>Départ</Label><Input type="date" value={checkOutDate} onChange={e => setCheckOutDate(e.target.value)} /></div>
+                      <div><Label>Nuits</Label><Input value={nights} readOnly className="bg-muted" /></div>
+                    </>
+                  ) : (
+                    <>
+                      <div><Label>Heure d'arrivée</Label><Input type="time" value={arrivalTime} onChange={e => setArrivalTime(e.target.value)} /></div>
+                      <div><Label>Durée (heures)</Label>
+                        <Select value={String(durationHours)} onValueChange={v => setDurationHours(Number(v))}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>{[1,2,3,4,5,6].map(h => <SelectItem key={h} value={String(h)}>{h}h</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                    </>
+                  )}
+                  <div><Label>Adultes</Label><Input type="number" value={numAdults} onChange={e => setNumAdults(Number(e.target.value))} /></div>
+                  <div><Label>Enfants</Label><Input type="number" value={numChildren} onChange={e => setNumChildren(Number(e.target.value))} /></div>
+                  <div className="col-span-2">
+                    <Label>Prix négocié (si différent)</Label>
+                    <Input type="number" placeholder="Laissez vide si prix normal" value={negotiatedPrice ?? ''} onChange={e => setNegotiatedPrice(e.target.value ? Number(e.target.value) : null)} />
+                    <p className="text-xs text-muted-foreground mt-1">Si le client a négocié un prix différent, entrez-le ici.</p>
+                    {negotiatedPrice != null && negotiatedPrice > 0 && negotiatedPrice !== basePrice && (
+                      <Badge variant="outline" className="mt-1 text-orange-600 border-orange-300">Prix négocié — écart de {formatFCFA(Math.abs(negotiatedPrice - basePrice))}</Badge>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Section E — Payment */}
+          {serviceType && serviceType !== 'reservation' && selectedRoomId && (
+            <Card>
+              <CardHeader><CardTitle className="text-base">5. Paiement</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <Switch checked={payNow} onCheckedChange={setPayNow} />
+                  <Label>Payer maintenant</Label>
+                </div>
+                {payNow && (
+                  <div className="flex gap-4">
+                    {[{ v: 'cash', l: 'Cash' }, { v: 'mtn_momo', l: 'MTN MoMo' }, { v: 'orange_money', l: 'Orange Money' }].map(m => (
+                      <label key={m.v} className="flex items-center gap-2">
+                        <Checkbox checked={paymentMethods.includes(m.v)}
+                          onCheckedChange={checked => setPaymentMethods(prev => checked ? [...prev, m.v] : prev.filter(p => p !== m.v))} />
+                        <span className="text-sm">{m.l}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Right panel — Live Summary */}
+        <div className="lg:col-span-2">
+          <div className="sticky top-6">
+            <Card className="border-primary/20">
+              <CardHeader>
+                <CardTitle className="text-base">Récapitulatif</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Guest */}
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <User className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-semibold">{selectedGuestData ? `${selectedGuestData.last_name} ${selectedGuestData.first_name}` : (newGuest.last_name ? `${newGuest.last_name} ${newGuest.first_name}` : 'Client non identifié')}</p>
+                    {selectedGuestData && <Badge variant="outline" className="text-xs">Client existant</Badge>}
+                  </div>
+                </div>
+
+                {/* Service */}
+                {serviceType && (
+                  <div className="flex items-center gap-2">
+                    {serviceType === 'night' ? <Moon className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
+                    <Badge>{serviceType === 'night' ? 'Nuit' : serviceType === 'sieste' ? 'Sieste' : 'Réservation'}</Badge>
+                  </div>
+                )}
+
+                {/* Room */}
+                {selectedRoom && (
+                  <div className="flex items-center gap-2">
+                    <BedDouble className="h-4 w-4" />
+                    <span className="font-bold text-lg">{selectedRoom.room_number}</span>
+                    {selectedCategory && <span className="text-sm text-muted-foreground">{selectedCategory.name}</span>}
+                  </div>
+                )}
+
+                {/* Dates */}
+                {serviceType === 'night' && checkInDate && (
+                  <div className="text-sm text-muted-foreground">
+                    {checkInDate} → {checkOutDate || '?'} • {nights} nuit(s)
+                  </div>
+                )}
+                {serviceType === 'sieste' && (
+                  <div className="text-sm text-muted-foreground">
+                    {arrivalTime} • {durationHours}h
+                  </div>
+                )}
+
+                {/* Price */}
+                <div className="border-t pt-3">
+                  {selectedCategory && (
+                    <div className="text-sm text-muted-foreground">
+                      Prix catégorie: {formatFCFA(serviceType === 'sieste' ? (selectedCategory.price_sieste || 0) : selectedCategory.price_per_night)}
+                      {serviceType === 'night' && nights > 1 && ` × ${nights} nuits`}
+                    </div>
+                  )}
+                  <p className="text-3xl font-bold mt-1">{formatFCFA(finalPrice)}</p>
+                  {payNow && <Badge className="mt-1 bg-green-600">Paiement immédiat</Badge>}
+                  {!payNow && serviceType && <Badge variant="outline" className="mt-1">Paiement en attente</Badge>}
+                </div>
+
+                <Button className="w-full mt-4" size="lg" disabled={!canFinalize || finalizeMutation.isPending}
+                  onClick={() => finalizeMutation.mutate()}>
+                  <ArrowRight className="h-4 w-4 mr-2" />Finaliser l'accueil
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default AccueilClientPage;
