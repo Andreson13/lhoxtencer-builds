@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Users, CalendarCheck, BedDouble, LogIn,
+  LayoutDashboard, Users, CalendarCheck, CalendarDays, BedDouble, LogIn,
   Coffee, BookOpen, UtensilsCrossed, ChefHat, Package,
   Receipt, Wallet, Sparkles, BarChart3,
   MessageSquare, QrCode, Settings, ScrollText, Building2,
@@ -21,6 +21,7 @@ const navGroups = [
       { key: 'nav.dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['admin','manager','receptionist','accountant','restaurant','kitchen','housekeeping'] },
       { key: 'nav.guests', path: '/guests', icon: Users, roles: ['admin','manager','receptionist'] },
       { key: 'nav.reservations', path: '/reservations', icon: CalendarCheck, roles: ['admin','manager','receptionist'] },
+      { key: 'nav.calendar', path: '/calendar', icon: CalendarDays, roles: ['admin','manager','receptionist'] },
       { key: 'nav.rooms', path: '/rooms', icon: BedDouble, roles: ['admin','manager','receptionist'] },
       { key: 'nav.categories', path: '/room-categories', icon: Layers, roles: ['admin','manager'] },
       { key: 'nav.checkinout', path: '/check-in-out', icon: LogIn, roles: ['admin','manager','receptionist'] },

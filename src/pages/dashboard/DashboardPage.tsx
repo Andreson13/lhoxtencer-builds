@@ -42,10 +42,18 @@ const DashboardPage = () => {
   const { data: activeStays } = useQuery({
     queryKey: ['active-stays-count', hotelId],
     queryFn: async () => {
-      const { data } = await supabase.from('stays').select('id').eq('hotel_id', hotelId!).eq('status', 'active');
+      const { data } = await supabase.from('stays').select('id, room_id').eq('hotel_id', hotelId!).eq('status', 'active');
       return data || [];
     },
     enabled: !!hotelId,
+  });
+
+  const activeRoomIds = new Set((activeStays || []).map((s: any) => s.room_id).filter(Boolean));
+  const reconciledRooms = (rooms || []).map((room: any) => {
+    if (activeRoomIds.has(room.id) && room.status !== 'occupied') {
+      return { ...room, status: 'occupied' };
+    }
+    return room;
   });
 
   const { data: pendingPayments } = useQuery({
@@ -61,9 +69,9 @@ const DashboardPage = () => {
     enabled: !!hotelId,
   });
 
-  const totalRooms = rooms?.length || 0;
-  const occupiedRooms = rooms?.filter((r: any) => r.status === 'occupied').length || 0;
-  const availableRooms = rooms?.filter((r: any) => r.status === 'available').length || 0;
+  const totalRooms = reconciledRooms.length || 0;
+  const occupiedRooms = reconciledRooms.filter((r: any) => r.status === 'occupied').length || 0;
+  const availableRooms = reconciledRooms.filter((r: any) => r.status === 'available').length || 0;
   const presentGuests = activeStays?.length || 0;
 
   const stats = [
@@ -122,9 +130,9 @@ const DashboardPage = () => {
                 <Skeleton key={i} className="h-20 rounded-lg" />
               ))}
             </div>
-          ) : rooms && rooms.length > 0 ? (
+          ) : reconciledRooms && reconciledRooms.length > 0 ? (
             <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-3">
-              {rooms.map((room: any) => (
+              {reconciledRooms.map((room: any) => (
                 <button
                   key={room.id}
                   onClick={() => navigate('/rooms')}

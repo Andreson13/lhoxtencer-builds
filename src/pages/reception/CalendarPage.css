@@ -1,0 +1,53 @@
+.calendar-page .fc {
+  font-family: inherit;
+}
+
+.calendar-page .fc .fc-toolbar-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.calendar-page .fc .fc-button {
+  background: transparent;
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--foreground));
+  font-size: 0.875rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: var(--radius);
+}
+
+.calendar-page .fc .fc-button:hover {
+  background: hsl(var(--muted));
+}
+
+.calendar-page .fc .fc-button-primary:not(:disabled).fc-button-active {
+  background: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+.calendar-page .fc .fc-daygrid-event {
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.calendar-page .fc .fc-day-today {
+  background: hsl(var(--accent)) !important;
+}
+
+.calendar-page .fc .fc-daygrid-day:hover {
+  background: hsl(var(--muted) / 0.5);
+  cursor: pointer;
+}
+
+.calendar-page .fc-event-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fc-daygrid-day-number-custom {
+  width: 100%;
+}

@@ -517,6 +517,7 @@ export type Database = {
       hotel_photos: {
         Row: {
           caption: string | null
+          category_id: string | null
           created_at: string | null
           display_order: number | null
           hotel_id: string
@@ -525,6 +526,7 @@ export type Database = {
         }
         Insert: {
           caption?: string | null
+          category_id?: string | null
           created_at?: string | null
           display_order?: number | null
           hotel_id: string
@@ -533,6 +535,7 @@ export type Database = {
         }
         Update: {
           caption?: string | null
+          category_id?: string | null
           created_at?: string | null
           display_order?: number | null
           hotel_id?: string
@@ -540,6 +543,13 @@ export type Database = {
           url?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "hotel_photos_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "room_categories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "hotel_photos_hotel_id_fkey"
             columns: ["hotel_id"]

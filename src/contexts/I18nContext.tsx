@@ -8,6 +8,7 @@ const translations: Record<string, Record<Lang, string>> = {
   'nav.dashboard': { fr: 'Tableau de bord', en: 'Dashboard' },
   'nav.guests': { fr: 'Clients', en: 'Guests' },
   'nav.reservations': { fr: 'Réservations', en: 'Reservations' },
+  'nav.calendar': { fr: 'Calendrier', en: 'Calendar' },
   'nav.rooms': { fr: 'Chambres', en: 'Rooms' },
   'nav.checkinout': { fr: 'Check-in / Check-out', en: 'Check-in / Check-out' },
   'nav.siestes': { fr: 'Siestes', en: 'Day Stays' },

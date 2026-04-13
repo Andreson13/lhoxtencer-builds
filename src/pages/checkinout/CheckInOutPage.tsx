@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
@@ -24,14 +25,29 @@ const CheckInOutPage = () => {
   const { profile } = useAuth();
   const { hotel } = useHotel();
   const qc = useQueryClient();
+  const [searchParams] = useSearchParams();
   const [searchCheckin, setSearchCheckin] = useState('');
   const [searchCheckout, setSearchCheckout] = useState('');
+  const [activeTab, setActiveTab] = useState('checkin');
   const [walkinOpen, setWalkinOpen] = useState(false);
   const [walkinStep, setWalkinStep] = useState(1);
   const [walkinGuestId, setWalkinGuestId] = useState<string | null>(null);
   const [walkinSearch, setWalkinSearch] = useState('');
   const [walkinNewGuest, setWalkinNewGuest] = useState({ last_name: '', first_name: '', phone: '', id_number: '' });
   const [walkinStay, setWalkinStay] = useState({ room_id: '', check_in_date: new Date().toISOString().split('T')[0], check_out_date: '', price_per_night: 0 });
+
+  useEffect(() => {
+    const mode = searchParams.get('mode');
+    const reservationId = searchParams.get('reservationId');
+    const stayId = searchParams.get('stayId');
+
+    if (mode === 'checkout' || stayId) setActiveTab('checkout');
+    if (reservationId) {
+      setActiveTab('checkin');
+      setSearchCheckin(reservationId);
+    }
+    if (stayId) setSearchCheckout(stayId);
+  }, [searchParams]);
 
   // Pending reservations for check-in
   const { data: pendingReservations } = useQuery({
@@ -80,28 +96,45 @@ const CheckInOutPage = () => {
 
       // Find or create guest
       let guestId: string;
-      const nameParts = reservation.guest_name.split(' ');
-      const lastName = nameParts.slice(-1)[0];
-      const firstName = nameParts.slice(0, -1).join(' ') || reservation.guest_name;
-
-      // Check if guest exists
-      const { data: existingGuest } = await supabase.from('guests')
-        .select('id').eq('hotel_id', hotel.id)
-        .ilike('last_name', lastName).ilike('first_name', firstName)
-        .limit(1).maybeSingle();
-
-      if (existingGuest) {
-        guestId = existingGuest.id;
+      if (reservation.guest_id) {
+        guestId = reservation.guest_id;
       } else {
-        const { data: newGuest, error: gErr } = await supabase.from('guests').insert({
-          hotel_id: hotel.id,
-          last_name: lastName,
-          first_name: firstName,
-          phone: reservation.guest_phone,
-          email: reservation.guest_email,
-        }).select().single();
-        if (gErr) throw gErr;
-        guestId = newGuest.id;
+        const nameParts = reservation.guest_name.split(' ');
+        const lastName = nameParts.slice(-1)[0];
+        const firstName = nameParts.slice(0, -1).join(' ') || reservation.guest_name;
+
+        // Check by phone first (stronger), then by name
+        let existingGuest: any = null;
+        if (reservation.guest_phone) {
+          const { data } = await supabase.from('guests')
+            .select('id')
+            .eq('hotel_id', hotel.id)
+            .eq('phone', reservation.guest_phone)
+            .limit(1)
+            .maybeSingle();
+          existingGuest = data;
+        }
+        if (!existingGuest) {
+          const { data } = await supabase.from('guests')
+            .select('id').eq('hotel_id', hotel.id)
+            .ilike('last_name', lastName).ilike('first_name', firstName)
+            .limit(1).maybeSingle();
+          existingGuest = data;
+        }
+
+        if (existingGuest) {
+          guestId = existingGuest.id;
+        } else {
+          const { data: newGuest, error: gErr } = await supabase.from('guests').insert({
+            hotel_id: hotel.id,
+            last_name: lastName,
+            first_name: firstName,
+            phone: reservation.guest_phone,
+            email: reservation.guest_email,
+          }).select().single();
+          if (gErr) throw gErr;
+          guestId = newGuest.id;
+        }
       }
 
       const nights = reservation.number_of_nights || 1;
@@ -289,7 +322,10 @@ const CheckInOutPage = () => {
   });
 
   const filteredReservations = pendingReservations?.filter(r =>
-    !searchCheckin || r.guest_name.toLowerCase().includes(searchCheckin.toLowerCase()) || r.reservation_number.toLowerCase().includes(searchCheckin.toLowerCase())
+    !searchCheckin ||
+    r.id === searchCheckin ||
+    r.guest_name.toLowerCase().includes(searchCheckin.toLowerCase()) ||
+    r.reservation_number.toLowerCase().includes(searchCheckin.toLowerCase())
   ) || [];
 
   const filteredStays = activeStays?.filter(s => {
@@ -297,7 +333,7 @@ const CheckInOutPage = () => {
     const guest = (s as any).guests;
     const room = (s as any).rooms;
     const q = searchCheckout.toLowerCase();
-    return (guest && `${guest.last_name} ${guest.first_name}`.toLowerCase().includes(q)) || (room?.room_number?.toLowerCase().includes(q));
+    return s.id === searchCheckout || (guest && `${guest.last_name} ${guest.first_name}`.toLowerCase().includes(q)) || (room?.room_number?.toLowerCase().includes(q));
   }) || [];
 
   return (
@@ -306,7 +342,7 @@ const CheckInOutPage = () => {
         <Button onClick={() => { setWalkinOpen(true); setWalkinStep(1); }}><Plus className="h-4 w-4 mr-2" />Walk-in (sans réservation)</Button>
       </PageHeader>
 
-      <Tabs defaultValue="checkin">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="checkin"><LogIn className="h-4 w-4 mr-2" />Check-in ({filteredReservations.length})</TabsTrigger>
           <TabsTrigger value="checkout"><LogOut className="h-4 w-4 mr-2" />Check-out ({filteredStays.length})</TabsTrigger>

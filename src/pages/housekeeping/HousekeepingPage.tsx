@@ -37,6 +37,25 @@ const HousekeepingPage = () => {
     enabled: !!hotel?.id,
   });
 
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const dedupedTasks = React.useMemo(() => {
+    const all = tasks || [];
+    const openByRoom = new Map<string, any>();
+    const cleanTodayByRoom = new Map<string, any>();
+
+    for (const t of all) {
+      const roomId = t.room_id || t.id;
+      if (t.status === 'clean') {
+        const createdDay = (t.created_at || '').slice(0, 10);
+        if (createdDay === todayKey && !cleanTodayByRoom.has(roomId)) cleanTodayByRoom.set(roomId, t);
+        continue;
+      }
+      if (!openByRoom.has(roomId)) openByRoom.set(roomId, t);
+    }
+
+    return [...openByRoom.values(), ...cleanTodayByRoom.values()];
+  }, [tasks, todayKey]);
+
   const { data: staff } = useQuery({
     queryKey: ['housekeeping-staff', hotel?.id],
     queryFn: async () => {
@@ -66,11 +85,11 @@ const HousekeepingPage = () => {
 
   return (
     <div className="page-container space-y-6">
-      <PageHeader title="Housekeeping" subtitle={`${tasks?.length || 0} tâche(s)`} />
+      <PageHeader title="Housekeeping" subtitle={`${dedupedTasks.length || 0} tâche(s)`} />
 
       <div className="grid grid-cols-4 gap-4">
         {statusCols.map(col => {
-          const colTasks = tasks?.filter(t => t.status === col.key) || [];
+          const colTasks = dedupedTasks.filter(t => t.status === col.key) || [];
           return (
             <div key={col.key} className={`rounded-lg p-3 ${col.color} min-h-[300px]`}>
               <h3 className="font-semibold mb-3 flex items-center gap-2">{col.label}<Badge variant="secondary">{colTasks.length}</Badge></h3>

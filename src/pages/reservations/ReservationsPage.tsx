@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-import { formatFCFA, formatDate, generateReservationNumber } from '@/utils/formatters';
+import { formatFCFA, formatDate, generateInvoiceNumber, generateReservationNumber } from '@/utils/formatters';
 import { withAudit } from '@/utils/auditLog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,12 +23,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { CalendarCheck, Plus, Search, Pencil, Trash2, Check, X, LogIn } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const ReservationsPage = () => {
   useRoleGuard(['admin', 'manager', 'receptionist']);
   const { profile } = useAuth();
   const { hotel } = useHotel();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -39,7 +41,7 @@ const ReservationsPage = () => {
   const [guestSearch, setGuestSearch] = useState('');
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
   const [selectedGuestData, setSelectedGuestData] = useState<any>(null);
-  const [createGuestRecord, setCreateGuestRecord] = useState(true);
+  const [createGuestRecord, setCreateGuestRecord] = useState(false);
 
   // Form state
   const [form, setForm] = useState({
@@ -112,17 +114,47 @@ const ReservationsPage = () => {
     mutationFn: async () => {
       if (!hotel || !profile) throw new Error('Missing context');
 
-      // Create guest record if new and checkbox checked
-      let guestId = selectedGuestId;
-      if (!guestId && createGuestRecord && form.guest_name) {
-        const nameParts = form.guest_name.trim().split(' ');
+      // Link existing guest when possible, and only create on NEW reservation when user opted in.
+      let guestId = selectedGuestId || editing?.guest_id || null;
+      if (!guestId && createGuestRecord && form.guest_name && !editing) {
+        const nameParts = form.guest_name.trim().split(' ').filter(Boolean);
         const lastName = nameParts[0] || form.guest_name;
         const firstName = nameParts.slice(1).join(' ') || '';
-        const { data: g } = await supabase.from('guests').insert({
-          hotel_id: hotel.id, last_name: lastName, first_name: firstName || lastName,
-          phone: form.guest_phone || null, email: form.guest_email || null,
-        }).select().single();
-        if (g) guestId = g.id;
+
+        // Try to reuse an existing guest before creating a new one.
+        let existingGuest: any = null;
+        if (form.guest_phone) {
+          const { data } = await supabase
+            .from('guests')
+            .select('id')
+            .eq('hotel_id', hotel.id)
+            .eq('phone', form.guest_phone)
+            .maybeSingle();
+          existingGuest = data;
+        }
+        if (!existingGuest) {
+          const { data } = await supabase
+            .from('guests')
+            .select('id')
+            .eq('hotel_id', hotel.id)
+            .ilike('last_name', lastName)
+            .ilike('first_name', firstName || lastName)
+            .maybeSingle();
+          existingGuest = data;
+        }
+
+        if (existingGuest?.id) {
+          guestId = existingGuest.id;
+        } else {
+          const { data: g } = await supabase.from('guests').insert({
+            hotel_id: hotel.id,
+            last_name: lastName,
+            first_name: firstName || lastName,
+            phone: form.guest_phone || null,
+            email: form.guest_email || null,
+          }).select().single();
+          if (g) guestId = g.id;
+        }
       }
 
       const payload: any = {
@@ -147,6 +179,7 @@ const ReservationsPage = () => {
         guest_id: guestId || null,
       };
 
+      let reservationId = editing?.id;
       if (editing) {
         payload.reservation_number = editing.reservation_number;
         const { error } = await supabase.from('reservations').update(payload).eq('id', editing.id);
@@ -154,15 +187,67 @@ const ReservationsPage = () => {
       } else {
         payload.reservation_number = generateReservationNumber();
         payload.created_by = profile.id;
-        const { error } = await supabase.from('reservations').insert(payload);
+        const { data: createdReservation, error } = await supabase.from('reservations').insert(payload).select('id').single();
         if (error) throw error;
+        reservationId = createdReservation?.id;
+      }
+
+      // Ensure reservations appear in Billing with correct acompte/solde values.
+      if (reservationId) {
+        const amountPaid = Number(form.deposit_paid || 0);
+        const totalAmount = Number(form.total_price || 0);
+        const balanceDue = Math.max(0, totalAmount - amountPaid);
+        const invoiceStatus = balanceDue <= 0 ? 'paid' : amountPaid > 0 ? 'partial' : 'open';
+
+        const { data: existingInvoice } = await supabase
+          .from('invoices')
+          .select('id')
+          .eq('hotel_id', hotel.id)
+          .eq('reservation_id', reservationId)
+          .maybeSingle();
+
+        if (existingInvoice?.id) {
+          const { error: invoiceUpdateError } = await supabase
+            .from('invoices')
+            .update({
+              guest_id: guestId,
+              subtotal: totalAmount,
+              total_amount: totalAmount,
+              amount_paid: amountPaid,
+              balance_due: balanceDue,
+              status: invoiceStatus,
+            } as any)
+            .eq('id', existingInvoice.id);
+          if (invoiceUpdateError) throw invoiceUpdateError;
+        } else {
+          const { error: invoiceInsertError } = await supabase
+            .from('invoices')
+            .insert({
+              hotel_id: hotel.id,
+              guest_id: guestId,
+              reservation_id: reservationId,
+              invoice_number: generateInvoiceNumber(),
+              status: invoiceStatus,
+              subtotal: totalAmount,
+              total_amount: totalAmount,
+              amount_paid: amountPaid,
+              balance_due: balanceDue,
+            } as any);
+          if (invoiceInsertError) throw invoiceInsertError;
+        }
       }
 
       if (profile && hotel) {
         await withAudit(hotel.id, profile.id, profile.full_name || '', editing ? 'update_reservation' : 'create_reservation', 'reservations', editing?.id, null, payload);
       }
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reservations'] }); toast.success(editing ? 'Réservation modifiée' : 'Réservation créée'); closeDialog(); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['reservations'] });
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+      qc.invalidateQueries({ queryKey: ['guests'] });
+      toast.success(editing ? 'Réservation modifiée' : 'Réservation créée');
+      closeDialog();
+    },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -264,7 +349,7 @@ const ReservationsPage = () => {
                       <TableCell><StatusBadge status={r.status || 'pending'} /></TableCell>
                       <TableCell className="text-right space-x-1">
                         {r.status === 'pending' && <Button variant="outline" size="sm" onClick={() => statusMutation.mutate({ id: r.id, status: 'confirmed' })}><Check className="h-3 w-3 mr-1" />Confirmer</Button>}
-                        {r.status === 'confirmed' && <Button variant="outline" size="sm" onClick={() => statusMutation.mutate({ id: r.id, status: 'checked_in' })}><LogIn className="h-3 w-3 mr-1" />Check-in</Button>}
+                        {r.status === 'confirmed' && <Button variant="outline" size="sm" onClick={() => navigate(`/check-in-out?reservationId=${r.id}`)}><LogIn className="h-3 w-3 mr-1" />Check-in</Button>}
                         {(r.status === 'pending' || r.status === 'confirmed') && <Button variant="ghost" size="sm" onClick={() => statusMutation.mutate({ id: r.id, status: 'cancelled' })}><X className="h-3 w-3" /></Button>}
                         <Button variant="ghost" size="icon" onClick={() => openEdit(r)}><Pencil className="h-4 w-4" /></Button>
                         <Button variant="ghost" size="icon" onClick={() => setDeleteItem(r)}><Trash2 className="h-4 w-4 text-destructive" /></Button>

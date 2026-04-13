@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
@@ -25,8 +26,10 @@ const BillingPage = () => {
   const { profile } = useAuth();
   const { hotel } = useHotel();
   const qc = useQueryClient();
+  const [searchParams] = useSearchParams();
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+  const [openInvoiceId, setOpenInvoiceId] = useState<string | undefined>(searchParams.get('invoiceId') || undefined);
 
   const { data: invoices, isLoading } = useQuery({
     queryKey: ['invoices', hotel?.id],
@@ -38,15 +41,18 @@ const BillingPage = () => {
     enabled: !!hotel?.id,
   });
 
+  const queryInvoiceId = searchParams.get('invoiceId');
+  const visibleInvoices = queryInvoiceId ? (invoices || []).filter((inv: any) => inv.id === queryInvoiceId) : (invoices || []);
+
   return (
     <div className="page-container space-y-6">
-      <PageHeader title="Facturation" subtitle={`${invoices?.length || 0} facture(s)`} />
+      <PageHeader title="Facturation" subtitle={`${visibleInvoices.length || 0} facture(s)`} />
 
-      {isLoading ? <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div> : !invoices?.length ? (
+      {isLoading ? <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div> : !visibleInvoices.length ? (
         <EmptyState icon={Receipt} title="Aucune facture" description="Les factures seront créées automatiquement lors des check-outs" />
       ) : (
-        <Accordion type="single" collapsible className="space-y-2">
-          {invoices.map(inv => (
+        <Accordion type="single" collapsible className="space-y-2" value={openInvoiceId} onValueChange={setOpenInvoiceId}>
+          {visibleInvoices.map((inv: any) => (
             <AccordionItem key={inv.id} value={inv.id} className="border rounded-md px-4">
               <AccordionTrigger className="hover:no-underline">
                 <div className="flex items-center gap-4 w-full mr-4">

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
@@ -23,6 +24,8 @@ const AccueilClientPage = () => {
   const { profile } = useAuth();
   const { hotel } = useHotel();
   const qc = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const reservationId = searchParams.get('reservationId');
 
   // State
   const [guestSearch, setGuestSearch] = useState('');
@@ -42,6 +45,17 @@ const AccueilClientPage = () => {
   const [payNow, setPayNow] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState<string[]>(['cash']);
   const [success, setSuccess] = useState<{ room: string; guest: string } | null>(null);
+  const [prefillApplied, setPrefillApplied] = useState(false);
+
+  const toDateKey = (value: string | null | undefined) => {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    const y = d.getFullYear();
+    const m = `${d.getMonth() + 1}`.padStart(2, '0');
+    const day = `${d.getDate()}`.padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
 
   // Queries
   const { data: existingGuests } = useQuery({
@@ -69,13 +83,73 @@ const AccueilClientPage = () => {
   const { data: availableRooms } = useQuery({
     queryKey: ['rooms-available-accueil', hotel?.id, selectedCategoryId],
     queryFn: async () => {
-      let q = supabase.from('rooms').select('id, room_number, floor, category_id').eq('hotel_id', hotel!.id).eq('status', 'available');
+      let q = supabase.from('rooms').select('id, room_number, floor, category_id, status').eq('hotel_id', hotel!.id).eq('status', 'available');
       if (selectedCategoryId) q = q.eq('category_id', selectedCategoryId);
       const { data } = await q.order('room_number');
-      return data || [];
+      let rooms = data || [];
+
+      // Keep preselected reservation room visible even if it is not currently "available"
+      if (selectedRoomId && !rooms.some((r: any) => r.id === selectedRoomId)) {
+        const { data: selectedRoomData } = await supabase
+          .from('rooms')
+          .select('id, room_number, floor, category_id, status')
+          .eq('hotel_id', hotel!.id)
+          .eq('id', selectedRoomId)
+          .maybeSingle();
+        if (selectedRoomData) rooms = [...rooms, selectedRoomData];
+      }
+
+      return rooms;
     },
     enabled: !!hotel?.id,
   });
+
+  const { data: reservationPrefill } = useQuery({
+    queryKey: ['reservation-prefill-accueil', hotel?.id, reservationId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('reservations')
+        .select('*, guests(id, first_name, last_name, phone, nationality, id_number), room_categories(id, name)')
+        .eq('hotel_id', hotel!.id)
+        .eq('id', reservationId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!hotel?.id && !!reservationId,
+  });
+
+  useEffect(() => {
+    if (!reservationId || !reservationPrefill || prefillApplied) return;
+
+    setServiceType('night');
+    setSelectedRoomId(reservationPrefill.room_id || null);
+    setSelectedCategoryId(reservationPrefill.category_id || null);
+    setCheckInDate(toDateKey(reservationPrefill.check_in_date) || new Date().toISOString().split('T')[0]);
+    setCheckOutDate(toDateKey(reservationPrefill.check_out_date));
+    setNumAdults(reservationPrefill.number_of_adults || 1);
+    setNumChildren(reservationPrefill.number_of_children || 0);
+
+    const prefGuest = (reservationPrefill as any).guests;
+    if (prefGuest?.id) {
+      setSelectedGuestId(prefGuest.id);
+      setSelectedGuestData(prefGuest);
+      setGuestSearch(`${prefGuest.last_name || ''} ${prefGuest.first_name || ''}`.trim());
+    } else {
+      const parts = (reservationPrefill.guest_name || '').trim().split(' ').filter(Boolean);
+      const lastName = parts.length > 1 ? parts[parts.length - 1] : (parts[0] || '');
+      const firstName = parts.length > 1 ? parts.slice(0, -1).join(' ') : '';
+      setNewGuest((prev) => ({
+        ...prev,
+        last_name: lastName,
+        first_name: firstName,
+        phone: reservationPrefill.guest_phone || prev.phone,
+      }));
+    }
+
+    setPrefillApplied(true);
+    toast.success(`Prérempli depuis la réservation ${reservationPrefill.reservation_number || ''}`.trim());
+  }, [prefillApplied, reservationId, reservationPrefill]);
 
   const selectedCategory = categories?.find(c => c.id === selectedCategoryId);
   const selectedRoom = availableRooms?.find(r => r.id === selectedRoomId);
@@ -221,6 +295,14 @@ const AccueilClientPage = () => {
   }
 
   const canFinalize = (selectedGuestId || (newGuest.last_name && newGuest.first_name)) && serviceType && selectedRoomId;
+  const reservationHint = useMemo(() => {
+    if (!reservationPrefill) return null;
+    return {
+      number: reservationPrefill.reservation_number,
+      name: reservationPrefill.guest_name,
+      status: reservationPrefill.status,
+    };
+  }, [reservationPrefill]);
 
   return (
     <div className="page-container">
@@ -228,6 +310,17 @@ const AccueilClientPage = () => {
         {/* Left panel */}
         <div className="lg:col-span-3 space-y-6">
           <h1 className="text-2xl font-bold">Accueil client</h1>
+
+          {reservationHint && (
+            <Card className="border-green-200 bg-green-50/60">
+              <CardContent className="py-3">
+                <p className="text-sm font-medium text-green-800">
+                  Préremplissage réservation #{reservationHint.number || '-'} — {reservationHint.name || 'Client'}
+                </p>
+                <p className="text-xs text-green-700">Statut: {reservationHint.status || 'pending'}</p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Section A — Client */}
           <Card>

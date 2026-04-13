@@ -48,6 +48,19 @@ const RoomsPage = () => {
     enabled: !!hotel?.id,
   });
 
+  const { data: activeStays } = useQuery({
+    queryKey: ['rooms-active-stays', hotel?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('stays')
+        .select('id, room_id, status')
+        .eq('hotel_id', hotel!.id)
+        .eq('status', 'active');
+      return data || [];
+    },
+    enabled: !!hotel?.id,
+  });
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       const payload: any = {
@@ -135,7 +148,15 @@ const RoomsPage = () => {
     setDialogOpen(true);
   };
 
-  const filtered = statusFilter === 'all' ? rooms : rooms?.filter((r: any) => r.status === statusFilter);
+  const activeRoomIds = new Set((activeStays || []).map((s: any) => s.room_id).filter(Boolean));
+  const reconciledRooms = (rooms || []).map((room: any) => {
+    // Source of truth: if an active stay exists for the room, it must be occupied.
+    if (activeRoomIds.has(room.id) && room.status !== 'occupied') {
+      return { ...room, status: 'occupied' };
+    }
+    return room;
+  });
+  const filtered = statusFilter === 'all' ? reconciledRooms : reconciledRooms.filter((r: any) => r.status === statusFilter);
   const bulkCount = Math.max(0, bulkForm.end - bulkForm.start + 1);
   const bulkExisting = rooms ? Array.from({ length: bulkCount }, (_, i) => {
     const n = bulkForm.start + i;

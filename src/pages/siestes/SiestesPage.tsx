@@ -44,13 +44,31 @@ const SiestesPage = () => {
     queryFn: async () => {
       const { data } = await supabase
         .from('siestes')
-        .select('*, rooms(room_number), invoices(balance_due, status, invoice_number), stays(id, guest_id)')
+        .select('*, rooms(room_number), invoices(balance_due, status, invoice_number)')
         .eq('hotel_id', hotel!.id)
         .eq('arrival_date', today)
         .order('arrival_time');
       return data || [];
     },
     enabled: !!hotel?.id,
+  });
+
+  const { data: siesteStaysByInvoice = {} } = useQuery({
+    queryKey: ['siestes-stays-by-invoice', hotel?.id, today],
+    queryFn: async () => {
+      const invoiceIds = (siestes || []).map((s: any) => s.invoice_id).filter(Boolean);
+      if (!invoiceIds.length) return {} as Record<string, { id: string; guest_id: string | null }>;
+      const { data } = await supabase
+        .from('stays')
+        .select('id, guest_id, invoice_id')
+        .eq('hotel_id', hotel!.id)
+        .in('invoice_id', invoiceIds as string[]);
+      return (data || []).reduce((acc: Record<string, { id: string; guest_id: string | null }>, row: any) => {
+        if (row.invoice_id) acc[row.invoice_id] = { id: row.id, guest_id: row.guest_id || null };
+        return acc;
+      }, {});
+    },
+    enabled: !!hotel?.id && !!siestes?.length,
   });
 
   const { data: rooms } = useQuery({
@@ -263,12 +281,13 @@ const SiestesPage = () => {
                         : <Badge className="bg-green-600">Payé</Badge>}
                     </TableCell>
                     <TableCell className="text-right">
-                      {((s as any).invoices?.balance_due || 0) > 0 && s.invoice_id && (s as any).stays?.id && s.guest_id && (
+                      {((s as any).invoices?.balance_due || 0) > 0 && s.invoice_id && siesteStaysByInvoice[s.invoice_id]?.id && (s.guest_id || siesteStaysByInvoice[s.invoice_id]?.guest_id) && (
                         <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => {
+                          const stayForInvoice = siesteStaysByInvoice[s.invoice_id];
                           setPaymentContext({
                             invoiceId: s.invoice_id,
-                            stayId: (s as any).stays.id,
-                            guestId: s.guest_id,
+                            stayId: stayForInvoice.id,
+                            guestId: s.guest_id || stayForInvoice.guest_id,
                             currentBalance: (s as any).invoices?.balance_due || 0,
                             invoiceNumber: (s as any).invoices?.invoice_number,
                             roomNumber: (s as any).rooms?.room_number,
