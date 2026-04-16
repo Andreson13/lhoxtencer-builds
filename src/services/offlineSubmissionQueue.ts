@@ -117,7 +117,40 @@ type RestaurantOrderCreateItem = {
   };
 };
 
-type QueueItem = GuestUpsertItem | GuestStayCreateItem | ReservationSaveItem | CheckinReservationItem | WalkinCheckinItem | RestaurantOrderCreateItem;
+type ReservationStatusUpdateItem = {
+  type: 'reservation-status-update';
+  createdAt: string;
+  payload: {
+    hotelId: string;
+    reservationId: string;
+    status: string;
+  };
+};
+
+type CheckoutStayItem = {
+  type: 'checkout-stay';
+  createdAt: string;
+  payload: {
+    hotelId: string;
+    stayId: string;
+    guestId: string;
+    roomId?: string | null;
+    invoiceId?: string | null;
+    stayType: string;
+    storedUnits: number;
+    unitPrice: number;
+  };
+};
+
+type QueueItem =
+  | GuestUpsertItem
+  | GuestStayCreateItem
+  | ReservationSaveItem
+  | CheckinReservationItem
+  | WalkinCheckinItem
+  | RestaurantOrderCreateItem
+  | ReservationStatusUpdateItem
+  | CheckoutStayItem;
 
 const loadQueue = (): QueueItem[] => {
   try {
@@ -559,6 +592,106 @@ const processRestaurantOrderCreate = async (item: RestaurantOrderCreateItem) => 
   if (orderItemsError) throw orderItemsError;
 };
 
+const processReservationStatusUpdate = async (item: ReservationStatusUpdateItem) => {
+  const p = item.payload;
+  const { data: reservation } = await supabase
+    .from('reservations')
+    .select('id, status')
+    .eq('hotel_id', p.hotelId)
+    .eq('id', p.reservationId)
+    .maybeSingle();
+
+  if (!reservation?.id || reservation.status === p.status) return;
+
+  const { error } = await supabase.from('reservations').update({ status: p.status }).eq('id', p.reservationId);
+  if (error) throw error;
+};
+
+const processCheckoutStay = async (item: CheckoutStayItem) => {
+  const p = item.payload;
+  const { data: stay } = await supabase
+    .from('stays')
+    .select('id, status, guest_id, room_id, stay_type, check_in_date, actual_check_out, number_of_nights, price_per_night, total_price, invoice_id')
+    .eq('hotel_id', p.hotelId)
+    .eq('id', p.stayId)
+    .maybeSingle();
+
+  if (!stay?.id || stay.status === 'checked_out') return;
+
+  let invoice: any = null;
+  if (stay.invoice_id || p.invoiceId) {
+    const { data } = await supabase
+      .from('invoices')
+      .select('id, balance_due, amount_paid, invoice_items(item_type, quantity, unit_price, subtotal)')
+      .eq('id', stay.invoice_id || p.invoiceId)
+      .maybeSingle();
+    invoice = data;
+  }
+
+  const start = new Date(stay.check_in_date);
+  const end = stay.actual_check_out ? new Date(stay.actual_check_out) : new Date();
+  const isSieste = (stay.stay_type || p.stayType) === 'sieste';
+  const liveUnits = isSieste
+    ? Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 3600000))
+    : Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000));
+  const storedUnits = Number(stay.number_of_nights || p.storedUnits || 0);
+  const unitPrice = Number(stay.price_per_night || p.unitPrice || 0);
+  const itemType = isSieste ? 'sieste' : 'room';
+  const alreadyBilledUnits = (invoice?.invoice_items || [])
+    .filter((invoiceItem: any) => invoiceItem.item_type === itemType)
+    .reduce((sum: number, invoiceItem: any) => sum + Number(invoiceItem.quantity || 0), 0);
+  const missingUnits = Math.max(0, liveUnits - Math.max(storedUnits, alreadyBilledUnits));
+
+  if (missingUnits > 0 && (stay.invoice_id || p.invoiceId)) {
+    await addChargeToInvoice({
+      hotelId: p.hotelId,
+      invoiceId: stay.invoice_id || p.invoiceId!,
+      stayId: stay.id,
+      guestId: stay.guest_id || p.guestId,
+      description: isSieste ? `Extension sieste - ${missingUnits}h` : `Nuitees additionnelles - ${missingUnits} nuit(s)`,
+      itemType: itemType as any,
+      quantity: missingUnits,
+      unitPrice,
+    });
+  }
+
+  const liveEstimatedTotal = liveUnits * unitPrice;
+  const paymentStatus = (invoice?.balance_due || 0) <= 0 ? 'paid' : (invoice?.amount_paid || 0) > 0 ? 'partial' : 'pending';
+
+  await supabase.from('stays').update({
+    status: 'checked_out',
+    actual_check_out: new Date().toISOString(),
+    number_of_nights: isSieste ? stay.number_of_nights : liveUnits,
+    total_price: liveEstimatedTotal,
+    payment_status: paymentStatus as any,
+  } as any).eq('id', stay.id);
+
+  if (stay.room_id || p.roomId) {
+    const roomId = stay.room_id || p.roomId;
+    await supabase.from('rooms').update({ status: 'housekeeping' }).eq('id', roomId);
+
+    const { data: existingTask } = await supabase
+      .from('housekeeping_tasks')
+      .select('id')
+      .eq('hotel_id', p.hotelId)
+      .eq('room_id', roomId)
+      .eq('status', 'pending')
+      .maybeSingle();
+
+    if (!existingTask?.id) {
+      await supabase.from('housekeeping_tasks').insert({ hotel_id: p.hotelId, room_id: roomId } as any);
+    }
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+  await supabase
+    .from('main_courante')
+    .update({ observation: 'DÉPART' } as any)
+    .eq('hotel_id', p.hotelId)
+    .eq('journee', today)
+    .eq('guest_id', stay.guest_id || p.guestId);
+};
+
 const processQueueItem = async (item: QueueItem) => {
   if (item.type === 'guest-upsert') return processGuestUpsert(item);
   if (item.type === 'guest-stay-create') return processGuestStayCreate(item);
@@ -566,6 +699,8 @@ const processQueueItem = async (item: QueueItem) => {
   if (item.type === 'checkin-reservation') return processCheckinReservation(item);
   if (item.type === 'walkin-checkin') return processWalkinCheckin(item);
   if (item.type === 'restaurant-order-create') return processRestaurantOrderCreate(item);
+  if (item.type === 'reservation-status-update') return processReservationStatusUpdate(item);
+  if (item.type === 'checkout-stay') return processCheckoutStay(item);
 };
 
 export const processOfflineSubmissionQueue = async () => {

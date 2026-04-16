@@ -301,10 +301,43 @@ const ReservationsPage = () => {
 
   const statusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase.from('reservations').update({ status }).eq('id', id);
-      if (error) throw error;
+      if (!hotel) throw new Error('Missing context');
+
+      try {
+        const currentReservation = reservations?.find((reservation) => reservation.id === id);
+        if (currentReservation?.status === status) {
+          return { queued: false, noop: true };
+        }
+
+        const { error } = await supabase.from('reservations').update({ status }).eq('id', id);
+        if (error) throw error;
+        return { queued: false, noop: false };
+      } catch (error) {
+        if (isNetworkIssue(error)) {
+          enqueueOfflineSubmission({
+            type: 'reservation-status-update',
+            createdAt: new Date().toISOString(),
+            payload: {
+              hotelId: hotel.id,
+              reservationId: id,
+              status,
+            },
+          });
+          return { queued: true, noop: false };
+        }
+        throw error;
+      }
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reservations'] }); toast.success(t('reservations.statusUpdated')); },
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['reservations'] });
+      if (result?.noop) {
+        toast.info('Cette reservation est deja dans cet etat.');
+      } else if (result?.queued) {
+        toast.success('Changement de statut mis en file locale. Synchronisation en attente du reseau.');
+      } else {
+        toast.success(t('reservations.statusUpdated'));
+      }
+    },
     onError: (e: any) => toast.error(e.message),
   });
 

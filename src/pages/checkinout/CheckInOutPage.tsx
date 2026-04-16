@@ -408,72 +408,108 @@ const CheckInOutPage = () => {
     mutationFn: async (stay: any) => {
       if (!hotel || !profile) throw new Error('Missing context');
 
-      let invoice: any = null;
-      if (stay.invoice_id) {
-        const { data } = await supabase
-          .from('invoices')
-          .select('id, guest_id, balance_due, total_amount, amount_paid, invoice_items(item_type, quantity, unit_price, subtotal)')
-          .eq('id', stay.invoice_id)
-          .maybeSingle();
-        invoice = data;
+      try {
+        if (stay.status === 'checked_out') {
+          return { queued: false, noop: true };
+        }
+
+        let invoice: any = null;
+        if (stay.invoice_id) {
+          const { data } = await supabase
+            .from('invoices')
+            .select('id, guest_id, balance_due, total_amount, amount_paid, invoice_items(item_type, quantity, unit_price, subtotal)')
+            .eq('id', stay.invoice_id)
+            .maybeSingle();
+          invoice = data;
+        }
+
+        const liveUnits = getLiveStayUnits(stay);
+        const storedUnits = Number(stay.number_of_nights || 0);
+        const unitPrice = Number(stay.price_per_night || 0);
+        const itemType = stay.stay_type === 'sieste' ? 'sieste' : 'room';
+        const alreadyBilledUnits = (invoice?.invoice_items || [])
+          .filter((item: any) => item.item_type === itemType)
+          .reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
+        const missingUnits = Math.max(0, liveUnits - Math.max(storedUnits, alreadyBilledUnits));
+
+        if (missingUnits > 0 && stay.invoice_id) {
+          await addChargeToInvoice({
+            hotelId: hotel.id,
+            invoiceId: stay.invoice_id,
+            stayId: stay.id,
+            guestId: stay.guest_id,
+            description: stay.stay_type === 'sieste' ? `Extension sieste - ${missingUnits}h` : `Nuitees additionnelles - ${missingUnits} nuit(s)`,
+            itemType: itemType as any,
+            quantity: missingUnits,
+            unitPrice,
+          });
+        }
+
+        await supabase.from('stays').update({
+          status: 'checked_out',
+          actual_check_out: new Date().toISOString(),
+          number_of_nights: stay.stay_type === 'sieste' ? stay.number_of_nights : liveUnits,
+          total_price: getLiveEstimatedTotal(stay),
+          payment_status: (invoice?.balance_due <= 0 ? 'paid' : invoice?.balance_due > 0 ? 'partial' : 'pending') as any,
+        } as any).eq('id', stay.id);
+
+        if (stay.room_id) {
+          await supabase.from('rooms').update({ status: 'housekeeping' }).eq('id', stay.room_id);
+
+          const { data: existingTask } = await supabase
+            .from('housekeeping_tasks')
+            .select('id')
+            .eq('hotel_id', hotel.id)
+            .eq('room_id', stay.room_id)
+            .eq('status', 'pending')
+            .maybeSingle();
+
+          if (!existingTask?.id) {
+            await supabase.from('housekeeping_tasks').insert({ hotel_id: hotel.id, room_id: stay.room_id } as any);
+          }
+        }
+
+        const today = new Date().toISOString().split('T')[0];
+        await supabase
+          .from('main_courante')
+          .update({ observation: 'DÉPART' } as any)
+          .eq('hotel_id', hotel.id)
+          .eq('journee', today)
+          .eq('guest_id', stay.guest_id);
+
+        await withAudit(hotel.id, profile.id, profile.full_name || '', 'check_out', 'stays', stay.id, { status: 'active' }, { status: 'checked_out' });
+        return { queued: false, noop: false };
+      } catch (error) {
+        if (isNetworkIssue(error)) {
+          enqueueOfflineSubmission({
+            type: 'checkout-stay',
+            createdAt: new Date().toISOString(),
+            payload: {
+              hotelId: hotel.id,
+              stayId: stay.id,
+              guestId: stay.guest_id,
+              roomId: stay.room_id,
+              invoiceId: stay.invoice_id,
+              stayType: stay.stay_type,
+              storedUnits: Number(stay.number_of_nights || 0),
+              unitPrice: Number(stay.price_per_night || 0),
+            },
+          });
+          return { queued: true, noop: false };
+        }
+        throw error;
       }
-
-      const liveUnits = getLiveStayUnits(stay);
-      const storedUnits = Number(stay.number_of_nights || 0);
-      const unitPrice = Number(stay.price_per_night || 0);
-      const itemType = stay.stay_type === 'sieste' ? 'sieste' : 'room';
-      const alreadyBilledUnits = (invoice?.invoice_items || [])
-        .filter((item: any) => item.item_type === itemType)
-        .reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
-      const missingUnits = Math.max(0, liveUnits - Math.max(storedUnits, alreadyBilledUnits));
-
-      if (missingUnits > 0 && stay.invoice_id) {
-        await addChargeToInvoice({
-          hotelId: hotel.id,
-          invoiceId: stay.invoice_id,
-          stayId: stay.id,
-          guestId: stay.guest_id,
-          description: stay.stay_type === 'sieste' ? `Extension sieste - ${missingUnits}h` : `Nuitees additionnelles - ${missingUnits} nuit(s)`,
-          itemType: itemType as any,
-          quantity: missingUnits,
-          unitPrice,
-        });
-      }
-
-      await supabase.from('stays').update({
-        status: 'checked_out',
-        actual_check_out: new Date().toISOString(),
-        number_of_nights: stay.stay_type === 'sieste' ? stay.number_of_nights : liveUnits,
-        total_price: getLiveEstimatedTotal(stay),
-        payment_status: (invoice?.balance_due <= 0 ? 'paid' : invoice?.balance_due > 0 ? 'partial' : 'pending') as any,
-      } as any).eq('id', stay.id);
-
-      // Room goes to housekeeping via trigger, but safety:
-      if (stay.room_id) {
-        await supabase.from('rooms').update({ status: 'housekeeping' }).eq('id', stay.room_id);
-      }
-
-      if (stay.room_id) {
-        await supabase.from('housekeeping_tasks').insert({ hotel_id: hotel.id, room_id: stay.room_id } as any);
-      }
-
-      const today = new Date().toISOString().split('T')[0];
-      await supabase
-        .from('main_courante')
-        .update({ observation: 'DÉPART' } as any)
-        .eq('hotel_id', hotel.id)
-        .eq('journee', today)
-        .eq('guest_id', stay.guest_id);
-
-      // Optional debts module is not provisioned in this deployment.
-      // Keep checkout non-blocking and avoid 404 noise.
-
-      await withAudit(hotel.id, profile.id, profile.full_name || '', 'check_out', 'stays', stay.id, { status: 'active' }, { status: 'checked_out' });
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['active-stays-checkout'] });
       qc.invalidateQueries({ queryKey: ['rooms'] });
-      toast.success(t('checkinout.checkout.success'));
+      if (result?.noop) {
+        toast.info('Ce sejour est deja cloture.');
+      } else if (result?.queued) {
+        toast.success('Check-out mis en file locale. Synchronisation en attente du reseau.');
+      } else {
+        toast.success(t('checkinout.checkout.success'));
+      }
     },
     onError: (e: any) => toast.error(e.message),
   });
