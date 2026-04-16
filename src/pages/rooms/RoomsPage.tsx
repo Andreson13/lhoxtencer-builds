@@ -13,6 +13,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useHotel } from '@/contexts/HotelContext';
+import { useI18n } from '@/contexts/I18nContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { supabase } from '@/integrations/supabase/client';
 import { formatFCFA } from '@/utils/formatters';
@@ -20,6 +21,7 @@ import { toast } from 'sonner';
 
 const RoomsPage = () => {
   useRoleGuard(['admin','manager','receptionist']);
+  const { t } = useI18n();
   const { hotel } = useHotel();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -90,7 +92,7 @@ const RoomsPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
       setDialogOpen(false);
-      toast.success(editRoom ? 'Chambre modifiée' : 'Chambre ajoutée');
+      toast.success(editRoom ? t('rooms.updated') : t('rooms.created'));
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -110,7 +112,7 @@ const RoomsPage = () => {
           });
         }
       }
-      if (roomsToCreate.length === 0) throw new Error('Toutes les chambres existent déjà');
+      if (roomsToCreate.length === 0) throw new Error(t('rooms.bulk.existsError'));
       const { error } = await supabase.from('rooms').insert(roomsToCreate);
       if (error) throw error;
       return roomsToCreate.length;
@@ -118,7 +120,7 @@ const RoomsPage = () => {
     onSuccess: (count) => {
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
       setBulkDialogOpen(false);
-      toast.success(`${count} chambre(s) créée(s) avec succès`);
+      toast.success(`${count} ${t('rooms.bulkCreated')}`);
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -131,7 +133,7 @@ const RoomsPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
       setDeleteId(null);
-      toast.success('Chambre supprimée');
+      toast.success(t('rooms.deleted'));
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -169,23 +171,34 @@ const RoomsPage = () => {
     housekeeping: 'border-l-warning', maintenance: 'border-l-info',
     out_of_order: 'border-l-muted-foreground',
   };
+  const availableCount = reconciledRooms.filter((room: any) => room.status === 'available').length;
+  const occupiedCount = reconciledRooms.filter((room: any) => room.status === 'occupied').length;
+  const housekeepingCount = reconciledRooms.filter((room: any) => room.status === 'housekeeping').length;
+  const maintenanceCount = reconciledRooms.filter((room: any) => ['maintenance', 'out_of_order'].includes(room.status)).length;
 
   return (
-    <div className="page-container">
-      <PageHeader title="Chambres" subtitle={`${rooms?.length || 0} chambres`}>
+    <div className="page-container space-y-6">
+      <PageHeader title={t('rooms.title')} subtitle={`${rooms?.length || 0} ${t('rooms.subtitle')}`}>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-40"><SelectValue placeholder="Filtrer" /></SelectTrigger>
+          <SelectTrigger className="w-40"><SelectValue placeholder={t('rooms.filter.placeholder')} /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Toutes</SelectItem>
-            <SelectItem value="available">Disponibles</SelectItem>
-            <SelectItem value="occupied">Occupées</SelectItem>
-            <SelectItem value="housekeeping">Nettoyage</SelectItem>
-            <SelectItem value="maintenance">Maintenance</SelectItem>
+            <SelectItem value="all">{t('rooms.filter.all')}</SelectItem>
+            <SelectItem value="available">{t('status.available')}</SelectItem>
+            <SelectItem value="occupied">{t('status.occupied')}</SelectItem>
+            <SelectItem value="housekeeping">{t('status.housekeeping')}</SelectItem>
+            <SelectItem value="maintenance">{t('status.maintenance')}</SelectItem>
           </SelectContent>
         </Select>
-        <Button variant="outline" onClick={() => setBulkDialogOpen(true)}><Layers className="h-4 w-4 mr-2" />Créer en lot</Button>
-        <Button onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Ajouter</Button>
+        <Button variant="outline" onClick={() => setBulkDialogOpen(true)}><Layers className="h-4 w-4 mr-2" />{t('rooms.bulk')}</Button>
+        <Button onClick={openAdd}><Plus className="h-4 w-4 mr-2" />{t('rooms.add')}</Button>
       </PageHeader>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">{t('rooms.summary.available')}</p><p className="mt-2 text-2xl font-semibold">{availableCount}</p></CardContent></Card>
+        <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">{t('rooms.summary.occupied')}</p><p className="mt-2 text-2xl font-semibold">{occupiedCount}</p></CardContent></Card>
+        <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">{t('rooms.summary.housekeeping')}</p><p className="mt-2 text-2xl font-semibold">{housekeepingCount}</p></CardContent></Card>
+        <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">{t('rooms.summary.maintenance')}</p><p className="mt-2 text-2xl font-semibold">{maintenanceCount}</p></CardContent></Card>
+      </div>
 
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -201,12 +214,12 @@ const RoomsPage = () => {
                   <StatusBadge status={room.status} />
                 </div>
                 <div className="space-y-1 text-sm text-muted-foreground">
-                  <p>Étage {room.floor} · {room.capacity} pers.</p>
+                  <p>{t('rooms.card.floor')} {room.floor} · {room.capacity} {t('rooms.card.capacity')}</p>
                   {room.room_categories && <p className="text-xs"><span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: room.room_categories.color || '#6366f1' }} />{room.room_categories.name}</p>}
-                  <p className="font-semibold text-foreground">{formatFCFA(room.room_categories?.price_per_night ?? room.price_per_night)}/nuit</p>
+                  <p className="font-semibold text-foreground">{formatFCFA(room.room_categories?.price_per_night ?? room.price_per_night)}{t('rooms.card.perNight')}</p>
                 </div>
                 <div className="flex gap-2 mt-4">
-                  <Button variant="outline" size="sm" onClick={() => openEdit(room)}><Pencil className="h-3 w-3 mr-1" />Modifier</Button>
+                  <Button variant="outline" size="sm" onClick={() => openEdit(room)}><Pencil className="h-3 w-3 mr-1" />{t('common.edit')}</Button>
                   <Button variant="outline" size="sm" className="text-destructive" onClick={() => setDeleteId(room.id)}><Trash2 className="h-3 w-3" /></Button>
                 </div>
               </CardContent>
@@ -214,43 +227,43 @@ const RoomsPage = () => {
           ))}
         </div>
       ) : (
-        <EmptyState title="Aucune chambre" description="Ajoutez votre première chambre" actionLabel="Ajouter une chambre" onAction={openAdd} />
+        <EmptyState title={t('rooms.emptyTitle')} description={t('rooms.emptyDescription')} actionLabel={t('rooms.emptyAction')} onAction={openAdd} />
       )}
 
       {/* Single room dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{editRoom ? 'Modifier la chambre' : 'Ajouter une chambre'}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editRoom ? t('rooms.dialog.editTitle') : t('rooms.dialog.newTitle')}</DialogTitle></DialogHeader>
           <form onSubmit={(e) => { e.preventDefault(); saveMutation.mutate(); }} className="space-y-4">
-            <div><Label>Numéro *</Label><Input value={form.room_number} onChange={e => setForm(f => ({...f, room_number: e.target.value}))} /></div>
+            <div><Label>{t('rooms.dialog.number')}</Label><Input value={form.room_number} onChange={e => setForm(f => ({...f, room_number: e.target.value}))} /></div>
             <div className="grid grid-cols-2 gap-4">
-              <div><Label>Étage</Label><Input type="number" value={form.floor} onChange={e => setForm(f => ({...f, floor: Number(e.target.value)}))} /></div>
-              <div><Label>Capacité</Label><Input type="number" value={form.capacity} onChange={e => setForm(f => ({...f, capacity: Number(e.target.value)}))} /></div>
+              <div><Label>{t('rooms.dialog.floor')}</Label><Input type="number" value={form.floor} onChange={e => setForm(f => ({...f, floor: Number(e.target.value)}))} /></div>
+              <div><Label>{t('rooms.dialog.capacity')}</Label><Input type="number" value={form.capacity} onChange={e => setForm(f => ({...f, capacity: Number(e.target.value)}))} /></div>
             </div>
-            <div><Label>Catégorie</Label>
+            <div><Label>{t('rooms.dialog.category')}</Label>
               <Select value={form.category_id} onValueChange={v => setForm(f => ({...f, category_id: v}))}>
-                <SelectTrigger><SelectValue placeholder="Sélectionner une catégorie" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t('rooms.dialog.selectCategory')} /></SelectTrigger>
                 <SelectContent>
                   {categories?.map(c => <SelectItem key={c.id} value={c.id}>{c.name} — {formatFCFA(c.price_per_night)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <div><Label>Statut</Label>
+            <div><Label>{t('rooms.dialog.status')}</Label>
               <Select value={form.status} onValueChange={(v) => setForm(f => ({...f, status: v}))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="available">Disponible</SelectItem>
-                  <SelectItem value="occupied">Occupée</SelectItem>
-                  <SelectItem value="housekeeping">Nettoyage</SelectItem>
-                  <SelectItem value="maintenance">Maintenance</SelectItem>
-                  <SelectItem value="out_of_order">Hors service</SelectItem>
+                  <SelectItem value="available">{t('status.available')}</SelectItem>
+                  <SelectItem value="occupied">{t('status.occupied')}</SelectItem>
+                  <SelectItem value="housekeeping">{t('status.housekeeping')}</SelectItem>
+                  <SelectItem value="maintenance">{t('status.maintenance')}</SelectItem>
+                  <SelectItem value="out_of_order">{t('status.out_of_order')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <div><Label>Description</Label><Input value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} /></div>
+            <div><Label>{t('rooms.dialog.description')}</Label><Input value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} /></div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-              <Button type="submit" disabled={saveMutation.isPending}>Enregistrer</Button>
+              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
+              <Button type="submit" disabled={saveMutation.isPending}>{t('common.save')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -259,41 +272,41 @@ const RoomsPage = () => {
       {/* Bulk creation dialog */}
       <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Créer des chambres en lot</DialogTitle><DialogDescription>Générer plusieurs chambres automatiquement</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{t('rooms.bulk.title')}</DialogTitle><DialogDescription>{t('rooms.bulk.description')}</DialogDescription></DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-3 gap-4">
-              <div><Label>Préfixe</Label><Input placeholder="ex: 1" value={bulkForm.prefix} onChange={e => setBulkForm(f => ({ ...f, prefix: e.target.value }))} /></div>
-              <div><Label>N° début</Label><Input type="number" value={bulkForm.start} onChange={e => setBulkForm(f => ({ ...f, start: Number(e.target.value) }))} /></div>
-              <div><Label>N° fin</Label><Input type="number" value={bulkForm.end} onChange={e => setBulkForm(f => ({ ...f, end: Number(e.target.value) }))} /></div>
+              <div><Label>{t('rooms.bulk.prefix')}</Label><Input placeholder="ex: 1" value={bulkForm.prefix} onChange={e => setBulkForm(f => ({ ...f, prefix: e.target.value }))} /></div>
+              <div><Label>{t('rooms.bulk.start')}</Label><Input type="number" value={bulkForm.start} onChange={e => setBulkForm(f => ({ ...f, start: Number(e.target.value) }))} /></div>
+              <div><Label>{t('rooms.bulk.end')}</Label><Input type="number" value={bulkForm.end} onChange={e => setBulkForm(f => ({ ...f, end: Number(e.target.value) }))} /></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div><Label>Étage</Label><Input type="number" value={bulkForm.floor} onChange={e => setBulkForm(f => ({ ...f, floor: Number(e.target.value) }))} /></div>
-              <div><Label>Capacité</Label><Input type="number" value={bulkForm.capacity} onChange={e => setBulkForm(f => ({ ...f, capacity: Number(e.target.value) }))} /></div>
+              <div><Label>{t('rooms.dialog.floor')}</Label><Input type="number" value={bulkForm.floor} onChange={e => setBulkForm(f => ({ ...f, floor: Number(e.target.value) }))} /></div>
+              <div><Label>{t('rooms.dialog.capacity')}</Label><Input type="number" value={bulkForm.capacity} onChange={e => setBulkForm(f => ({ ...f, capacity: Number(e.target.value) }))} /></div>
             </div>
-            <div><Label>Catégorie *</Label>
+            <div><Label>{t('rooms.dialog.category')} *</Label>
               <Select value={bulkForm.category_id} onValueChange={v => setBulkForm(f => ({ ...f, category_id: v }))}>
-                <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t('rooms.dialog.selectCategory')} /></SelectTrigger>
                 <SelectContent>{categories?.map(c => <SelectItem key={c.id} value={c.id}>{c.name} — {formatFCFA(c.price_per_night)}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="bg-muted p-3 rounded-md text-sm">
-              <p>Cela créera <strong>{bulkCount - bulkExisting.length}</strong> chambre(s)</p>
+              <p>{t('rooms.bulk.willCreate')} <strong>{bulkCount - bulkExisting.length}</strong> {t('rooms.bulk.roomCount')}</p>
               {bulkExisting.length > 0 && (
-                <p className="text-warning mt-1">⚠ {bulkExisting.length} chambre(s) existante(s) seront ignorées: {bulkExisting.join(', ')}</p>
+                <p className="text-warning mt-1">{bulkExisting.length} {t('rooms.bulk.ignored')}: {bulkExisting.join(', ')}</p>
               )}
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkDialogOpen(false)}>Annuler</Button>
+            <Button variant="outline" onClick={() => setBulkDialogOpen(false)}>{t('common.cancel')}</Button>
             <Button onClick={() => bulkMutation.mutate()} disabled={bulkCount === 0 || !bulkForm.category_id || bulkMutation.isPending}>
-              Créer {bulkCount - bulkExisting.length} chambre(s)
+              {t('rooms.bulk.createAction')} {bulkCount - bulkExisting.length} {t('rooms.bulk.roomCount')}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <ConfirmDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}
-        description={<p>Cette action est irréversible. La chambre sera définitivement supprimée.</p>}
+        description={<p>{t('rooms.deleteDescription')}</p>}
         onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} />
     </div>
   );

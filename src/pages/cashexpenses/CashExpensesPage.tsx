@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
+import { useI18n } from '@/contexts/I18nContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { useCashSession } from '@/hooks/useCashSession';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -36,6 +37,7 @@ const expenseSchema = z.object({
 type ExpenseForm = z.infer<typeof expenseSchema>;
 
 const CashExpensesPage = () => {
+  const { t } = useI18n();
   useRoleGuard(['admin', 'manager', 'receptionist', 'accountant']);
   const { profile } = useAuth();
   const { hotel } = useHotel();
@@ -130,8 +132,8 @@ const CashExpensesPage = () => {
 
       <Tabs defaultValue="cash">
         <TabsList>
-          <TabsTrigger value="cash"><DollarSign className="h-4 w-4 mr-2" />Caisse</TabsTrigger>
-          <TabsTrigger value="expenses"><TrendingDown className="h-4 w-4 mr-2" />Dépenses</TabsTrigger>
+          <TabsTrigger value="cash"><DollarSign className="h-4 w-4 mr-2" />{t('tabs.cash')}</TabsTrigger>
+          <TabsTrigger value="expenses"><TrendingDown className="h-4 w-4 mr-2" />{t('tabs.expenses')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="cash" className="mt-4 space-y-4">

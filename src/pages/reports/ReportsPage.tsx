@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useHotel } from '@/contexts/HotelContext';
+import { useI18n } from '@/contexts/I18nContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { formatFCFA } from '@/utils/formatters';
@@ -15,6 +16,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 const COLORS = ['hsl(var(--primary))', 'hsl(var(--destructive))', '#f59e0b', '#10b981', '#6366f1', '#ec4899'];
 
 const ReportsPage = () => {
+  const { t, lang } = useI18n();
   useRoleGuard(['admin', 'manager', 'accountant']);
   const { hotel } = useHotel();
   const [month, setMonth] = useState(new Date().getMonth() + 1);
@@ -122,17 +124,19 @@ const ReportsPage = () => {
   const expensePieData = Object.entries(expenseByCat).map(([name, value]) => ({ name, value }));
 
   const roomStatusData = [
-    { name: 'Disponible', value: rooms?.filter(r => r.status === 'available').length || 0 },
-    { name: 'Occupée', value: occupiedRooms },
-    { name: 'Nettoyage', value: rooms?.filter(r => r.status === 'housekeeping').length || 0 },
-    { name: 'Maintenance', value: rooms?.filter(r => r.status === 'maintenance').length || 0 },
+    { name: t('status.available'), value: rooms?.filter(r => r.status === 'available').length || 0 },
+    { name: t('status.occupied'), value: occupiedRooms },
+    { name: t('status.housekeeping'), value: rooms?.filter(r => r.status === 'housekeeping').length || 0 },
+    { name: t('status.maintenance'), value: rooms?.filter(r => r.status === 'maintenance').length || 0 },
   ].filter(d => d.value > 0);
 
-  const months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+  const months = lang === 'fr'
+    ? ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc']
+    : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   return (
     <div className="page-container space-y-6">
-      <PageHeader title="Rapports" subtitle="Analyse et statistiques">
+      <PageHeader title={t('reports.title')} subtitle={t('reports.subtitle')}>
         <div className="flex gap-2">
           <Select value={String(month)} onValueChange={v => setMonth(Number(v))}>
             <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
@@ -147,40 +151,40 @@ const ReportsPage = () => {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Taux d'occupation</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{occupancyRate}%</p></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Check-ins</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{totalCheckIns}</p></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">CA du mois</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{formatFCFA(totalRevenue)}</p></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Bénéfice net</CardTitle></CardHeader><CardContent><p className={`text-2xl font-bold ${netProfit >= 0 ? 'text-green-600' : 'text-destructive'}`}>{formatFCFA(netProfit)}</p></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{t('reports.summary.occupancy')}</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{occupancyRate}%</p></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{t('reports.summary.checkins')}</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{totalCheckIns}</p></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{t('reports.summary.revenue')}</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{formatFCFA(totalRevenue)}</p></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{t('reports.summary.netProfit')}</CardTitle></CardHeader><CardContent><p className={`text-2xl font-bold ${netProfit >= 0 ? 'text-green-600' : 'text-destructive'}`}>{formatFCFA(netProfit)}</p></CardContent></Card>
       </div>
 
       <Tabs defaultValue="reception">
         <TabsList className="flex-wrap">
-          <TabsTrigger value="reception">Réception</TabsTrigger>
-          <TabsTrigger value="restaurant">Restaurant</TabsTrigger>
-          <TabsTrigger value="financier">Financier</TabsTrigger>
-          <TabsTrigger value="occupation">Occupation</TabsTrigger>
+          <TabsTrigger value="reception">{t('tabs.reception')}</TabsTrigger>
+          <TabsTrigger value="restaurant">{t('tabs.restaurant')}</TabsTrigger>
+          <TabsTrigger value="financier">{t('tabs.financier')}</TabsTrigger>
+          <TabsTrigger value="occupation">{t('tabs.occupation')}</TabsTrigger>
         </TabsList>
 
         {/* RECEPTION TAB */}
         <TabsContent value="reception" className="mt-4 space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">Check-ins</CardTitle></CardHeader><CardContent><p className="text-xl font-bold">{totalCheckIns}</p></CardContent></Card>
-            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">Check-outs</CardTitle></CardHeader><CardContent><p className="text-xl font-bold">{totalCheckOuts}</p></CardContent></Card>
-            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">Nuits vendues</CardTitle></CardHeader><CardContent><p className="text-xl font-bold">{totalNightsSold}</p></CardContent></Card>
-            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">Encaissé (Main courante)</CardTitle></CardHeader><CardContent><p className="text-xl font-bold">{formatFCFA(mainCouranteEncaissement)}</p></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">{t('reports.summary.checkins')}</CardTitle></CardHeader><CardContent><p className="text-xl font-bold">{totalCheckIns}</p></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">{t('reports.reception.checkouts')}</CardTitle></CardHeader><CardContent><p className="text-xl font-bold">{totalCheckOuts}</p></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">{t('reports.reception.nightsSold')}</CardTitle></CardHeader><CardContent><p className="text-xl font-bold">{totalNightsSold}</p></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">{t('reports.reception.collected')}</CardTitle></CardHeader><CardContent><p className="text-xl font-bold">{formatFCFA(mainCouranteEncaissement)}</p></CardContent></Card>
           </div>
           <Card>
             <CardContent className="pt-4">
-              <p className="text-sm text-muted-foreground">CA Main courante</p>
+              <p className="text-sm text-muted-foreground">{t('reports.reception.dailyRevenue')}</p>
               <p className="text-2xl font-bold">{formatFCFA(mainCouranteCA)}</p>
             </CardContent>
           </Card>
           {stays && stays.length > 0 && (
             <Card>
-              <CardHeader><CardTitle>Séjours du mois</CardTitle></CardHeader>
+              <CardHeader><CardTitle>{t('reports.reception.staysTitle')}</CardTitle></CardHeader>
               <CardContent>
                 <Table>
-                  <TableHeader><TableRow><TableHead>Client</TableHead><TableHead>Chambre</TableHead><TableHead>Nuits</TableHead><TableHead className="text-right">Montant</TableHead><TableHead>Statut</TableHead></TableRow></TableHeader>
+                  <TableHeader><TableRow><TableHead>{t('reports.table.guest')}</TableHead><TableHead>{t('reports.table.room')}</TableHead><TableHead>{t('reports.table.nights')}</TableHead><TableHead className="text-right">{t('reports.table.amount')}</TableHead><TableHead>{t('common.status')}</TableHead></TableRow></TableHeader>
                   <TableBody>
                     {stays.slice(0, 20).map(s => (
                       <TableRow key={s.id}>
@@ -188,7 +192,7 @@ const ReportsPage = () => {
                         <TableCell>{(s as any).rooms?.room_number || '-'}</TableCell>
                         <TableCell>{s.number_of_nights || '-'}</TableCell>
                         <TableCell className="text-right">{formatFCFA(s.total_price)}</TableCell>
-                        <TableCell><Badge variant={s.status === 'active' ? 'default' : 'secondary'}>{s.status}</Badge></TableCell>
+                        <TableCell><Badge variant={s.status === 'active' ? 'default' : 'secondary'}>{t(`status.${s.status}`)}</Badge></TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -201,17 +205,17 @@ const ReportsPage = () => {
         {/* RESTAURANT TAB */}
         <TabsContent value="restaurant" className="mt-4 space-y-4">
           <div className="grid grid-cols-3 gap-4">
-            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">Commandes</CardTitle></CardHeader><CardContent><p className="text-xl font-bold">{orders?.length || 0}</p></CardContent></Card>
-            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">CA Restaurant</CardTitle></CardHeader><CardContent><p className="text-xl font-bold">{formatFCFA(restaurantRevenue)}</p></CardContent></Card>
-            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">Panier moyen</CardTitle></CardHeader><CardContent><p className="text-xl font-bold">{formatFCFA(avgOrderValue)}</p></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">{t('reports.restaurant.orders')}</CardTitle></CardHeader><CardContent><p className="text-xl font-bold">{orders?.length || 0}</p></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">{t('reports.restaurant.revenue')}</CardTitle></CardHeader><CardContent><p className="text-xl font-bold">{formatFCFA(restaurantRevenue)}</p></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">{t('reports.restaurant.average')}</CardTitle></CardHeader><CardContent><p className="text-xl font-bold">{formatFCFA(avgOrderValue)}</p></CardContent></Card>
           </div>
           <Card>
-            <CardHeader><CardTitle>Revenus — {months[month - 1]} {year}</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{t('reports.restaurant.revenueChart')} - {months[month - 1]} {year}</CardTitle></CardHeader>
             <CardContent className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={[
-                  { name: 'Hébergement', montant: totalRevenue - restaurantRevenue },
-                  { name: 'Restaurant', montant: restaurantRevenue },
+                  { name: t('reports.restaurant.lodging'), montant: totalRevenue - restaurantRevenue },
+                  { name: t('tabs.restaurant'), montant: restaurantRevenue },
                 ]}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" /><YAxis />
@@ -223,16 +227,16 @@ const ReportsPage = () => {
           </Card>
           {orders && orders.length > 0 && (
             <Card>
-              <CardHeader><CardTitle>Détail des commandes</CardTitle></CardHeader>
+              <CardHeader><CardTitle>{t('reports.restaurant.orderDetails')}</CardTitle></CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Commande</TableHead>
-                      <TableHead>Chambre</TableHead>
-                      <TableHead>Client</TableHead>
-                      <TableHead>Statut</TableHead>
-                      <TableHead className="text-right">Montant</TableHead>
+                      <TableHead>{t('tabs.orders')}</TableHead>
+                      <TableHead>{t('reports.table.room')}</TableHead>
+                      <TableHead>{t('reports.table.guest')}</TableHead>
+                      <TableHead>{t('common.status')}</TableHead>
+                      <TableHead className="text-right">{t('reports.table.amount')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -241,7 +245,7 @@ const ReportsPage = () => {
                         <TableCell className="font-mono">{o.order_number}</TableCell>
                         <TableCell>{o.rooms?.room_number || o.room_number || '-'}</TableCell>
                         <TableCell>{o.guests ? `${o.guests.last_name || ''} ${o.guests.first_name || ''}`.trim() : (o.walkin_name || '-')}</TableCell>
-                        <TableCell><Badge variant="outline">{o.status || '-'}</Badge></TableCell>
+                        <TableCell><Badge variant="outline">{o.status ? t(`restaurant.status.${o.status}`) : '-'}</Badge></TableCell>
                         <TableCell className="text-right">{formatFCFA(o.total_amount || 0)}</TableCell>
                       </TableRow>
                     ))}
@@ -255,15 +259,15 @@ const ReportsPage = () => {
         {/* FINANCIER TAB */}
         <TabsContent value="financier" className="mt-4 space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">Total Revenus</CardTitle></CardHeader><CardContent><p className="text-xl font-bold text-green-600">{formatFCFA(totalPaid)}</p></CardContent></Card>
-            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">Total Dépenses</CardTitle></CardHeader><CardContent><p className="text-xl font-bold text-destructive">{formatFCFA(totalExpenses)}</p></CardContent></Card>
-            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">Bénéfice Net</CardTitle></CardHeader><CardContent><p className={`text-xl font-bold ${netProfit >= 0 ? 'text-green-600' : 'text-destructive'}`}>{formatFCFA(netProfit)}</p></CardContent></Card>
-            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">Impayés</CardTitle></CardHeader><CardContent><p className="text-xl font-bold text-orange-500">{formatFCFA(totalRevenue - totalPaid)}</p></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">{t('reports.financial.totalRevenue')}</CardTitle></CardHeader><CardContent><p className="text-xl font-bold text-green-600">{formatFCFA(totalPaid)}</p></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">{t('reports.financial.totalExpenses')}</CardTitle></CardHeader><CardContent><p className="text-xl font-bold text-destructive">{formatFCFA(totalExpenses)}</p></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">{t('reports.summary.netProfit')}</CardTitle></CardHeader><CardContent><p className={`text-xl font-bold ${netProfit >= 0 ? 'text-green-600' : 'text-destructive'}`}>{formatFCFA(netProfit)}</p></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">{t('reports.financial.unpaid')}</CardTitle></CardHeader><CardContent><p className="text-xl font-bold text-orange-500">{formatFCFA(totalRevenue - totalPaid)}</p></CardContent></Card>
           </div>
 
           {expensePieData.length > 0 && (
             <Card>
-              <CardHeader><CardTitle>Dépenses par catégorie</CardTitle></CardHeader>
+              <CardHeader><CardTitle>{t('reports.financial.expenseByCategory')}</CardTitle></CardHeader>
               <CardContent className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -279,14 +283,14 @@ const ReportsPage = () => {
 
           {cashSessions && cashSessions.length > 0 && (
             <Card>
-              <CardHeader><CardTitle>Sessions de caisse</CardTitle></CardHeader>
+              <CardHeader><CardTitle>{t('reports.financial.cashSessions')}</CardTitle></CardHeader>
               <CardContent>
                 <Table>
-                  <TableHeader><TableRow><TableHead>Date</TableHead><TableHead className="text-right">Ouverture</TableHead><TableHead className="text-right">Clôture</TableHead><TableHead className="text-right">Différence</TableHead></TableRow></TableHeader>
+                  <TableHeader><TableRow><TableHead>{t('reports.table.date')}</TableHead><TableHead className="text-right">{t('reports.table.opening')}</TableHead><TableHead className="text-right">{t('reports.table.closing')}</TableHead><TableHead className="text-right">{t('reports.table.difference')}</TableHead></TableRow></TableHeader>
                   <TableBody>
                     {cashSessions.map(s => (
                       <TableRow key={s.id}>
-                        <TableCell>{s.opened_at ? new Date(s.opened_at).toLocaleDateString('fr-FR') : '-'}</TableCell>
+                        <TableCell>{s.opened_at ? new Date(s.opened_at).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-GB') : '-'}</TableCell>
                         <TableCell className="text-right">{formatFCFA(s.opening_balance)}</TableCell>
                         <TableCell className="text-right">{formatFCFA(s.closing_balance)}</TableCell>
                         <TableCell className={`text-right ${(s.difference || 0) < 0 ? 'text-destructive' : 'text-green-600'}`}>{formatFCFA(s.difference)}</TableCell>
@@ -302,7 +306,7 @@ const ReportsPage = () => {
         {/* OCCUPATION TAB */}
         <TabsContent value="occupation" className="mt-4">
           <Card>
-            <CardHeader><CardTitle>Répartition des chambres</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{t('reports.occupancy.roomSplit')}</CardTitle></CardHeader>
             <CardContent className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>

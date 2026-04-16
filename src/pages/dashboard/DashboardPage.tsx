@@ -4,6 +4,7 @@ import { BedDouble, Users, DoorOpen, UserCheck, Wallet } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { useI18n } from '@/contexts/I18nContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { useCashSession } from '@/hooks/useCashSession';
@@ -15,6 +16,7 @@ import { useEffect } from 'react';
 
 const DashboardPage = () => {
   useRoleGuard(['admin','manager','receptionist','accountant','restaurant','kitchen','housekeeping']);
+  const { t } = useI18n();
   const { hotel } = useHotel();
   const navigate = useNavigate();
   const hotelId = hotel?.id;
@@ -75,11 +77,11 @@ const DashboardPage = () => {
   const presentGuests = activeStays?.length || 0;
 
   const stats = [
-    { label: 'Total Chambres', value: totalRooms, icon: BedDouble, color: 'bg-primary/10 text-primary' },
-    { label: 'Occupées', value: occupiedRooms, icon: DoorOpen, color: 'bg-destructive/10 text-destructive' },
-    { label: 'Disponibles', value: availableRooms, icon: BedDouble, color: 'bg-success/10 text-success' },
-    { label: 'Clients Présents', value: presentGuests, icon: UserCheck, color: 'bg-info/10 text-info' },
-    { label: 'Paiements en attente', value: formatFCFA(pendingPayments || 0), icon: Wallet, color: 'bg-orange-100 text-orange-700' },
+    { label: t('dashboard.stats.totalRooms'), value: totalRooms, icon: BedDouble, color: 'bg-primary/10 text-primary' },
+    { label: t('dashboard.stats.occupied'), value: occupiedRooms, icon: DoorOpen, color: 'bg-destructive/10 text-destructive' },
+    { label: t('dashboard.stats.available'), value: availableRooms, icon: BedDouble, color: 'bg-success/10 text-success' },
+    { label: t('dashboard.stats.presentGuests'), value: presentGuests, icon: UserCheck, color: 'bg-info/10 text-info' },
+    { label: t('dashboard.stats.pendingPayments'), value: formatFCFA(pendingPayments || 0), icon: Wallet, color: 'bg-orange-100 text-orange-700' },
   ];
 
   const statusColors: Record<string, string> = {
@@ -93,13 +95,13 @@ const DashboardPage = () => {
   return (
     <div className="page-container">
       <PageHeader
-        title="Tableau de bord"
+        title={t('dashboard.title')}
         subtitle={hotel ? `${hotel.name} — ${formatFullDate(new Date())}` : ''}
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mb-6">
         {stats.map((stat) => (
-          <Card key={stat.label}>
+          <Card key={stat.label} className="border-border/60 shadow-sm">
             <CardContent className="pt-6">
               {loadingRooms ? (
                 <Skeleton className="h-16 w-full" />
@@ -119,9 +121,9 @@ const DashboardPage = () => {
         ))}
       </div>
 
-      <Card>
+      <Card className="border-border/60 shadow-sm">
         <CardHeader>
-          <CardTitle className="text-lg">État des chambres</CardTitle>
+          <CardTitle className="text-lg">{t('dashboard.roomsState')}</CardTitle>
         </CardHeader>
         <CardContent>
           {loadingRooms ? (
@@ -146,9 +148,9 @@ const DashboardPage = () => {
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               <BedDouble className="h-12 w-12 mx-auto mb-2 opacity-50" />
-              <p>Aucune chambre configurée</p>
+              <p>{t('dashboard.emptyRooms')}</p>
               <button onClick={() => navigate('/rooms')} className="text-primary text-sm mt-1 underline">
-                Ajouter des chambres
+                {t('dashboard.addRooms')}
               </button>
             </div>
           )}

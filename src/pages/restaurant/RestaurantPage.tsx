@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
+import { useI18n } from '@/contexts/I18nContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -35,6 +36,7 @@ const menuSchema = z.object({
 });
 
 const RestaurantPage = () => {
+  const { t } = useI18n();
   useRoleGuard(['admin', 'manager', 'receptionist', 'restaurant']);
   const { profile } = useAuth();
   const { hotel } = useHotel();
@@ -145,7 +147,7 @@ const RestaurantPage = () => {
       const { error: itemsError } = await supabase.from('restaurant_order_items').insert(items);
       if (itemsError) throw itemsError;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['restaurant-orders'] }); toast.success('Commande créée'); setOrderDialogOpen(false); setCart([]); setOrderRoom(''); setWalkinName(''); setWalkinTable(''); setIsWalkin(false); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['restaurant-orders'] }); toast.success(t('restaurant.created')); setOrderDialogOpen(false); setCart([]); setOrderRoom(''); setWalkinName(''); setWalkinTable(''); setIsWalkin(false); },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -204,12 +206,12 @@ const RestaurantPage = () => {
         await supabase.from('notifications').insert({
           hotel_id: hotel!.id,
           type: 'restaurant_delivered',
-          title: 'Commande livrée',
-          message: `Commande ${order.order_number} livrée et ajoutée à la facture chambre`,
+          title: t('restaurant.deliveredNotificationTitle'),
+          message: `${t('restaurant.deliveredNotificationTitle')} ${order.order_number} ${t('restaurant.deliveredNotificationMessage')}`,
         });
       }
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['restaurant-orders'] }); toast.success('Statut mis à jour'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['restaurant-orders'] }); toast.success(t('restaurant.statusUpdated')); },
   });
 
   const saveMenuMutation = useMutation({
@@ -223,13 +225,13 @@ const RestaurantPage = () => {
         if (error) throw error;
       }
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['menu-items'] }); toast.success('Article sauvegardé'); setMenuDialogOpen(false); setEditingItem(null); reset(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['menu-items'] }); toast.success(t('restaurant.saved')); setMenuDialogOpen(false); setEditingItem(null); reset(); },
     onError: (e: any) => toast.error(e.message),
   });
 
   const deleteMenuMutation = useMutation({
     mutationFn: async (id: string) => { const { error } = await supabase.from('restaurant_items').delete().eq('id', id); if (error) throw error; },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['menu-items'] }); toast.success('Article supprimé'); setDeleteItem(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['menu-items'] }); toast.success(t('restaurant.deleted')); setDeleteItem(null); },
   });
 
   const addToCart = (item: any) => {
@@ -241,23 +243,53 @@ const RestaurantPage = () => {
   };
 
   const statusColors: Record<string, string> = { pending: 'bg-yellow-100 text-yellow-800', in_preparation: 'bg-blue-100 text-blue-800', ready: 'bg-green-100 text-green-800', delivered: 'bg-gray-100 text-gray-800', billed: 'bg-purple-100 text-purple-800', cancelled: 'bg-red-100 text-red-800' };
-  const statusLabels: Record<string, string> = { pending: 'En attente', in_preparation: 'En préparation', ready: 'Prêt', delivered: 'Livré', billed: 'Facturé', cancelled: 'Annulé' };
+  const statusLabels: Record<string, string> = {
+    pending: t('restaurant.status.pending'),
+    in_preparation: t('restaurant.status.in_preparation'),
+    ready: t('restaurant.status.ready'),
+    delivered: t('restaurant.status.delivered'),
+    billed: t('restaurant.status.billed'),
+    cancelled: t('restaurant.status.cancelled'),
+  };
+  const pendingOrders = orders?.filter(order => order.status === 'pending').length || 0;
+  const preparingOrders = orders?.filter(order => order.status === 'in_preparation').length || 0;
+  const restaurantRevenue = orders?.reduce((sum, order) => sum + Number(order.total_amount || 0), 0) || 0;
+  const avgOrderValue = orders?.length ? Math.round(restaurantRevenue / orders.length) : 0;
 
   return (
     <div className="page-container space-y-6">
-      <PageHeader title="Restaurant" subtitle="Gestion des commandes et du menu">
-        <Button onClick={() => setOrderDialogOpen(true)}><Plus className="h-4 w-4 mr-2" />Nouvelle commande</Button>
+      <PageHeader title={t('restaurant.title')} subtitle={t('restaurant.subtitle')}>
+        <Button onClick={() => setOrderDialogOpen(true)}><Plus className="h-4 w-4 mr-2" />{t('restaurant.newOrder')}</Button>
       </PageHeader>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{t('restaurant.summary.pending')}</CardTitle></CardHeader>
+          <CardContent><p className="text-2xl font-semibold">{pendingOrders}</p></CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{t('restaurant.summary.preparing')}</CardTitle></CardHeader>
+          <CardContent><p className="text-2xl font-semibold">{preparingOrders}</p></CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{t('restaurant.summary.revenue')}</CardTitle></CardHeader>
+          <CardContent><p className="text-2xl font-semibold">{formatFCFA(restaurantRevenue)}</p></CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{t('restaurant.summary.avg')}</CardTitle></CardHeader>
+          <CardContent><p className="text-2xl font-semibold">{formatFCFA(avgOrderValue)}</p></CardContent>
+        </Card>
+      </div>
 
       <Tabs defaultValue="orders">
         <TabsList>
-          <TabsTrigger value="orders">Commandes</TabsTrigger>
-          <TabsTrigger value="menu">Menu</TabsTrigger>
+          <TabsTrigger value="orders">{t('tabs.orders')}</TabsTrigger>
+          <TabsTrigger value="menu">{t('tabs.menu')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="orders" className="mt-4">
           {ordersLoading ? <Skeleton className="h-40 w-full" /> : !orders?.length ? (
-            <EmptyState icon={UtensilsCrossed} title="Aucune commande" description="Créez une commande" actionLabel="Nouvelle commande" onAction={() => setOrderDialogOpen(true)} />
+            <EmptyState icon={UtensilsCrossed} title={t('restaurant.emptyTitle')} description={t('restaurant.emptyDescription')} actionLabel={t('restaurant.newOrder')} onAction={() => setOrderDialogOpen(true)} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {orders.map(order => (
@@ -271,8 +303,8 @@ const RestaurantPage = () => {
                   <CardContent className="space-y-2">
                     <p className="text-sm">
                       {order.is_walkin
-                        ? `Walk-in: ${order.walkin_name || '-'}${order.walkin_table ? ` (Table ${order.walkin_table})` : ''}`
-                        : `Chambre ${(order as any).rooms?.room_number || order.room_number || '-'} — ${((order as any).guests?.last_name && (order as any).guests?.first_name) ? `${(order as any).guests.last_name} ${(order as any).guests.first_name}` : 'Client'}`}
+                        ? `${t('restaurant.order.walkinSummary')}: ${order.walkin_name || '-'}${order.walkin_table ? ` (${t('restaurant.order.table')} ${order.walkin_table})` : ''}`
+                        : `${t('restaurant.order.room')} ${(order as any).rooms?.room_number || order.room_number || '-'} - ${((order as any).guests?.last_name && (order as any).guests?.first_name) ? `${(order as any).guests.last_name} ${(order as any).guests.first_name}` : t('restaurant.order.guestFallback')}`}
                     </p>
                     <div className="text-sm space-y-1">
                       {(order as any).restaurant_order_items?.map((oi: any) => (
@@ -281,9 +313,9 @@ const RestaurantPage = () => {
                     </div>
                     <p className="font-semibold">{formatFCFA(order.total_amount)}</p>
                     <div className="flex gap-2 mt-2">
-                      {order.status === 'pending' && <Button size="sm" onClick={() => updateOrderStatus.mutate({ id: order.id, status: 'in_preparation', order })}>Commencer</Button>}
-                      {order.status === 'in_preparation' && <Button size="sm" onClick={() => updateOrderStatus.mutate({ id: order.id, status: 'ready', order })}>Prêt</Button>}
-                      {order.status === 'ready' && <Button size="sm" onClick={() => updateOrderStatus.mutate({ id: order.id, status: 'delivered', order })}>Livré</Button>}
+                      {order.status === 'pending' && <Button size="sm" onClick={() => updateOrderStatus.mutate({ id: order.id, status: 'in_preparation', order })}>{t('restaurant.order.start')}</Button>}
+                      {order.status === 'in_preparation' && <Button size="sm" onClick={() => updateOrderStatus.mutate({ id: order.id, status: 'ready', order })}>{t('restaurant.order.ready')}</Button>}
+                      {order.status === 'ready' && <Button size="sm" onClick={() => updateOrderStatus.mutate({ id: order.id, status: 'delivered', order })}>{t('restaurant.order.delivered')}</Button>}
                     </div>
                   </CardContent>
                 </Card>
@@ -294,19 +326,19 @@ const RestaurantPage = () => {
 
         <TabsContent value="menu" className="mt-4 space-y-4">
           <div className="flex justify-end">
-            <Button onClick={() => { reset(); setEditingItem(null); setMenuDialogOpen(true); }}><Plus className="h-4 w-4 mr-2" />Ajouter un article</Button>
+            <Button onClick={() => { reset(); setEditingItem(null); setMenuDialogOpen(true); }}><Plus className="h-4 w-4 mr-2" />{t('restaurant.menu.add')}</Button>
           </div>
           {menuLoading ? <Skeleton className="h-40 w-full" /> : (
-            <div className="rounded-md border">
+            <div className="rounded-xl border bg-card/60 shadow-sm">
               <Table>
-                <TableHeader><TableRow><TableHead>Nom</TableHead><TableHead>Catégorie</TableHead><TableHead className="text-right">Prix</TableHead><TableHead>Disponible</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead>{t('restaurant.menu.name')}</TableHead><TableHead>{t('restaurant.menu.category')}</TableHead><TableHead className="text-right">{t('restaurant.menu.price')}</TableHead><TableHead>{t('restaurant.menu.available')}</TableHead><TableHead className="text-right">{t('common.actions')}</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {menuItems?.map(item => (
                     <TableRow key={item.id}>
                       <TableCell className="font-medium">{item.name}</TableCell>
                       <TableCell>{(item as any).restaurant_categories?.name || '-'}</TableCell>
                       <TableCell className="text-right">{formatFCFA(item.price)}</TableCell>
-                      <TableCell><Badge variant={item.available ? 'default' : 'secondary'}>{item.available ? 'Oui' : 'Non'}</Badge></TableCell>
+                      <TableCell><Badge variant={item.available ? 'default' : 'secondary'}>{item.available ? t('restaurant.menu.itemAvailable') : t('restaurant.menu.itemUnavailable')}</Badge></TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="icon" onClick={() => { setEditingItem(item); Object.entries(item).forEach(([k, v]) => { if (v != null) setValue(k as any, v); }); setMenuDialogOpen(true); }}><Pencil className="h-4 w-4" /></Button>
                         <Button variant="ghost" size="icon" onClick={() => setDeleteItem(item)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
@@ -323,23 +355,23 @@ const RestaurantPage = () => {
       {/* New Order Dialog - FIX 8 */}
       <Dialog open={orderDialogOpen} onOpenChange={setOrderDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Nouvelle commande</DialogTitle><DialogDescription>Sélectionnez les articles</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{t('restaurant.dialog.orderTitle')}</DialogTitle><DialogDescription>{t('restaurant.dialog.orderDescription')}</DialogDescription></DialogHeader>
           <div className="space-y-4">
             <div className="flex items-center gap-4 mb-2">
-              <Label>Walk-in</Label>
+              <Label>{t('restaurant.order.walkinLabel')}</Label>
               <Switch checked={isWalkin} onCheckedChange={v => { setIsWalkin(v); if (v) setOrderRoom(''); }} />
             </div>
             {!isWalkin ? (
               <div>
-                <Label>Chambre occupée</Label>
+                <Label>{t('restaurant.dialog.occupiedRoom')}</Label>
                 {!occupiedRooms?.length ? (
-                  <p className="text-sm text-muted-foreground mt-1">Aucune chambre occupée</p>
+                  <p className="text-sm text-muted-foreground mt-1">{t('restaurant.dialog.noOccupiedRoom')}</p>
                 ) : (
                   <Select onValueChange={v => setOrderRoom(v)}>
-                    <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={t('restaurant.dialog.selectRoom')} /></SelectTrigger>
                     <SelectContent>
                       {occupiedRooms.map(r => (
-                        <SelectItem key={r.id} value={r.id}>Chambre {r.room_number} — {r.guestName || 'Client'}</SelectItem>
+                        <SelectItem key={r.id} value={r.id}>{t('restaurant.order.room')} {r.room_number} - {r.guestName || t('restaurant.order.guestFallback')}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -347,12 +379,12 @@ const RestaurantPage = () => {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-4">
-                <div><Label>Nom du client</Label><Input placeholder="Nom" value={walkinName} onChange={e => setWalkinName(e.target.value)} /></div>
-                <div><Label>N° de table</Label><Input placeholder="Table" value={walkinTable} onChange={e => setWalkinTable(e.target.value)} /></div>
+                <div><Label>{t('restaurant.dialog.walkinName')}</Label><Input placeholder={t('restaurant.dialog.walkinName')} value={walkinName} onChange={e => setWalkinName(e.target.value)} /></div>
+                <div><Label>{t('restaurant.dialog.walkinTable')}</Label><Input placeholder={t('restaurant.dialog.walkinTable')} value={walkinTable} onChange={e => setWalkinTable(e.target.value)} /></div>
               </div>
             )}
             <div>
-              <Label>Articles disponibles</Label>
+              <Label>{t('restaurant.dialog.availableItems')}</Label>
               <div className="grid grid-cols-2 gap-2 mt-2 max-h-48 overflow-y-auto">
                 {menuItems?.filter(i => i.available).map(item => (
                   <Button key={item.id} variant="outline" className="justify-between" onClick={() => addToCart(item)}>
@@ -363,7 +395,7 @@ const RestaurantPage = () => {
             </div>
             {cart.length > 0 && (
               <div>
-                <Label>Panier</Label>
+                <Label>{t('restaurant.dialog.cart')}</Label>
                 <div className="space-y-1 mt-2">
                   {cart.map(c => (
                     <div key={c.item.id} className="flex justify-between items-center text-sm">
@@ -371,14 +403,15 @@ const RestaurantPage = () => {
                       <span>{formatFCFA(c.item.price * c.quantity)}</span>
                     </div>
                   ))}
-                  <p className="font-bold text-right border-t pt-1">Total: {formatFCFA(cart.reduce((s, c) => s + c.item.price * c.quantity, 0))}</p>
+                  <p className="font-bold text-right border-t pt-1">{t('common.total')}: {formatFCFA(cart.reduce((s, c) => s + c.item.price * c.quantity, 0))}</p>
                 </div>
               </div>
             )}
+            {cart.length === 0 && <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">{t('restaurant.dialog.emptyCart')}</p>}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setOrderDialogOpen(false); setCart([]); }}>Annuler</Button>
-            <Button onClick={() => createOrderMutation.mutate()} disabled={cart.length === 0 || createOrderMutation.isPending}>Créer la commande</Button>
+            <Button variant="outline" onClick={() => { setOrderDialogOpen(false); setCart([]); }}>{t('common.cancel')}</Button>
+            <Button onClick={() => createOrderMutation.mutate()} disabled={cart.length === 0 || createOrderMutation.isPending}>{t('restaurant.dialog.createOrder')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -386,26 +419,26 @@ const RestaurantPage = () => {
       {/* Menu Item Dialog */}
       <Dialog open={menuDialogOpen} onOpenChange={v => { if (!v) { setMenuDialogOpen(false); setEditingItem(null); reset(); } }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{editingItem ? 'Modifier' : 'Nouvel'} article</DialogTitle><DialogDescription>Informations de l'article</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{editingItem ? t('restaurant.dialog.menuEditTitle') : t('restaurant.dialog.menuNewTitle')}</DialogTitle><DialogDescription>{t('restaurant.dialog.menuDescription')}</DialogDescription></DialogHeader>
           <form onSubmit={handleSubmit(d => saveMenuMutation.mutate(d))} className="space-y-4">
-            <div><Label>Nom *</Label><Input {...register('name')} /></div>
-            <div><Label>Prix *</Label><Input type="number" {...register('price')} /></div>
-            <div><Label>Catégorie</Label>
+            <div><Label>{t('restaurant.menu.name')} *</Label><Input {...register('name')} /></div>
+            <div><Label>{t('restaurant.menu.price')} *</Label><Input type="number" {...register('price')} /></div>
+            <div><Label>{t('restaurant.menu.category')}</Label>
               <Select onValueChange={v => setValue('category_id', v)}>
-                <SelectTrigger><SelectValue placeholder="Catégorie" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t('restaurant.menu.category')} /></SelectTrigger>
                 <SelectContent>{categories?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div><Label>Description</Label><Input {...register('description')} /></div>
+            <div><Label>{t('restaurant.dialog.description')}</Label><Input {...register('description')} /></div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => { setMenuDialogOpen(false); setEditingItem(null); reset(); }}>Annuler</Button>
-              <Button type="submit">Enregistrer</Button>
+              <Button type="button" variant="outline" onClick={() => { setMenuDialogOpen(false); setEditingItem(null); reset(); }}>{t('common.cancel')}</Button>
+              <Button type="submit">{t('common.save')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      <ConfirmDialog open={!!deleteItem} onOpenChange={() => setDeleteItem(null)} title="Supprimer l'article" description={`Supprimer ${deleteItem?.name} ?`} onConfirm={() => deleteMenuMutation.mutate(deleteItem.id)} confirmLabel="Supprimer" variant="destructive" />
+      <ConfirmDialog open={!!deleteItem} onOpenChange={() => setDeleteItem(null)} title={t('restaurant.deleteTitle')} description={`${t('restaurant.deleteDescription')} ${deleteItem?.name || ''} ?`} onConfirm={() => deleteMenuMutation.mutate(deleteItem.id)} confirmLabel={t('common.delete')} variant="destructive" />
     </div>
   );
 };

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
+import { useI18n } from '@/contexts/I18nContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { useEnsureMainCourante } from '@/hooks/useMainCourante';
 import { reconcileMainCouranteForDate } from '@/services/transactionService';
@@ -42,6 +43,7 @@ const MainCourantePage = () => {
   };
 
   useRoleGuard(['admin', 'manager', 'receptionist']);
+  const { t } = useI18n();
   const { profile } = useAuth();
   const { hotel } = useHotel();
   const qc = useQueryClient();
@@ -74,7 +76,7 @@ const MainCourantePage = () => {
   const updateFieldMutation = useMutation({
     mutationFn: async ({ id, field, value }: { id: string; field: string; value: number }) => {
       const entry = entries?.find(e => e.id === id);
-      if (!entry) throw new Error('Ligne introuvable pour mise a jour');
+      if (!entry) throw new Error(t('maincourante.missingEntry'));
       const h = field === 'hebergement' ? toSafeNumber(value) : toSafeNumber(entry.hebergement);
       const b = field === 'bar' ? toSafeNumber(value) : toSafeNumber(entry.bar);
       const r = field === 'restaurant' ? toSafeNumber(value) : toSafeNumber(entry.restaurant);
@@ -108,7 +110,7 @@ const MainCourantePage = () => {
       const { error } = await supabase.from('main_courante').update({ day_closed: true }).eq('hotel_id', hotel!.id).eq('journee', selectedDate);
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['main-courante'] }); toast.success('Journée clôturée'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['main-courante'] }); toast.success(t('maincourante.closed')); },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -120,7 +122,7 @@ const MainCourantePage = () => {
       });
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['main-courante'] }); toast.success('Ligne ajoutée'); setAddDialogOpen(false); setManualEntry({ room_number: '', nom_client: '', nombre_personnes: 1 }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['main-courante'] }); toast.success(t('maincourante.added')); setAddDialogOpen(false); setManualEntry({ room_number: '', nom_client: '', nombre_personnes: 1 }); },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -169,7 +171,7 @@ const MainCourantePage = () => {
                 .maybeSingle();
 
               if (!invoice || !invoice.balance_due || invoice.balance_due <= 0) {
-                toast.info('Aucun solde ouvert pour ce client');
+                toast.info(t('maincourante.noOpenBalance'));
                 return;
               }
 
@@ -210,12 +212,12 @@ const MainCourantePage = () => {
 
   return (
     <div className="page-container space-y-6">
-      <PageHeader title="Main Courante — Réception" subtitle={hotel?.name || ''}>
+      <PageHeader title={t('maincourante.title')} subtitle={hotel?.name || ''}>
         <div className="flex items-center gap-2">
           {!isClosed && isToday && (profile?.role === 'admin' || profile?.role === 'manager') && (
-            <Button variant="destructive" onClick={() => closeDayMutation.mutate()}><Lock className="h-4 w-4 mr-2" />Clôturer</Button>
+            <Button variant="destructive" onClick={() => closeDayMutation.mutate()}><Lock className="h-4 w-4 mr-2" />{t('maincourante.closeDay')}</Button>
           )}
-          <Button variant="outline" onClick={() => setAddDialogOpen(true)} disabled={!!isClosed}><Plus className="h-4 w-4 mr-2" />Ajouter une ligne</Button>
+          <Button variant="outline" onClick={() => setAddDialogOpen(true)} disabled={!!isClosed}><Plus className="h-4 w-4 mr-2" />{t('maincourante.addLine')}</Button>
         </div>
       </PageHeader>
 
@@ -228,14 +230,14 @@ const MainCourantePage = () => {
           </div>
           <Button variant="outline" size="icon" onClick={() => navigateDate(1)}><ChevronRight className="h-4 w-4" /></Button>
         </div>
-        <Badge variant={isClosed ? 'destructive' : 'default'}>{isClosed ? 'Journée clôturée' : 'Journée ouverte'}</Badge>
+        <Badge variant={isClosed ? 'destructive' : 'default'}>{isClosed ? t('maincourante.closedDay') : t('maincourante.openDay')}</Badge>
       </div>
 
       <div className="grid grid-cols-4 gap-4">
-        <Card><CardContent className="pt-4"><p className="text-sm text-muted-foreground">CA Jour</p><p className="text-xl font-bold">{formatFCFA(totals?.ca_total_jour || 0)}</p></CardContent></Card>
-        <Card><CardContent className="pt-4"><p className="text-sm text-muted-foreground">Encaissements</p><p className="text-xl font-bold">{formatFCFA(totals?.encaissement || 0)}</p></CardContent></Card>
-        <Card><CardContent className="pt-4"><p className="text-sm text-muted-foreground">À Reporter</p><p className="text-xl font-bold text-destructive">{formatFCFA(totals?.a_reporter || 0)}</p></CardContent></Card>
-        <Card><CardContent className="pt-4"><p className="text-sm text-muted-foreground">Divers</p><p className="text-xl font-bold">{formatFCFA(totals?.divers || 0)}</p></CardContent></Card>
+        <Card><CardContent className="pt-4"><p className="text-sm text-muted-foreground">{t('maincourante.kpi.ca')}</p><p className="text-xl font-bold">{formatFCFA(totals?.ca_total_jour || 0)}</p></CardContent></Card>
+        <Card><CardContent className="pt-4"><p className="text-sm text-muted-foreground">{t('maincourante.kpi.cash')}</p><p className="text-xl font-bold">{formatFCFA(totals?.encaissement || 0)}</p></CardContent></Card>
+        <Card><CardContent className="pt-4"><p className="text-sm text-muted-foreground">{t('maincourante.kpi.carry')}</p><p className="text-xl font-bold text-destructive">{formatFCFA(totals?.a_reporter || 0)}</p></CardContent></Card>
+        <Card><CardContent className="pt-4"><p className="text-sm text-muted-foreground">{t('maincourante.kpi.misc')}</p><p className="text-xl font-bold">{formatFCFA(totals?.divers || 0)}</p></CardContent></Card>
       </div>
 
       {isLoading ? (
@@ -245,19 +247,19 @@ const MainCourantePage = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="sticky left-0 bg-background z-10">N° Chbre</TableHead>
-                <TableHead className="sticky left-[80px] bg-background z-10">Pers</TableHead>
-                <TableHead className="sticky left-[130px] bg-background z-10">Nom du client</TableHead>
-                <TableHead className="text-right">Hébergement</TableHead>
-                <TableHead className="text-right">Bar</TableHead>
-                <TableHead className="text-right">Restau</TableHead>
-                <TableHead className="text-right bg-muted/30">CA Total</TableHead>
-                <TableHead className="text-right">Déduction</TableHead>
-                <TableHead className="text-right">Report veille</TableHead>
-                <TableHead className="text-right">Encaissement</TableHead>
-                <TableHead className="text-right bg-muted/30">À Reporter</TableHead>
-                <TableHead className="text-right">Divers</TableHead>
-                <TableHead>Observation</TableHead>
+                <TableHead className="sticky left-0 bg-background z-10">{t('maincourante.table.room')}</TableHead>
+                <TableHead className="sticky left-[80px] bg-background z-10">{t('maincourante.table.people')}</TableHead>
+                <TableHead className="sticky left-[130px] bg-background z-10">{t('maincourante.table.guest')}</TableHead>
+                <TableHead className="text-right">{t('maincourante.table.lodging')}</TableHead>
+                <TableHead className="text-right">{t('maincourante.table.bar')}</TableHead>
+                <TableHead className="text-right">{t('maincourante.table.restaurant')}</TableHead>
+                <TableHead className="text-right bg-muted/30">{t('maincourante.table.caTotal')}</TableHead>
+                <TableHead className="text-right">{t('maincourante.table.deduction')}</TableHead>
+                <TableHead className="text-right">{t('maincourante.table.previousCarry')}</TableHead>
+                <TableHead className="text-right">{t('maincourante.table.cash')}</TableHead>
+                <TableHead className="text-right bg-muted/30">{t('maincourante.table.carry')}</TableHead>
+                <TableHead className="text-right">{t('maincourante.table.misc')}</TableHead>
+                <TableHead>{t('maincourante.table.observation')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -280,7 +282,7 @@ const MainCourantePage = () => {
               ))}
               {entries && entries.length > 0 && (
                 <TableRow className="bg-muted/50 font-bold">
-                  <TableCell className="sticky left-0 bg-muted/50 z-10" colSpan={3}>TOTAUX</TableCell>
+                  <TableCell className="sticky left-0 bg-muted/50 z-10" colSpan={3}>{t('maincourante.table.totals')}</TableCell>
                   <TableCell className="text-right">{formatFCFA(totals?.hebergement || 0)}</TableCell>
                   <TableCell className="text-right">{formatFCFA(totals?.bar || 0)}</TableCell>
                   <TableCell className="text-right">{formatFCFA(totals?.restaurant || 0)}</TableCell>
@@ -300,15 +302,15 @@ const MainCourantePage = () => {
 
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Ajouter une ligne</DialogTitle><DialogDescription>Entrée manuelle</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{t('maincourante.dialog.title')}</DialogTitle><DialogDescription>{t('maincourante.dialog.description')}</DialogDescription></DialogHeader>
           <div className="space-y-4">
-            <div><Label>N° Chambre</Label><Input value={manualEntry.room_number} onChange={e => setManualEntry(p => ({ ...p, room_number: e.target.value }))} /></div>
-            <div><Label>Nom du client *</Label><Input value={manualEntry.nom_client} onChange={e => setManualEntry(p => ({ ...p, nom_client: e.target.value }))} /></div>
-            <div><Label>Nombre de personnes</Label><Input type="number" value={manualEntry.nombre_personnes} onChange={e => setManualEntry(p => ({ ...p, nombre_personnes: Number(e.target.value) }))} /></div>
+            <div><Label>{t('maincourante.dialog.room')}</Label><Input value={manualEntry.room_number} onChange={e => setManualEntry(p => ({ ...p, room_number: e.target.value }))} /></div>
+            <div><Label>{t('maincourante.dialog.guest')} *</Label><Input value={manualEntry.nom_client} onChange={e => setManualEntry(p => ({ ...p, nom_client: e.target.value }))} /></div>
+            <div><Label>{t('maincourante.dialog.people')}</Label><Input type="number" value={manualEntry.nombre_personnes} onChange={e => setManualEntry(p => ({ ...p, nombre_personnes: Number(e.target.value) }))} /></div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddDialogOpen(false)}>Annuler</Button>
-            <Button onClick={() => addManualMutation.mutate()} disabled={!manualEntry.nom_client}>Ajouter</Button>
+            <Button variant="outline" onClick={() => setAddDialogOpen(false)}>{t('common.cancel')}</Button>
+            <Button onClick={() => addManualMutation.mutate()} disabled={!manualEntry.nom_client}>{t('common.add')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

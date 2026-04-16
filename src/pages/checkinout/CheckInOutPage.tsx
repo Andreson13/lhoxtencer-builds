@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
+import { useI18n } from '@/contexts/I18nContext';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { formatFCFA, formatDate, generateInvoiceNumber } from '@/utils/formatters';
 import { getOrCreateInvoice, addChargeToInvoice } from '@/services/transactionService';
@@ -22,6 +23,7 @@ import { LogIn, LogOut, Search, User, BedDouble, Plus } from 'lucide-react';
 
 const CheckInOutPage = () => {
   useRoleGuard(['admin', 'manager', 'receptionist']);
+  const { t } = useI18n();
   const { profile } = useAuth();
   const { hotel } = useHotel();
   const qc = useQueryClient();
@@ -188,7 +190,7 @@ const CheckInOutPage = () => {
       qc.invalidateQueries({ queryKey: ['reservations-checkin'] });
       qc.invalidateQueries({ queryKey: ['active-stays-checkout'] });
       qc.invalidateQueries({ queryKey: ['rooms'] });
-      toast.success('Check-in effectué avec succès');
+      toast.success(t('checkinout.checkin.success'));
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -253,7 +255,7 @@ const CheckInOutPage = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['active-stays-checkout'] });
       qc.invalidateQueries({ queryKey: ['rooms'] });
-      toast.success('Check-in walk-in effectué');
+      toast.success(t('checkinout.walkin.success'));
       setWalkinOpen(false);
       setWalkinStep(1);
       setWalkinGuestId(null);
@@ -281,8 +283,8 @@ const CheckInOutPage = () => {
       await supabase.from('stays').update({
         status: 'checked_out',
         actual_check_out: new Date().toISOString(),
-        payment_status: invoice?.balance_due <= 0 ? 'paid' : invoice?.balance_due > 0 ? 'partial' : 'pending',
-      }).eq('id', stay.id);
+        payment_status: (invoice?.balance_due <= 0 ? 'paid' : invoice?.balance_due > 0 ? 'partial' : 'pending') as any,
+      } as any).eq('id', stay.id);
 
       // Room goes to housekeeping via trigger, but safety:
       if (stay.room_id) {
@@ -302,7 +304,7 @@ const CheckInOutPage = () => {
         .eq('guest_id', stay.guest_id);
 
       if (invoice?.balance_due > 0) {
-        await supabase.from('debts').upsert({
+        await (supabase.from('debts' as any) as any).upsert({
           hotel_id: hotel.id,
           guest_id: stay.guest_id,
           invoice_id: stay.invoice_id,
@@ -316,7 +318,7 @@ const CheckInOutPage = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['active-stays-checkout'] });
       qc.invalidateQueries({ queryKey: ['rooms'] });
-      toast.success('Check-out effectué avec succès');
+      toast.success(t('checkinout.checkout.success'));
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -336,25 +338,50 @@ const CheckInOutPage = () => {
     return s.id === searchCheckout || (guest && `${guest.last_name} ${guest.first_name}`.toLowerCase().includes(q)) || (room?.room_number?.toLowerCase().includes(q));
   }) || [];
 
+  const dashboardCards = [
+    { label: t('checkinout.kpi.pending'), value: filteredReservations.length, icon: LogIn, tone: 'text-primary bg-primary/10' },
+    { label: t('checkinout.kpi.active'), value: filteredStays.length, icon: LogOut, tone: 'text-orange-600 bg-orange-100' },
+    { label: t('checkinout.kpi.available'), value: availableRooms?.length || 0, icon: BedDouble, tone: 'text-emerald-600 bg-emerald-100' },
+  ];
+
   return (
     <div className="page-container space-y-6">
-      <PageHeader title="Check-in / Check-out" subtitle="Gérer les arrivées et départs">
-        <Button onClick={() => { setWalkinOpen(true); setWalkinStep(1); }}><Plus className="h-4 w-4 mr-2" />Walk-in (sans réservation)</Button>
+      <PageHeader title={t('checkinout.title')} subtitle={t('checkinout.subtitle')}>
+        <Button onClick={() => { setWalkinOpen(true); setWalkinStep(1); }}><Plus className="h-4 w-4 mr-2" />{t('checkinout.walkin')}</Button>
       </PageHeader>
 
+      <div className="grid gap-4 md:grid-cols-3">
+        {dashboardCards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <Card key={card.label} className="shadow-sm border-border/60">
+              <CardContent className="pt-6 flex items-center gap-4">
+                <div className={`h-11 w-11 rounded-2xl flex items-center justify-center ${card.tone}`}>
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">{card.label}</p>
+                  <p className="text-2xl font-semibold">{card.value}</p>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="checkin"><LogIn className="h-4 w-4 mr-2" />Check-in ({filteredReservations.length})</TabsTrigger>
-          <TabsTrigger value="checkout"><LogOut className="h-4 w-4 mr-2" />Check-out ({filteredStays.length})</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 rounded-2xl bg-muted/70 p-1 h-auto">
+          <TabsTrigger value="checkin" className="rounded-xl"><LogIn className="h-4 w-4 mr-2" />{t('checkinout.tabs.checkin')} ({filteredReservations.length})</TabsTrigger>
+          <TabsTrigger value="checkout" className="rounded-xl"><LogOut className="h-4 w-4 mr-2" />{t('checkinout.tabs.checkout')} ({filteredStays.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="checkin" className="mt-4 space-y-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Rechercher par nom ou n° réservation..." className="pl-10" value={searchCheckin} onChange={e => setSearchCheckin(e.target.value)} />
+            <Input placeholder={t('checkinout.search.checkin')} className="pl-10" value={searchCheckin} onChange={e => setSearchCheckin(e.target.value)} />
           </div>
           {filteredReservations.length === 0 ? (
-            <Card><CardContent className="py-8 text-center text-muted-foreground">Aucune réservation en attente de check-in</CardContent></Card>
+            <Card><CardContent className="py-8 text-center text-muted-foreground">{t('checkinout.empty.checkin')}</CardContent></Card>
           ) : (
             <div className="grid gap-4">
               {filteredReservations.map(r => (
@@ -371,12 +398,12 @@ const CheckInOutPage = () => {
                     </div>
                     <div className="flex items-center gap-6">
                       <div className="text-sm text-right">
-                        <p className="flex items-center gap-1"><BedDouble className="h-3 w-3" />{(r as any).rooms?.room_number || 'Non assignée'}</p>
+                        <p className="flex items-center gap-1"><BedDouble className="h-3 w-3" />{(r as any).rooms?.room_number || t('common.notAssigned')}</p>
                         <p className="text-muted-foreground">{formatDate(r.check_in_date)} → {formatDate(r.check_out_date)}</p>
                       </div>
                       <Badge variant="outline">{formatFCFA(r.total_price)}</Badge>
                       <Button onClick={() => checkinMutation.mutate(r)} disabled={checkinMutation.isPending || !r.room_id}>
-                        <LogIn className="h-4 w-4 mr-2" />Check-in
+                        <LogIn className="h-4 w-4 mr-2" />{t('checkinout.tabs.checkin')}
                       </Button>
                     </div>
                   </CardContent>
@@ -389,10 +416,10 @@ const CheckInOutPage = () => {
         <TabsContent value="checkout" className="mt-4 space-y-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Rechercher par nom ou n° chambre..." className="pl-10" value={searchCheckout} onChange={e => setSearchCheckout(e.target.value)} />
+            <Input placeholder={t('checkinout.search.checkout')} className="pl-10" value={searchCheckout} onChange={e => setSearchCheckout(e.target.value)} />
           </div>
           {filteredStays.length === 0 ? (
-            <Card><CardContent className="py-8 text-center text-muted-foreground">Aucun séjour actif</CardContent></Card>
+            <Card><CardContent className="py-8 text-center text-muted-foreground">{t('checkinout.empty.checkout')}</CardContent></Card>
           ) : (
             <div className="grid gap-4">
               {filteredStays.map(s => {
@@ -416,7 +443,7 @@ const CheckInOutPage = () => {
                           <p className="text-muted-foreground">{formatFCFA(s.total_price)}</p>
                         </div>
                         <Button variant="destructive" onClick={() => checkoutMutation.mutate(s)} disabled={checkoutMutation.isPending}>
-                          <LogOut className="h-4 w-4 mr-2" />Check-out
+                          <LogOut className="h-4 w-4 mr-2" />{t('checkinout.tabs.checkout')}
                         </Button>
                       </div>
                     </CardContent>
@@ -432,15 +459,15 @@ const CheckInOutPage = () => {
       <Dialog open={walkinOpen} onOpenChange={setWalkinOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Check-in Walk-in — Étape {walkinStep}/2</DialogTitle>
-            <DialogDescription>{walkinStep === 1 ? 'Identifiez le client' : 'Détails du séjour'}</DialogDescription>
+            <DialogTitle>{t('checkinout.walkin.title')} — {t('common.step')} {walkinStep}/2</DialogTitle>
+            <DialogDescription>{walkinStep === 1 ? t('checkinout.walkin.identify') : t('checkinout.walkin.details')}</DialogDescription>
           </DialogHeader>
 
           {walkinStep === 1 && (
             <div className="space-y-4">
               <div>
-                <Label>Rechercher un client existant</Label>
-                <Input placeholder="Nom, téléphone..." value={walkinSearch} onChange={e => { setWalkinSearch(e.target.value); setWalkinGuestId(null); }} />
+                <Label>{t('checkinout.walkin.searchGuest')}</Label>
+                <Input placeholder={t('checkinout.walkin.searchPlaceholder')} value={walkinSearch} onChange={e => { setWalkinSearch(e.target.value); setWalkinGuestId(null); }} />
               </div>
               {existingGuests && existingGuests.length > 0 && (
                 <div className="border rounded-md max-h-40 overflow-y-auto">
@@ -454,18 +481,18 @@ const CheckInOutPage = () => {
               )}
               {!walkinGuestId && (
                 <div className="border-t pt-4 space-y-3">
-                  <p className="text-sm font-medium">Ou créer un nouveau client :</p>
+                  <p className="text-sm font-medium">{t('checkinout.walkin.newGuest')}</p>
                   <div className="grid grid-cols-2 gap-3">
                     <div><Label>Nom *</Label><Input value={walkinNewGuest.last_name} onChange={e => setWalkinNewGuest(p => ({ ...p, last_name: e.target.value }))} /></div>
                     <div><Label>Prénom *</Label><Input value={walkinNewGuest.first_name} onChange={e => setWalkinNewGuest(p => ({ ...p, first_name: e.target.value }))} /></div>
-                    <div><Label>Téléphone</Label><Input value={walkinNewGuest.phone} onChange={e => setWalkinNewGuest(p => ({ ...p, phone: e.target.value }))} /></div>
+                    <div><Label>{t('settings.hotel.phone')}</Label><Input value={walkinNewGuest.phone} onChange={e => setWalkinNewGuest(p => ({ ...p, phone: e.target.value }))} /></div>
                     <div><Label>N° ID</Label><Input value={walkinNewGuest.id_number} onChange={e => setWalkinNewGuest(p => ({ ...p, id_number: e.target.value }))} /></div>
                   </div>
                 </div>
               )}
               <DialogFooter>
-                <Button variant="outline" onClick={() => setWalkinOpen(false)}>Annuler</Button>
-                <Button onClick={() => setWalkinStep(2)} disabled={!walkinGuestId && (!walkinNewGuest.last_name || !walkinNewGuest.first_name)}>Suivant</Button>
+                <Button variant="outline" onClick={() => setWalkinOpen(false)}>{t('common.cancel')}</Button>
+                <Button onClick={() => setWalkinStep(2)} disabled={!walkinGuestId && (!walkinNewGuest.last_name || !walkinNewGuest.first_name)}>{t('common.next')}</Button>
               </DialogFooter>
             </div>
           )}
@@ -491,8 +518,8 @@ const CheckInOutPage = () => {
               </div>
               <div><Label>Prix/nuit</Label><Input type="number" value={walkinStay.price_per_night} onChange={e => setWalkinStay(p => ({ ...p, price_per_night: Number(e.target.value) }))} /></div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setWalkinStep(1)}>Retour</Button>
-                <Button onClick={() => walkinCheckinMutation.mutate()} disabled={!walkinStay.room_id || walkinCheckinMutation.isPending}>Effectuer le check-in</Button>
+                <Button variant="outline" onClick={() => setWalkinStep(1)}>{t('common.back')}</Button>
+                <Button onClick={() => walkinCheckinMutation.mutate()} disabled={!walkinStay.room_id || walkinCheckinMutation.isPending}>{t('checkinout.walkin.perform')}</Button>
               </DialogFooter>
             </div>
           )}

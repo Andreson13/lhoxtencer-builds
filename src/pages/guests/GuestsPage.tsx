@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
+import { useI18n } from '@/contexts/I18nContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -66,6 +67,7 @@ type StayForm = z.infer<typeof staySchema>;
 
 const GuestsPage = () => {
   useRoleGuard(['admin', 'manager', 'receptionist']);
+  const { t } = useI18n();
   const { profile } = useAuth();
   const { hotel } = useHotel();
   const qc = useQueryClient();
@@ -192,10 +194,10 @@ const GuestsPage = () => {
   }, [allStays]);
 
   const getCategoryLabel = (type: string) => {
-    if (type === 'room') return 'Hebergement';
-    if (type === 'restaurant') return 'Restaurant';
-    if (type === 'bar' || type === 'minibar') return 'Bar';
-    return 'Extras';
+    if (type === 'room') return t('guests.history.lodging');
+    if (type === 'restaurant') return t('guests.history.restaurant');
+    if (type === 'bar' || type === 'minibar') return t('guests.history.bar');
+    return t('guests.history.extras');
   };
 
   const filteredHistoryItems = React.useMemo(() => {
@@ -247,26 +249,26 @@ const GuestsPage = () => {
     if (!printable) return;
     printable.document.write(`
       <html>
-        <head><title>Historique de consommation</title></head>
+        <head><title>${t('guests.profile.consumptionHistory')}</title></head>
         <body style="font-family:Arial,sans-serif;padding:24px;">
-          <h2>Historique de consommation</h2>
-          <p>Client: ${selectedGuest?.last_name || ''} ${selectedGuest?.first_name || ''}</p>
-          <p>Facture: ${invoice?.invoice_number || '-'} | Chambre: ${historyStay?.rooms?.room_number || '-'}</p>
+          <h2>${t('guests.profile.consumptionHistory')}</h2>
+          <p>${t('reports.table.guest')}: ${selectedGuest?.last_name || ''} ${selectedGuest?.first_name || ''}</p>
+          <p>${t('guests.profile.invoiceLabel')}: ${invoice?.invoice_number || '-'} | ${t('reports.table.room')}: ${historyStay?.rooms?.room_number || '-'}</p>
           <table style="width:100%;border-collapse:collapse;margin-top:12px;">
             <thead>
               <tr>
-                <th style="padding:8px;border:1px solid #ddd;text-align:left;">Description</th>
-                <th style="padding:8px;border:1px solid #ddd;text-align:left;">Categorie</th>
-                <th style="padding:8px;border:1px solid #ddd;text-align:right;">Qte</th>
-                <th style="padding:8px;border:1px solid #ddd;text-align:right;">P.U.</th>
-                <th style="padding:8px;border:1px solid #ddd;text-align:right;">Sous-total</th>
+                <th style="padding:8px;border:1px solid #ddd;text-align:left;">${t('billing.table.description')}</th>
+                <th style="padding:8px;border:1px solid #ddd;text-align:left;">${t('billing.table.type')}</th>
+                <th style="padding:8px;border:1px solid #ddd;text-align:right;">${t('billing.table.qty')}</th>
+                <th style="padding:8px;border:1px solid #ddd;text-align:right;">${t('billing.table.unitPrice')}</th>
+                <th style="padding:8px;border:1px solid #ddd;text-align:right;">${t('billing.table.subtotal')}</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
           </table>
-          <p style="margin-top:16px;"><strong>Total facture: ${formatFCFA(invoice?.total_amount || 0)}</strong></p>
-          <p><strong>Paye: ${formatFCFA(invoice?.amount_paid || 0)}</strong></p>
-          <p><strong>Solde: ${formatFCFA(invoice?.balance_due || 0)}</strong></p>
+          <p style="margin-top:16px;"><strong>${t('guests.profile.invoiceTotal')}: ${formatFCFA(invoice?.total_amount || 0)}</strong></p>
+          <p><strong>${t('guests.profile.paid')}: ${formatFCFA(invoice?.amount_paid || 0)}</strong></p>
+          <p><strong>${t('guests.profile.balance')}: ${formatFCFA(invoice?.balance_due || 0)}</strong></p>
         </body>
       </html>
     `);
@@ -294,7 +296,7 @@ const GuestsPage = () => {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['guests'] });
-      toast.success(editingGuest ? 'Client modifié' : 'Client ajouté');
+      toast.success(editingGuest ? t('guests.updated') : t('guests.created'));
       closeDialog();
     },
     onError: (e: any) => toast.error(e.message),
@@ -350,7 +352,7 @@ const GuestsPage = () => {
       qc.invalidateQueries({ queryKey: ['guest-stays'] });
       qc.invalidateQueries({ queryKey: ['rooms'] });
       qc.invalidateQueries({ queryKey: ['invoices'] });
-      toast.success('Séjour créé avec succès');
+      toast.success(t('guests.stayCreated'));
       setStayDialogOpen(false);
       stayForm.reset();
     },
@@ -364,7 +366,7 @@ const GuestsPage = () => {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['guests'] });
-      toast.success('Client supprimé');
+      toast.success(t('guests.deleted'));
       setDeleteGuest(null);
     },
     onError: (e: any) => toast.error(e.message),
@@ -402,35 +404,35 @@ const GuestsPage = () => {
     return (
       <div className="page-container space-y-6">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => setSelectedGuestId(null)}><ArrowLeft className="h-5 w-5" /></Button>
-          <PageHeader title={`${selectedGuest.last_name} ${selectedGuest.first_name}`} subtitle="Profil client">
+          <Button variant="ghost" size="icon" onClick={() => setSelectedGuestId(null)} title={t('common.back')}><ArrowLeft className="h-5 w-5" /></Button>
+          <PageHeader title={`${selectedGuest.last_name} ${selectedGuest.first_name}`} subtitle={t('guests.profile.title')}>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => openEdit(selectedGuest)}><Pencil className="h-4 w-4 mr-2" />Modifier</Button>
-              <Button onClick={() => openNewStay(selectedGuest.id)}><Plus className="h-4 w-4 mr-2" />Nouveau séjour</Button>
+              <Button variant="outline" onClick={() => openEdit(selectedGuest)}><Pencil className="h-4 w-4 mr-2" />{t('guests.profile.edit')}</Button>
+              <Button onClick={() => openNewStay(selectedGuest.id)}><Plus className="h-4 w-4 mr-2" />{t('guests.newStay')}</Button>
             </div>
           </PageHeader>
         </div>
 
         {/* Personal info card */}
         <Card>
-          <CardHeader><CardTitle>Informations personnelles</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t('guests.profile.personalInfo')}</CardTitle></CardHeader>
           <CardContent>
             <div className="mb-4 p-3 rounded-lg bg-primary/10 border border-primary/20">
-              <p className="text-sm text-muted-foreground">Valeur vie client</p>
+              <p className="text-sm text-muted-foreground">{t('guests.profile.lifetimeValue')}</p>
               <p className="text-2xl font-bold text-primary">{formatFCFA(lifetimeValue)}</p>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div><span className="text-muted-foreground">Genre:</span> {selectedGuest.gender || '-'}</div>
-              <div><span className="text-muted-foreground">Né(e) le:</span> {formatDate(selectedGuest.date_of_birth)}</div>
-              <div><span className="text-muted-foreground">Lieu:</span> {selectedGuest.place_of_birth || '-'}</div>
-              <div><span className="text-muted-foreground">Nationalité:</span> {selectedGuest.nationality || '-'}</div>
-              <div><span className="text-muted-foreground">Téléphone:</span> {selectedGuest.phone || '-'}</div>
-              <div><span className="text-muted-foreground">Email:</span> {selectedGuest.email || '-'}</div>
-              <div><span className="text-muted-foreground">Profession:</span> {selectedGuest.profession || '-'}</div>
-              <div><span className="text-muted-foreground">Adresse:</span> {selectedGuest.usual_address || '-'}</div>
-              <div><span className="text-muted-foreground">Pièce:</span> {selectedGuest.id_type || '-'} {selectedGuest.id_number || ''}</div>
-              <div><span className="text-muted-foreground">Délivré le:</span> {formatDate(selectedGuest.id_issued_on)}</div>
-              <div><span className="text-muted-foreground">Délivré à:</span> {selectedGuest.id_issued_at || '-'}</div>
+              <div><span className="text-muted-foreground">{t('guests.profile.gender')}:</span> {selectedGuest.gender || '-'}</div>
+              <div><span className="text-muted-foreground">{t('guests.profile.birthDate')}:</span> {formatDate(selectedGuest.date_of_birth)}</div>
+              <div><span className="text-muted-foreground">{t('guests.profile.birthPlace')}:</span> {selectedGuest.place_of_birth || '-'}</div>
+              <div><span className="text-muted-foreground">{t('guests.profile.nationality')}:</span> {selectedGuest.nationality || '-'}</div>
+              <div><span className="text-muted-foreground">{t('guests.profile.phone')}:</span> {selectedGuest.phone || '-'}</div>
+              <div><span className="text-muted-foreground">{t('guests.profile.email')}:</span> {selectedGuest.email || '-'}</div>
+              <div><span className="text-muted-foreground">{t('guests.profile.profession')}:</span> {selectedGuest.profession || '-'}</div>
+              <div><span className="text-muted-foreground">{t('guests.profile.address')}:</span> {selectedGuest.usual_address || '-'}</div>
+              <div><span className="text-muted-foreground">{t('guests.profile.id')}:</span> {selectedGuest.id_type || '-'} {selectedGuest.id_number || ''}</div>
+              <div><span className="text-muted-foreground">{t('guests.profile.issuedOn')}:</span> {formatDate(selectedGuest.id_issued_on)}</div>
+              <div><span className="text-muted-foreground">{t('guests.profile.issuedAt')}:</span> {selectedGuest.id_issued_at || '-'}</div>
             </div>
           </CardContent>
         </Card>
@@ -438,17 +440,17 @@ const GuestsPage = () => {
         {/* Active stay */}
         {activeStay && (
           <Card className="border-primary">
-            <CardHeader><CardTitle className="flex items-center gap-2"><BedDouble className="h-5 w-5" />Séjour actif</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2"><BedDouble className="h-5 w-5" />{t('guests.profile.activeStay')}</CardTitle></CardHeader>
             <CardContent>
               <div className="grid grid-cols-4 gap-4 text-sm">
-                <div><span className="text-muted-foreground">Chambre:</span> <span className="font-bold">{(activeStay as any).rooms?.room_number}</span></div>
-                <div><span className="text-muted-foreground">Arrivée:</span> {formatDate(activeStay.check_in_date)}</div>
-                <div><span className="text-muted-foreground">Départ prévu:</span> {formatDate(activeStay.check_out_date)}</div>
-                <div><span className="text-muted-foreground">Total:</span> <span className="font-bold">{formatFCFA((activeStay as any).invoices?.total_amount || activeStay.total_price)}</span></div>
+                <div><span className="text-muted-foreground">{t('reports.table.room')}:</span> <span className="font-bold">{(activeStay as any).rooms?.room_number}</span></div>
+                <div><span className="text-muted-foreground">{t('guests.profile.checkin')}:</span> {formatDate(activeStay.check_in_date)}</div>
+                <div><span className="text-muted-foreground">{t('guests.profile.checkout')}:</span> {formatDate(activeStay.check_out_date)}</div>
+                <div><span className="text-muted-foreground">{t('common.total')}:</span> <span className="font-bold">{formatFCFA((activeStay as any).invoices?.total_amount || activeStay.total_price)}</span></div>
               </div>
               {(activeStay as any).invoices?.balance_due > 0 && (
                 <div className="mt-4 flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
-                  <p className="text-destructive font-semibold">Solde: {formatFCFA((activeStay as any).invoices?.balance_due || 0)}</p>
+                  <p className="text-destructive font-semibold">{t('guests.profile.balance')}: {formatFCFA((activeStay as any).invoices?.balance_due || 0)}</p>
                   <Button className="bg-green-600 hover:bg-green-700" onClick={() => {
                     setPaymentContext({
                       invoiceId: activeStay.invoice_id,
@@ -460,7 +462,7 @@ const GuestsPage = () => {
                       guestName: `${selectedGuest.last_name} ${selectedGuest.first_name}`,
                     });
                     setPaymentDialogOpen(true);
-                  }}>Marquer comme payé</Button>
+                  }}>{t('guests.profile.markPaid')}</Button>
                 </div>
               )}
             </CardContent>
@@ -469,23 +471,23 @@ const GuestsPage = () => {
 
         {/* Stay history */}
         <Card>
-          <CardHeader><CardTitle>Historique des séjours</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t('guests.profile.stayHistory')}</CardTitle></CardHeader>
           <CardContent>
             {!guestStays?.length ? (
-              <p className="text-muted-foreground text-center py-4">Aucun séjour enregistré</p>
+              <p className="text-muted-foreground text-center py-4">{t('guests.profile.noStay')}</p>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Chambre</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Arrivée</TableHead>
-                    <TableHead>Départ</TableHead>
-                    <TableHead>Nuits</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead className="text-right">Solde</TableHead>
-                    <TableHead>Statut</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
+                    <TableHead>{t('reports.table.room')}</TableHead>
+                    <TableHead>{t('billing.table.type')}</TableHead>
+                    <TableHead>{t('guests.profile.checkin')}</TableHead>
+                    <TableHead>{t('guests.profile.checkout')}</TableHead>
+                    <TableHead>{t('reports.table.nights')}</TableHead>
+                    <TableHead className="text-right">{t('common.total')}</TableHead>
+                    <TableHead className="text-right">{t('guests.profile.balance')}</TableHead>
+                    <TableHead>{t('common.status')}</TableHead>
+                    <TableHead className="text-right">{t('common.actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -496,7 +498,7 @@ const GuestsPage = () => {
                       <React.Fragment key={s.id}>
                         <TableRow>
                           <TableCell className="font-mono">{(s as any).rooms?.room_number || '-'}</TableCell>
-                          <TableCell><Badge variant="outline">{s.stay_type === 'sieste' ? 'Sieste' : 'Nuit'}</Badge></TableCell>
+                          <TableCell><Badge variant="outline">{s.stay_type === 'sieste' ? t('guests.dialog.stayDay') : t('guests.dialog.stayNight')}</Badge></TableCell>
                           <TableCell>{formatDate(s.check_in_date)}</TableCell>
                           <TableCell>{formatDate(s.actual_check_out || s.check_out_date)}</TableCell>
                           <TableCell>{s.number_of_nights || '-'}</TableCell>
@@ -506,13 +508,13 @@ const GuestsPage = () => {
                           <TableCell className="text-right space-x-2">
                             <Button variant="outline" size="sm" onClick={() => setExpandedStayId(isExpanded ? null : s.id)}>
                               {isExpanded ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
-                              Détails
+                              {t('common.details')}
                             </Button>
                             <Button variant="secondary" size="sm" onClick={() => {
                               setHistoryStay(s);
                               setHistorySearch('');
                               setHistoryModalOpen(true);
-                            }}>Historique</Button>
+                            }}>{t('guests.profile.history')}</Button>
                             {(invoice?.balance_due || 0) > 0 && s.invoice_id && (
                               <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => {
                                 setPaymentContext({
@@ -525,7 +527,7 @@ const GuestsPage = () => {
                                   guestName: `${selectedGuest.last_name} ${selectedGuest.first_name}`,
                                 });
                                 setPaymentDialogOpen(true);
-                              }}>Marquer comme payé</Button>
+                              }}>{t('guests.profile.markPaid')}</Button>
                             )}
                           </TableCell>
                         </TableRow>
@@ -533,18 +535,18 @@ const GuestsPage = () => {
                           <TableRow>
                             <TableCell colSpan={9}>
                               {!invoice?.invoice_items?.length ? (
-                                <p className="text-sm text-muted-foreground py-2">Aucune ligne de facture pour ce séjour.</p>
+                                <p className="text-sm text-muted-foreground py-2">{t('guests.profile.noInvoiceLines')}</p>
                               ) : (
                                 <div className="rounded-md border p-3">
-                                  <p className="text-sm font-semibold mb-2">Facture {invoice?.invoice_number || '-'}</p>
+                                  <p className="text-sm font-semibold mb-2">{t('guests.profile.invoiceLabel')} {invoice?.invoice_number || '-'}</p>
                                   <Table>
                                     <TableHeader>
                                       <TableRow>
-                                        <TableHead>Description</TableHead>
-                                        <TableHead>Type</TableHead>
-                                        <TableHead className="text-right">Qté</TableHead>
-                                        <TableHead className="text-right">P.U.</TableHead>
-                                        <TableHead className="text-right">Sous-total</TableHead>
+                                        <TableHead>{t('billing.table.description')}</TableHead>
+                                        <TableHead>{t('billing.table.type')}</TableHead>
+                                        <TableHead className="text-right">{t('billing.table.qty')}</TableHead>
+                                        <TableHead className="text-right">{t('billing.table.unitPrice')}</TableHead>
+                                        <TableHead className="text-right">{t('billing.table.subtotal')}</TableHead>
                                       </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -594,20 +596,20 @@ const GuestsPage = () => {
         <Dialog open={historyModalOpen} onOpenChange={setHistoryModalOpen}>
           <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Historique de consommation</DialogTitle>
+              <DialogTitle>{t('guests.profile.consumptionHistory')}</DialogTitle>
               <DialogDescription>
-                Facture {historyStay?.invoices?.invoice_number || '-'} - Chambre {historyStay?.rooms?.room_number || '-'}
+                {t('guests.profile.invoiceLabel')} {historyStay?.invoices?.invoice_number || '-'} - {t('reports.table.room')} {historyStay?.rooms?.room_number || '-'}
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <Input
-                  placeholder="Rechercher une ligne (description, type)..."
+                  placeholder={t('guests.profile.searchLine')}
                   value={historySearch}
                   onChange={(e) => setHistorySearch(e.target.value)}
                 />
-                <Button variant="outline" onClick={printHistory}>Imprimer</Button>
+                <Button variant="outline" onClick={printHistory}>{t('common.print')}</Button>
               </div>
 
               {Object.entries(groupedHistoryItems).map(([category, items]) => (
@@ -617,15 +619,15 @@ const GuestsPage = () => {
                     {items.length > 0 && <Badge variant="outline" className="text-xs">{formatFCFA(categoryTotals[category] || 0)}</Badge>}
                   </div>
                   {items.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Aucune ligne.</p>
+                    <p className="text-sm text-muted-foreground">{t('guests.profile.noLine')}</p>
                   ) : (
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Description</TableHead>
-                          <TableHead className="text-right">Qte</TableHead>
-                          <TableHead className="text-right">P.U.</TableHead>
-                          <TableHead className="text-right">Sous-total</TableHead>
+                          <TableHead>{t('billing.table.description')}</TableHead>
+                          <TableHead className="text-right">{t('billing.table.qty')}</TableHead>
+                          <TableHead className="text-right">{t('billing.table.unitPrice')}</TableHead>
+                          <TableHead className="text-right">{t('billing.table.subtotal')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -644,9 +646,9 @@ const GuestsPage = () => {
               ))}
 
               <div className="rounded-md border bg-muted/40 p-3 text-sm">
-                <p>Total facture: <span className="font-semibold">{formatFCFA(historyStay?.invoices?.total_amount || 0)}</span></p>
-                <p>Paye: <span className="font-semibold">{formatFCFA(historyStay?.invoices?.amount_paid || 0)}</span></p>
-                <p>Solde: <span className="font-semibold text-destructive">{formatFCFA(historyStay?.invoices?.balance_due || 0)}</span></p>
+                <p>{t('guests.profile.invoiceTotal')}: <span className="font-semibold">{formatFCFA(historyStay?.invoices?.total_amount || 0)}</span></p>
+                <p>{t('guests.profile.paid')}: <span className="font-semibold">{formatFCFA(historyStay?.invoices?.amount_paid || 0)}</span></p>
+                <p>{t('guests.profile.balance')}: <span className="font-semibold text-destructive">{formatFCFA(historyStay?.invoices?.balance_due || 0)}</span></p>
               </div>
             </div>
           </DialogContent>
@@ -665,40 +667,40 @@ const GuestsPage = () => {
       <Dialog open={dialogOpen} onOpenChange={v => { if (!v) closeDialog(); }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingGuest ? 'Modifier le client' : 'Nouveau client'}</DialogTitle>
-            <DialogDescription>Informations personnelles uniquement</DialogDescription>
+            <DialogTitle>{editingGuest ? t('guests.dialog.editTitle') : t('guests.dialog.newTitle')}</DialogTitle>
+            <DialogDescription>{t('guests.dialog.description')}</DialogDescription>
           </DialogHeader>
           <form onSubmit={guestForm.handleSubmit(d => saveMutation.mutate(d))} className="space-y-6">
             <div>
-              <h3 className="text-lg font-semibold mb-3">Identité</h3>
+              <h3 className="text-lg font-semibold mb-3">{t('guests.dialog.identity')}</h3>
               <div className="grid grid-cols-3 gap-4">
-                <div><Label>Nom *</Label><Input {...guestForm.register('last_name')} />{guestForm.formState.errors.last_name && <p className="text-sm text-destructive mt-1">{guestForm.formState.errors.last_name.message}</p>}</div>
-                <div><Label>Prénom *</Label><Input {...guestForm.register('first_name')} />{guestForm.formState.errors.first_name && <p className="text-sm text-destructive mt-1">{guestForm.formState.errors.first_name.message}</p>}</div>
-                <div><Label>Nom de jeune fille</Label><Input {...guestForm.register('maiden_name')} /></div>
-                <div><Label>Genre</Label><Select onValueChange={v => guestForm.setValue('gender', v)} value={guestForm.watch('gender') || ''}><SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger><SelectContent><SelectItem value="M">Masculin</SelectItem><SelectItem value="F">Féminin</SelectItem></SelectContent></Select></div>
-                <div><Label>Date de naissance</Label><Input type="date" {...guestForm.register('date_of_birth')} /></div>
-                <div><Label>Lieu de naissance</Label><Input {...guestForm.register('place_of_birth')} /></div>
-                <div><Label>Nationalité</Label><Input {...guestForm.register('nationality')} /></div>
-                <div><Label>Pays de résidence</Label><Input {...guestForm.register('country_of_residence')} /></div>
-                <div><Label>Adresse</Label><Input {...guestForm.register('usual_address')} /></div>
-                <div><Label>Profession</Label><Input {...guestForm.register('profession')} /></div>
-                <div><Label>Téléphone</Label><Input {...guestForm.register('phone')} /></div>
-                <div><Label>Email</Label><Input type="email" {...guestForm.register('email')} /></div>
+                <div><Label>{t('guests.dialog.lastName')}</Label><Input {...guestForm.register('last_name')} />{guestForm.formState.errors.last_name && <p className="text-sm text-destructive mt-1">{guestForm.formState.errors.last_name.message}</p>}</div>
+                <div><Label>{t('guests.dialog.firstName')}</Label><Input {...guestForm.register('first_name')} />{guestForm.formState.errors.first_name && <p className="text-sm text-destructive mt-1">{guestForm.formState.errors.first_name.message}</p>}</div>
+                <div><Label>{t('guests.dialog.maidenName')}</Label><Input {...guestForm.register('maiden_name')} /></div>
+                <div><Label>{t('guests.dialog.gender')}</Label><Select onValueChange={v => guestForm.setValue('gender', v)} value={guestForm.watch('gender') || ''}><SelectTrigger><SelectValue placeholder={t('guests.dialog.select')} /></SelectTrigger><SelectContent><SelectItem value="M">{t('guests.dialog.genderMale')}</SelectItem><SelectItem value="F">{t('guests.dialog.genderFemale')}</SelectItem></SelectContent></Select></div>
+                <div><Label>{t('guests.dialog.birthDate')}</Label><Input type="date" {...guestForm.register('date_of_birth')} /></div>
+                <div><Label>{t('guests.dialog.birthPlace')}</Label><Input {...guestForm.register('place_of_birth')} /></div>
+                <div><Label>{t('guests.dialog.nationality')}</Label><Input {...guestForm.register('nationality')} /></div>
+                <div><Label>{t('guests.dialog.country')}</Label><Input {...guestForm.register('country_of_residence')} /></div>
+                <div><Label>{t('guests.dialog.address')}</Label><Input {...guestForm.register('usual_address')} /></div>
+                <div><Label>{t('guests.dialog.profession')}</Label><Input {...guestForm.register('profession')} /></div>
+                <div><Label>{t('guests.dialog.phone')}</Label><Input {...guestForm.register('phone')} /></div>
+                <div><Label>{t('guests.dialog.email')}</Label><Input type="email" {...guestForm.register('email')} /></div>
               </div>
             </div>
             <div>
-              <h3 className="text-lg font-semibold mb-3">Pièce d'identité</h3>
+              <h3 className="text-lg font-semibold mb-3">{t('guests.dialog.idSection')}</h3>
               <div className="grid grid-cols-4 gap-4">
-                <div><Label>Type</Label><Select onValueChange={v => guestForm.setValue('id_type', v)} value={guestForm.watch('id_type') || ''}><SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger><SelectContent><SelectItem value="cni">CNI</SelectItem><SelectItem value="passport">Passeport</SelectItem><SelectItem value="permit">Permis</SelectItem></SelectContent></Select></div>
-                <div><Label>Numéro</Label><Input {...guestForm.register('id_number')} /></div>
-                <div><Label>Délivré le</Label><Input type="date" {...guestForm.register('id_issued_on')} /></div>
-                <div><Label>Délivré à</Label><Input {...guestForm.register('id_issued_at')} /></div>
+                <div><Label>{t('guests.dialog.idType')}</Label><Select onValueChange={v => guestForm.setValue('id_type', v)} value={guestForm.watch('id_type') || ''}><SelectTrigger><SelectValue placeholder={t('guests.dialog.idType')} /></SelectTrigger><SelectContent><SelectItem value="cni">CNI</SelectItem><SelectItem value="passport">Passeport</SelectItem><SelectItem value="permit">Permis</SelectItem></SelectContent></Select></div>
+                <div><Label>{t('guests.dialog.idNumber')}</Label><Input {...guestForm.register('id_number')} /></div>
+                <div><Label>{t('guests.dialog.idIssuedOn')}</Label><Input type="date" {...guestForm.register('id_issued_on')} /></div>
+                <div><Label>{t('guests.dialog.idIssuedAt')}</Label><Input {...guestForm.register('id_issued_at')} /></div>
               </div>
             </div>
-            <div><Label>Notes</Label><Textarea {...guestForm.register('notes')} /></div>
+            <div><Label>{t('guests.dialog.notes')}</Label><Textarea {...guestForm.register('notes')} /></div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={closeDialog}>Annuler</Button>
-              <Button type="submit" disabled={saveMutation.isPending}>{saveMutation.isPending ? 'Enregistrement...' : 'Enregistrer'}</Button>
+              <Button type="button" variant="outline" onClick={closeDialog}>{t('common.cancel')}</Button>
+              <Button type="submit" disabled={saveMutation.isPending}>{saveMutation.isPending ? t('guests.dialog.saving') : t('common.save')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -711,13 +713,13 @@ const GuestsPage = () => {
       <Dialog open={stayDialogOpen} onOpenChange={v => { if (!v) { setStayDialogOpen(false); stayForm.reset(); } }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Nouveau séjour</DialogTitle>
-            <DialogDescription>Détails du séjour pour {guests?.find(g => g.id === stayGuestId)?.last_name} {guests?.find(g => g.id === stayGuestId)?.first_name}</DialogDescription>
+            <DialogTitle>{t('guests.dialog.stayTitle')}</DialogTitle>
+            <DialogDescription>{t('guests.dialog.stayDescription')} {guests?.find(g => g.id === stayGuestId)?.last_name} {guests?.find(g => g.id === stayGuestId)?.first_name}</DialogDescription>
           </DialogHeader>
           <form onSubmit={stayForm.handleSubmit(d => createStayMutation.mutate(d))} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Type de séjour</Label>
+                <Label>{t('guests.dialog.stayType')}</Label>
                 <Select onValueChange={v => {
                   stayForm.setValue('stay_type', v);
                   const currentRoom = rooms?.find((r: any) => r.id === stayRoomId);
@@ -728,13 +730,13 @@ const GuestsPage = () => {
                 }} defaultValue="night">
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="night">Nuit</SelectItem>
-                    <SelectItem value="sieste">Sieste</SelectItem>
+                    <SelectItem value="night">{t('guests.dialog.stayNight')}</SelectItem>
+                    <SelectItem value="sieste">{t('guests.dialog.stayDay')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>Chambre *</Label>
+                <Label>{t('guests.dialog.room')}</Label>
                 <Select onValueChange={v => {
                   stayForm.setValue('room_id', v);
                   const room = rooms?.find((r: any) => r.id === v);
@@ -744,24 +746,24 @@ const GuestsPage = () => {
                     stayForm.setValue('price_per_night', currentType === 'sieste' ? siestePrice : room.price_per_night);
                   }
                 }}>
-                  <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={t('guests.dialog.select')} /></SelectTrigger>
                   <SelectContent>{rooms?.map((r: any) => <SelectItem key={r.id} value={r.id}>{r.room_number} — {formatFCFA(r.price_per_night)}</SelectItem>)}</SelectContent>
                 </Select>
                 {stayForm.formState.errors.room_id && <p className="text-sm text-destructive mt-1">{stayForm.formState.errors.room_id.message}</p>}
               </div>
-              <div><Label>Arrivée *</Label><Input type="date" {...stayForm.register('check_in_date')} /></div>
-              <div><Label>Départ *</Label><Input type="date" {...stayForm.register('check_out_date')} /></div>
-              <div><Label>{stayType === 'sieste' ? 'Prix sieste' : 'Prix/nuit'}</Label><Input type="number" {...stayForm.register('price_per_night')} /></div>
-              {stayType !== 'sieste' && <div><Label>Nuits</Label><Input value={nights} readOnly className="bg-muted" /></div>}
-              <div><Label>Total</Label><Input value={formatFCFA(totalPrice)} readOnly className="bg-muted" /></div>
-              <div><Label>Adultes</Label><Input type="number" {...stayForm.register('number_of_adults')} /></div>
-              <div><Label>Enfants</Label><Input type="number" {...stayForm.register('number_of_children')} /></div>
-              <div><Label>Arrangement</Label><Input {...stayForm.register('arrangement')} /></div>
+              <div><Label>{t('guests.dialog.arrival')}</Label><Input type="date" {...stayForm.register('check_in_date')} /></div>
+              <div><Label>{t('guests.dialog.departure')}</Label><Input type="date" {...stayForm.register('check_out_date')} /></div>
+              <div><Label>{stayType === 'sieste' ? t('guests.dialog.dayPrice') : t('guests.dialog.nightPrice')}</Label><Input type="number" {...stayForm.register('price_per_night')} /></div>
+              {stayType !== 'sieste' && <div><Label>{t('guests.dialog.nights')}</Label><Input value={nights} readOnly className="bg-muted" /></div>}
+              <div><Label>{t('guests.dialog.total')}</Label><Input value={formatFCFA(totalPrice)} readOnly className="bg-muted" /></div>
+              <div><Label>{t('guests.dialog.adults')}</Label><Input type="number" {...stayForm.register('number_of_adults')} /></div>
+              <div><Label>{t('guests.dialog.children')}</Label><Input type="number" {...stayForm.register('number_of_children')} /></div>
+              <div><Label>{t('guests.dialog.arrangement')}</Label><Input {...stayForm.register('arrangement')} /></div>
             </div>
-            <div><Label>Notes</Label><Textarea {...stayForm.register('notes')} /></div>
+            <div><Label>{t('guests.dialog.notes')}</Label><Textarea {...stayForm.register('notes')} /></div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setStayDialogOpen(false)}>Annuler</Button>
-              <Button type="submit" disabled={createStayMutation.isPending}>Créer le séjour</Button>
+              <Button type="button" variant="outline" onClick={() => setStayDialogOpen(false)}>{t('common.cancel')}</Button>
+              <Button type="submit" disabled={createStayMutation.isPending}>{t('guests.dialog.stayTitle')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -771,31 +773,31 @@ const GuestsPage = () => {
 
   return (
     <div className="page-container space-y-6">
-      <PageHeader title="Clients" subtitle={`${filtered.length} client(s)`}>
-        <Button onClick={() => { guestForm.reset({ nationality: 'Camerounaise', country_of_residence: 'Cameroun' }); setDialogOpen(true); }}><Plus className="h-4 w-4 mr-2" />Nouveau client</Button>
+      <PageHeader title={t('guests.title')} subtitle={`${filtered.length} ${t('guests.subtitle')}`}>
+        <Button onClick={() => { guestForm.reset({ nationality: 'Camerounaise', country_of_residence: 'Cameroun' }); setDialogOpen(true); }}><Plus className="h-4 w-4 mr-2" />{t('guests.new')}</Button>
       </PageHeader>
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Rechercher par nom, téléphone, ID..." className="pl-10" value={search} onChange={e => setSearch(e.target.value)} />
+        <Input placeholder={t('guests.search')} className="pl-10" value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
       {isLoading ? (
         <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
       ) : filtered.length === 0 ? (
-        <EmptyState icon={Users} title="Aucun client" description="Ajoutez votre premier client" actionLabel="Nouveau client" onAction={() => setDialogOpen(true)} />
+        <EmptyState icon={Users} title={t('guests.emptyTitle')} description={t('guests.emptyDescription')} actionLabel={t('guests.new')} onAction={() => setDialogOpen(true)} />
       ) : (
         <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nom complet</TableHead>
-                <TableHead>Téléphone</TableHead>
-                <TableHead>Nationalité</TableHead>
-                <TableHead>N° ID</TableHead>
-                <TableHead className="text-center">Séjours</TableHead>
-                <TableHead>Dernière visite</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>{t('guests.table.fullName')}</TableHead>
+                <TableHead>{t('guests.table.phone')}</TableHead>
+                <TableHead>{t('guests.table.nationality')}</TableHead>
+                <TableHead>{t('guests.table.idNumber')}</TableHead>
+                <TableHead className="text-center">{t('guests.table.stays')}</TableHead>
+                <TableHead>{t('guests.table.lastVisit')}</TableHead>
+                <TableHead className="text-right">{t('common.actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -811,7 +813,7 @@ const GuestsPage = () => {
                     <TableCell className="font-medium">
                       {info.hasActive && <span className={`inline-block h-2.5 w-2.5 rounded-full mr-2 ${dotColor}`} />}
                       {g.last_name} {g.first_name}
-                      {info.hasActive && <Badge variant="default" className="ml-2 text-xs">Présent</Badge>}
+                      {info.hasActive && <Badge variant="default" className="ml-2 text-xs">{t('guests.present')}</Badge>}
                     </TableCell>
                     <TableCell>{g.phone || '-'}</TableCell>
                     <TableCell>{g.nationality || '-'}</TableCell>
@@ -819,8 +821,8 @@ const GuestsPage = () => {
                     <TableCell className="text-center">{info.count}</TableCell>
                     <TableCell>{info.lastVisit ? formatDate(info.lastVisit) : '-'}</TableCell>
                     <TableCell className="text-right space-x-1">
-                      <Button variant="ghost" size="icon" onClick={() => setSelectedGuestId(g.id)} title="Voir le profil"><Eye className="h-4 w-4" /></Button>
-                      <Button variant="outline" size="sm" onClick={() => openNewStay(g.id)}><BedDouble className="h-3 w-3 mr-1" />Séjour</Button>
+                      <Button variant="ghost" size="icon" onClick={() => setSelectedGuestId(g.id)} title={t('guests.viewProfile')}><Eye className="h-4 w-4" /></Button>
+                      <Button variant="outline" size="sm" onClick={() => openNewStay(g.id)}><BedDouble className="h-3 w-3 mr-1" />{t('guests.newStay')}</Button>
                       <Button variant="ghost" size="icon" onClick={() => setDeleteGuest(g)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                     </TableCell>
                   </TableRow>
@@ -833,7 +835,7 @@ const GuestsPage = () => {
 
       {renderGuestDialog()}
       {renderStayDialog()}
-      <ConfirmDialog open={!!deleteGuest} onOpenChange={() => setDeleteGuest(null)} title="Supprimer le client" description={`Voulez-vous supprimer ${deleteGuest?.last_name} ${deleteGuest?.first_name} ?`} onConfirm={() => deleteMutation.mutate(deleteGuest.id)} confirmLabel="Supprimer" variant="destructive" />
+      <ConfirmDialog open={!!deleteGuest} onOpenChange={() => setDeleteGuest(null)} title={t('guests.deleteTitle')} description={`${t('delete.title')} ${deleteGuest?.last_name || ''} ${deleteGuest?.first_name || ''} ?`} onConfirm={() => deleteMutation.mutate(deleteGuest.id)} confirmLabel={t('guests.deleteConfirm')} variant="destructive" />
     </div>
   );
 };

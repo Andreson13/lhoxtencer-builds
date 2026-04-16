@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
+import { useI18n } from '@/contexts/I18nContext';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -23,6 +24,7 @@ import { Receipt, Plus, CreditCard } from 'lucide-react';
 
 const BillingPage = () => {
   useRoleGuard(['admin', 'manager', 'receptionist', 'accountant']);
+  const { t } = useI18n();
   const { profile } = useAuth();
   const { hotel } = useHotel();
   const qc = useQueryClient();
@@ -43,17 +45,35 @@ const BillingPage = () => {
 
   const queryInvoiceId = searchParams.get('invoiceId');
   const visibleInvoices = queryInvoiceId ? (invoices || []).filter((inv: any) => inv.id === queryInvoiceId) : (invoices || []);
+  const openInvoices = visibleInvoices.filter((inv: any) => !['paid', 'cancelled'].includes(inv.status || 'open')).length;
+  const paidInvoices = visibleInvoices.filter((inv: any) => inv.status === 'paid').length;
+  const outstandingTotal = visibleInvoices.reduce((sum: number, inv: any) => sum + Number(inv.balance_due || 0), 0);
 
   return (
     <div className="page-container space-y-6">
-      <PageHeader title="Facturation" subtitle={`${visibleInvoices.length || 0} facture(s)`} />
+      <PageHeader title={t('billing.title')} subtitle={`${visibleInvoices.length || 0} ${t('billing.subtitle')}`} />
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border bg-card p-4 shadow-sm">
+          <p className="text-sm text-muted-foreground">{t('billing.summary.openInvoices')}</p>
+          <p className="mt-2 text-2xl font-semibold">{openInvoices}</p>
+        </div>
+        <div className="rounded-2xl border bg-card p-4 shadow-sm">
+          <p className="text-sm text-muted-foreground">{t('billing.summary.paidInvoices')}</p>
+          <p className="mt-2 text-2xl font-semibold">{paidInvoices}</p>
+        </div>
+        <div className="rounded-2xl border bg-card p-4 shadow-sm">
+          <p className="text-sm text-muted-foreground">{t('billing.summary.outstanding')}</p>
+          <p className="mt-2 text-2xl font-semibold text-destructive">{formatFCFA(outstandingTotal)}</p>
+        </div>
+      </div>
 
       {isLoading ? <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div> : !visibleInvoices.length ? (
-        <EmptyState icon={Receipt} title="Aucune facture" description="Les factures seront créées automatiquement lors des check-outs" />
+        <EmptyState icon={Receipt} title={t('billing.emptyTitle')} description={t('billing.emptyDescription')} />
       ) : (
         <Accordion type="single" collapsible className="space-y-2" value={openInvoiceId} onValueChange={setOpenInvoiceId}>
           {visibleInvoices.map((inv: any) => (
-            <AccordionItem key={inv.id} value={inv.id} className="border rounded-md px-4">
+            <AccordionItem key={inv.id} value={inv.id} className="border rounded-2xl px-4 bg-card shadow-sm">
               <AccordionTrigger className="hover:no-underline">
                 <div className="flex items-center gap-4 w-full mr-4">
                   <span className="font-mono text-sm">{inv.invoice_number}</span>
@@ -65,7 +85,7 @@ const BillingPage = () => {
               <AccordionContent>
                 <div className="space-y-4 pb-4">
                   <Table>
-                    <TableHeader><TableRow><TableHead>Description</TableHead><TableHead>Type</TableHead><TableHead className="text-right">Qté</TableHead><TableHead className="text-right">P.U.</TableHead><TableHead className="text-right">Sous-total</TableHead></TableRow></TableHeader>
+                    <TableHeader><TableRow><TableHead>{t('billing.table.description')}</TableHead><TableHead>{t('billing.table.type')}</TableHead><TableHead className="text-right">{t('billing.table.qty')}</TableHead><TableHead className="text-right">{t('billing.table.unitPrice')}</TableHead><TableHead className="text-right">{t('billing.table.subtotal')}</TableHead></TableRow></TableHeader>
                     <TableBody>
                       {(inv as any).invoice_items?.map((item: any) => (
                         <TableRow key={item.id}>
@@ -80,15 +100,15 @@ const BillingPage = () => {
                   </Table>
                   <div className="flex justify-between items-center border-t pt-3">
                     <div className="text-sm space-y-1">
-                      <p>Sous-total: {formatFCFA(inv.subtotal)}</p>
-                      <p>Taxes ({inv.tax_percentage}%): {formatFCFA(inv.tax_amount)}</p>
-                      <p className="font-semibold">Total: {formatFCFA(inv.total_amount)}</p>
-                      <p>Payé: {formatFCFA(inv.amount_paid)}</p>
-                      <p className="text-destructive font-semibold">Solde: {formatFCFA(inv.balance_due)}</p>
+                      <p>{t('billing.total.subtotal')}: {formatFCFA(inv.subtotal)}</p>
+                      <p>{t('billing.total.taxes')} ({inv.tax_percentage}%): {formatFCFA(inv.tax_amount)}</p>
+                      <p className="font-semibold">{t('billing.total.total')}: {formatFCFA(inv.total_amount)}</p>
+                      <p>{t('billing.total.paid')}: {formatFCFA(inv.amount_paid)}</p>
+                      <p className="text-destructive font-semibold">{t('billing.total.balance')}: {formatFCFA(inv.balance_due)}</p>
                     </div>
                     {inv.status !== 'paid' && inv.status !== 'cancelled' && (
                       <Button onClick={() => { setSelectedInvoice(inv); setPaymentDialogOpen(true); }}>
-                        <CreditCard className="h-4 w-4 mr-2" />Enregistrer un paiement
+                        <CreditCard className="h-4 w-4 mr-2" />{t('billing.recordPayment')}
                       </Button>
                     )}
                   </div>

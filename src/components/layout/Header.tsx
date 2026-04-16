@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/AuthContext';
+import { useI18n } from '@/contexts/I18nContext';
 import { useNavigate } from 'react-router-dom';
 
 interface HeaderProps {
@@ -16,6 +17,7 @@ interface HeaderProps {
 
 export const Header = ({ onToggleSidebar }: HeaderProps) => {
   const { profile, signOut } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
@@ -30,7 +32,7 @@ export const Header = ({ onToggleSidebar }: HeaderProps) => {
       </Button>
 
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')}>
+        <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')} title={t('header.notifications')}>
           <Bell className="h-5 w-5" />
         </Button>
 
@@ -43,11 +45,11 @@ export const Header = ({ onToggleSidebar }: HeaderProps) => {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => navigate('/settings')}>
-              Paramètres
+              {t('header.settings')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
               <LogOut className="h-4 w-4 mr-2" />
-              Se déconnecter
+              {t('auth.logout')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

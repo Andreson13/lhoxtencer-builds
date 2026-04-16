@@ -108,6 +108,11 @@
   .fcfa {
     font-variant-numeric: tabular-nums;
   }
+  .offline-banner {
+    @apply border-b px-4 py-2 text-sm font-medium;
+    background: linear-gradient(90deg, hsl(var(--warning) / 0.18), hsl(var(--background)));
+    color: hsl(var(--foreground));
+  }
 }
 
 @layer utilities {

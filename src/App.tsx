@@ -1,5 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
+import { BrowserRouter, HashRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -35,7 +34,11 @@ import NotFound from "@/pages/NotFound";
 import BookingPortalPage from "@/pages/public/BookingPortalPage";
 import MenuPortalPage from "@/pages/public/MenuPortalPage";
 
-const queryClient = new QueryClient();
+const isDesktopShell =
+  typeof window !== 'undefined' &&
+  (window.location.protocol === 'file:' || window.electronApp?.isDesktop);
+
+const Router = isDesktopShell ? HashRouter : BrowserRouter;
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, profile, loading } = useAuth();
@@ -46,15 +49,14 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <I18nProvider>
-      <AuthProvider>
-        <HotelProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-              <Routes>
+  <I18nProvider>
+    <AuthProvider>
+      <HotelProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            <Routes>
                 {/* Public routes */}
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/onboarding" element={<OnboardingPage />} />
@@ -90,13 +92,12 @@ const App = () => (
                   <Route path="/audit" element={<AuditLogPage />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />
-              </Routes>
-            </BrowserRouter>
-          </TooltipProvider>
-        </HotelProvider>
-      </AuthProvider>
-    </I18nProvider>
-  </QueryClientProvider>
+            </Routes>
+          </Router>
+        </TooltipProvider>
+      </HotelProvider>
+    </AuthProvider>
+  </I18nProvider>
 );
 
 export default App;
