@@ -42,11 +42,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = async (userId: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .single();
+
+    if (error) {
+      throw error;
+    }
+
     if (data) {
       setProfile(data as unknown as Profile);
     }
@@ -55,27 +60,54 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     let initialized = false;
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        await fetchProfile(session.user.id);
-      }
-      setLoading(false);
-      initialized = true;
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+    supabase.auth.getSession()
+      .then(async ({ data: { session } }) => {
         setSession(session);
         setUser(session?.user ?? null);
+
+        if (session?.user) {
+          try {
+            await fetchProfile(session.user.id);
+          } catch (error) {
+            console.error('Failed to load profile during session bootstrap', error);
+            setProfile(null);
+          }
+        }
+      })
+      .finally(() => {
+        setLoading(false);
+        initialized = true;
+      });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+
         if (!session?.user) {
           setProfile(null);
           setLoading(false);
-        } else if (initialized) {
+          return;
+        }
+
+        if (!initialized) {
+          return;
+        }
+
+        const shouldBlockUi = event === 'SIGNED_IN' || event === 'USER_UPDATED';
+
+        if (shouldBlockUi) {
           setLoading(true);
+        }
+
+        try {
           await fetchProfile(session.user.id);
-          setLoading(false);
+        } catch (error) {
+          console.error('Failed to refresh profile after auth state change', error);
+        } finally {
+          if (shouldBlockUi) {
+            setLoading(false);
+          }
         }
       }
     );
