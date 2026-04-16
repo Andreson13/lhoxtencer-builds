@@ -1,13 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { useI18n } from '@/contexts/I18nContext';
+import { useHotel } from '@/contexts/HotelContext';
+import { useStayAccrualSync } from '@/hooks/useStayAccrualSync';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 
 export const AppLayout = () => {
   const { t } = useI18n();
+  const { hotel } = useHotel();
+  const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [isOnline, setIsOnline] = useState(() => window.navigator.onLine);
+
+  useStayAccrualSync(hotel?.id);
 
   useEffect(() => {
     const markOnline = () => setIsOnline(true);
@@ -21,6 +27,16 @@ export const AppLayout = () => {
       window.removeEventListener('offline', markOffline);
     };
   }, []);
+
+  useEffect(() => {
+    const section = location.pathname
+      .split('/')
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' / ');
+    const hotelName = hotel?.name || 'Hotel Harmony';
+    document.title = section ? `${hotelName} - ${section}` : hotelName;
+  }, [hotel?.name, location.pathname]);
 
   return (
     <div className="min-h-screen flex w-full">

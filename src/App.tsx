@@ -29,6 +29,7 @@ import FeedbackPage from "@/pages/feedback/FeedbackPage";
 import QRCodesPage from "@/pages/qrcodes/QRCodesPage";
 import SettingsPage from "@/pages/settings/SettingsPage";
 import AuditLogPage from "@/pages/audit/AuditLogPage";
+import PoliceRegisterPage from "@/pages/gestion/PoliceRegisterPage";
 import AccessDeniedPage from "@/pages/AccessDeniedPage";
 import NotFound from "@/pages/NotFound";
 import BookingPortalPage from "@/pages/public/BookingPortalPage";
@@ -72,6 +73,7 @@ const App = () => (
                   <Route path="/accueil" element={<AccueilClientPage />} />
                   <Route path="/dashboard" element={<DashboardPage />} />
                   <Route path="/guests" element={<GuestsPage />} />
+                  <Route path="/guests/:guestId" element={<GuestsPage />} />
                   <Route path="/reservations" element={<ReservationsPage />} />
                   <Route path="/calendar" element={<CalendarPage />} />
                   <Route path="/rooms" element={<RoomsPage />} />
@@ -90,6 +92,7 @@ const App = () => (
                   <Route path="/qr-codes" element={<QRCodesPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/audit" element={<AuditLogPage />} />
+                  <Route path="/police-register" element={<PoliceRegisterPage />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />
             </Routes>

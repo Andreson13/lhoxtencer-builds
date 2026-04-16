@@ -116,7 +116,7 @@ const SettingsPage = () => {
           <Card className="border-border/60 shadow-sm">
             <CardHeader>
               <CardTitle>{t('settings.hotel.cardTitle')}</CardTitle>
-              <DialogDescription>{t('settings.hotel.cardDescription')}</DialogDescription>
+              <p className="text-sm text-muted-foreground">{t('settings.hotel.cardDescription')}</p>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
               <div className="rounded-2xl border bg-muted/30 p-4 space-y-2">
@@ -161,7 +161,7 @@ const SettingsPage = () => {
           <Card className="border-border/60 shadow-sm">
             <CardHeader>
               <CardTitle>{t('settings.team.title')}</CardTitle>
-              <DialogDescription>{t('settings.team.description')}</DialogDescription>
+              <p className="text-sm text-muted-foreground">{t('settings.team.description')}</p>
             </CardHeader>
             <CardContent className="p-0">
           <div className="rounded-md border-x-0 border-b-0">

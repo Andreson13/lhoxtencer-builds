@@ -25,6 +25,7 @@ const translations: Record<string, Record<Lang, string>> = {
   'nav.qrcodes': { fr: 'QR Codes', en: 'QR Codes' },
   'nav.settings': { fr: 'Paramètres', en: 'Settings' },
   'nav.audit': { fr: 'Journal d\'audit', en: 'Audit Log' },
+  'nav.policeRegister': { fr: 'Registre de Police', en: 'Police Register' },
   'nav.categories': { fr: 'Catégories', en: 'Categories' },
   // Common
   'common.add': { fr: 'Ajouter', en: 'Add' },

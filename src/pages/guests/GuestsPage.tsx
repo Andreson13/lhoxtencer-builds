@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -11,6 +12,8 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { PaymentDialog } from '@/components/shared/PaymentDialog';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { formatFCFA, formatDate, generateInvoiceNumber } from '@/utils/formatters';
+import { generateCustomerDossier, generatePoliceRegister } from '@/utils/pdfGenerators';
+import { fetchCustomerDossierData, fetchPoliceRegisterRows, getCurrentWeekRange } from '@/services/guestDocumentService';
 import { getOrCreateInvoice, addChargeToInvoice } from '@/services/transactionService';
 import { withAudit } from '@/utils/auditLog';
 import { Button } from '@/components/ui/button';
@@ -24,8 +27,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { Users, Plus, Search, Pencil, Trash2, BedDouble, Eye, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
+import { Users, Plus, Search, Pencil, Trash2, BedDouble, Eye, ArrowLeft, ChevronDown, ChevronUp, Download, FileText, MoreVertical } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -70,6 +74,8 @@ const GuestsPage = () => {
   const { t } = useI18n();
   const { profile } = useAuth();
   const { hotel } = useHotel();
+  const navigate = useNavigate();
+  const { guestId: guestIdParam } = useParams();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -84,6 +90,14 @@ const GuestsPage = () => {
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [historyStay, setHistoryStay] = useState<any>(null);
   const [historySearch, setHistorySearch] = useState('');
+
+  useEffect(() => {
+    if (guestIdParam) {
+      setSelectedGuestId(guestIdParam);
+    } else {
+      setSelectedGuestId(null);
+    }
+  }, [guestIdParam]);
 
   const guestForm = useForm<GuestForm>({
     resolver: zodResolver(guestSchema),
@@ -124,7 +138,7 @@ const GuestsPage = () => {
     queryFn: async () => {
       const { data } = await supabase
         .from('stays')
-        .select('guest_id, status, check_in_date, room_id, rooms(room_number), invoices(balance_due, amount_paid, total_amount)')
+        .select('id, guest_id, status, check_in_date, room_id, rooms(room_number), invoices(balance_due, amount_paid, total_amount)')
         .eq('hotel_id', hotel!.id)
         .order('check_in_date', { ascending: false });
       return data || [];
@@ -168,9 +182,12 @@ const GuestsPage = () => {
     enabled: !!selectedGuestId && !!hotel?.id,
   });
 
-  const stayCountMap = React.useMemo(() => {
+  const stayCountMap = useMemo(() => {
     const map: Record<string, { count: number; lastVisit: string | null; hasActive: boolean; paymentStatus: string | null }> = {};
+    const seen = new Set<string>();
     allStays?.forEach(s => {
+      if (!s.id || seen.has(s.id)) return;
+      seen.add(s.id);
       if (!map[s.guest_id]) map[s.guest_id] = { count: 0, lastVisit: null, hasActive: false, paymentStatus: null };
       map[s.guest_id].count++;
       if (!map[s.guest_id].lastVisit || (s.check_in_date && s.check_in_date > map[s.guest_id].lastVisit!)) {
@@ -192,6 +209,37 @@ const GuestsPage = () => {
     });
     return map;
   }, [allStays]);
+
+  const getLiveStayStats = (stay: any) => {
+    const now = new Date();
+    const checkIn = new Date(stay.check_in_date);
+    const endDate = stay.actual_check_out ? new Date(stay.actual_check_out) : now;
+    const isSieste = stay.stay_type === 'sieste';
+    const baseUnitPrice = Number(stay.price_per_night || 0);
+
+    const elapsedUnits = isSieste
+      ? Math.max(1, Math.ceil((endDate.getTime() - checkIn.getTime()) / 3600000))
+      : Math.max(1, Math.ceil((endDate.getTime() - checkIn.getTime()) / 86400000));
+
+    const invoiceItems = stay.invoices?.invoice_items || [];
+    const roomItems = invoiceItems.filter((item: any) => item.item_type === (isSieste ? 'sieste' : 'room'));
+    const billedRoomSubtotal = roomItems.reduce((sum: number, item: any) => sum + Number(item.subtotal || 0), 0);
+
+    const expectedRoomSubtotal = elapsedUnits * baseUnitPrice;
+    const deltaRoomCharge = Math.max(0, expectedRoomSubtotal - billedRoomSubtotal);
+    const estimatedTotal = Number(stay.invoices?.total_amount || stay.total_price || 0) + deltaRoomCharge;
+    const amountPaid = Number(stay.invoices?.amount_paid || 0);
+    const estimatedBalance = Math.max(0, estimatedTotal - amountPaid);
+
+    return {
+      elapsedUnits,
+      estimatedTotal,
+      estimatedBalance,
+      deltaRoomCharge,
+      unitLabel: isSieste ? 'h' : 'nuit(s)',
+      isSieste,
+    };
+  };
 
   const getCategoryLabel = (type: string) => {
     if (type === 'room') return t('guests.history.lodging');
@@ -397,18 +445,56 @@ const GuestsPage = () => {
     return !search || `${g.last_name} ${g.first_name} ${g.id_number || ''} ${g.phone || ''}`.toLowerCase().includes(search.toLowerCase());
   }) || [];
 
+  const handleDownloadDossier = async (guestId: string) => {
+    if (!hotel) return;
+    try {
+      const dossier = await fetchCustomerDossierData(hotel.id, guestId);
+      await generateCustomerDossier({
+        guest: dossier.guest,
+        hotel,
+        stays: dossier.stays,
+        siestes: dossier.siestes,
+        payments: dossier.payments,
+        generatedBy: profile?.full_name || 'Reception',
+      });
+    } catch (error: any) {
+      toast.error(error.message || 'Impossible de generer le dossier client');
+    }
+  };
+
+  const handleExportPoliceRegister = async () => {
+    if (!hotel) return;
+    const range = getCurrentWeekRange();
+    try {
+      const rows = await fetchPoliceRegisterRows(hotel.id, range.start, range.end);
+      await generatePoliceRegister({
+        hotel,
+        guests: rows,
+        periodStart: range.start,
+        periodEnd: range.end,
+        generatedBy: profile?.full_name || 'Reception',
+      });
+    } catch (error: any) {
+      toast.error(error.message || 'Impossible de generer le registre de police');
+    }
+  };
+
   // ---- GUEST PROFILE VIEW ----
   if (selectedGuestId && selectedGuest) {
-    const activeStay = guestStays?.find(s => s.status === 'active');
+    const activeStay = (guestStays || [])
+      .filter((s: any) => s.status === 'active')
+      .sort((a: any, b: any) => new Date(b.check_in_date).getTime() - new Date(a.check_in_date).getTime())[0];
+    const activeLiveStats = activeStay ? getLiveStayStats(activeStay) : null;
     const lifetimeValue = guestStays?.reduce((sum, s: any) => sum + ((s as any).invoices?.amount_paid || 0), 0) || 0;
     return (
       <div className="page-container space-y-6">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => setSelectedGuestId(null)} title={t('common.back')}><ArrowLeft className="h-5 w-5" /></Button>
+          <Button variant="ghost" size="icon" onClick={() => navigate('/guests')} title={t('common.back')}><ArrowLeft className="h-5 w-5" /></Button>
           <PageHeader title={`${selectedGuest.last_name} ${selectedGuest.first_name}`} subtitle={t('guests.profile.title')}>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => openEdit(selectedGuest)}><Pencil className="h-4 w-4 mr-2" />{t('guests.profile.edit')}</Button>
               <Button onClick={() => openNewStay(selectedGuest.id)}><Plus className="h-4 w-4 mr-2" />{t('guests.newStay')}</Button>
+              <Button variant="secondary" onClick={() => handleDownloadDossier(selectedGuest.id)}><Download className="h-4 w-4 mr-2" />Telecharger le dossier complet</Button>
             </div>
           </PageHeader>
         </div>
@@ -446,17 +532,23 @@ const GuestsPage = () => {
                 <div><span className="text-muted-foreground">{t('reports.table.room')}:</span> <span className="font-bold">{(activeStay as any).rooms?.room_number}</span></div>
                 <div><span className="text-muted-foreground">{t('guests.profile.checkin')}:</span> {formatDate(activeStay.check_in_date)}</div>
                 <div><span className="text-muted-foreground">{t('guests.profile.checkout')}:</span> {formatDate(activeStay.check_out_date)}</div>
-                <div><span className="text-muted-foreground">{t('common.total')}:</span> <span className="font-bold">{formatFCFA((activeStay as any).invoices?.total_amount || activeStay.total_price)}</span></div>
+                <div><span className="text-muted-foreground">{t('common.total')}:</span> <span className="font-bold">{formatFCFA(activeLiveStats?.estimatedTotal || ((activeStay as any).invoices?.total_amount || activeStay.total_price))}</span></div>
               </div>
-              {(activeStay as any).invoices?.balance_due > 0 && (
+              <div className="mt-2 text-sm text-muted-foreground">
+                Duree en cours: <span className="font-medium">{activeLiveStats?.elapsedUnits || 0} {activeLiveStats?.unitLabel || ''}</span>
+                {(activeLiveStats?.deltaRoomCharge || 0) > 0 && (
+                  <span className="ml-2 text-orange-600">(+{formatFCFA(activeLiveStats?.deltaRoomCharge || 0)} a regulariser)</span>
+                )}
+              </div>
+              {(activeLiveStats?.estimatedBalance || (activeStay as any).invoices?.balance_due || 0) > 0 && (
                 <div className="mt-4 flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
-                  <p className="text-destructive font-semibold">{t('guests.profile.balance')}: {formatFCFA((activeStay as any).invoices?.balance_due || 0)}</p>
+                  <p className="text-destructive font-semibold">{t('guests.profile.balance')}: {formatFCFA(activeLiveStats?.estimatedBalance || (activeStay as any).invoices?.balance_due || 0)}</p>
                   <Button className="bg-green-600 hover:bg-green-700" onClick={() => {
                     setPaymentContext({
                       invoiceId: activeStay.invoice_id,
                       stayId: activeStay.id,
                       guestId: activeStay.guest_id,
-                      currentBalance: (activeStay as any).invoices?.balance_due || 0,
+                      currentBalance: activeLiveStats?.estimatedBalance || (activeStay as any).invoices?.balance_due || 0,
                       invoiceNumber: (activeStay as any).invoices?.invoice_number,
                       roomNumber: (activeStay as any).rooms?.room_number,
                       guestName: `${selectedGuest.last_name} ${selectedGuest.first_name}`,
@@ -515,13 +607,14 @@ const GuestsPage = () => {
                               setHistorySearch('');
                               setHistoryModalOpen(true);
                             }}>{t('guests.profile.history')}</Button>
-                            {(invoice?.balance_due || 0) > 0 && s.invoice_id && (
+                            {(getLiveStayStats(s).estimatedBalance || invoice?.balance_due || 0) > 0 && s.invoice_id && (
                               <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => {
+                                const liveStats = getLiveStayStats(s);
                                 setPaymentContext({
                                   invoiceId: s.invoice_id,
                                   stayId: s.id,
                                   guestId: s.guest_id,
-                                  currentBalance: invoice?.balance_due || 0,
+                                  currentBalance: liveStats.estimatedBalance || invoice?.balance_due || 0,
                                   invoiceNumber: invoice?.invoice_number,
                                   roomNumber: (s as any).rooms?.room_number,
                                   guestName: `${selectedGuest.last_name} ${selectedGuest.first_name}`,
@@ -774,6 +867,7 @@ const GuestsPage = () => {
   return (
     <div className="page-container space-y-6">
       <PageHeader title={t('guests.title')} subtitle={`${filtered.length} ${t('guests.subtitle')}`}>
+        <Button variant="outline" onClick={handleExportPoliceRegister}><FileText className="h-4 w-4 mr-2" />Export Registre de Police</Button>
         <Button onClick={() => { guestForm.reset({ nationality: 'Camerounaise', country_of_residence: 'Cameroun' }); setDialogOpen(true); }}><Plus className="h-4 w-4 mr-2" />{t('guests.new')}</Button>
       </PageHeader>
 
@@ -820,10 +914,18 @@ const GuestsPage = () => {
                     <TableCell>{g.id_number || '-'}</TableCell>
                     <TableCell className="text-center">{info.count}</TableCell>
                     <TableCell>{info.lastVisit ? formatDate(info.lastVisit) : '-'}</TableCell>
-                    <TableCell className="text-right space-x-1">
-                      <Button variant="ghost" size="icon" onClick={() => setSelectedGuestId(g.id)} title={t('guests.viewProfile')}><Eye className="h-4 w-4" /></Button>
-                      <Button variant="outline" size="sm" onClick={() => openNewStay(g.id)}><BedDouble className="h-3 w-3 mr-1" />{t('guests.newStay')}</Button>
-                      <Button variant="ghost" size="icon" onClick={() => setDeleteGuest(g)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => navigate(`/guests/${g.id}`)}><Eye className="h-4 w-4 mr-2" />Voir le profil</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openNewStay(g.id)}><BedDouble className="h-4 w-4 mr-2" />{t('guests.newStay')}</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDownloadDossier(g.id)}><Download className="h-4 w-4 mr-2" />Dossier complet PDF</DropdownMenuItem>
+                          <DropdownMenuItem className="text-destructive" onClick={() => setDeleteGuest(g)}><Trash2 className="h-4 w-4 mr-2" />{t('common.delete')}</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 );

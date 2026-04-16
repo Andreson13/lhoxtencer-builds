@@ -8,6 +8,8 @@ import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { useI18n } from '@/contexts/I18nContext';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { formatFCFA, formatDate, generateInvoiceNumber } from '@/utils/formatters';
+import { generateCustomerDossier } from '@/utils/pdfGenerators';
+import { fetchCustomerDossierData } from '@/services/guestDocumentService';
 import { getOrCreateInvoice, addChargeToInvoice } from '@/services/transactionService';
 import { withAudit } from '@/utils/auditLog';
 import { Button } from '@/components/ui/button';
@@ -19,7 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { LogIn, LogOut, Search, User, BedDouble, Plus } from 'lucide-react';
+import { LogIn, LogOut, Search, User, BedDouble, Plus, Download } from 'lucide-react';
 
 const CheckInOutPage = () => {
   useRoleGuard(['admin', 'manager', 'receptionist']);
@@ -37,6 +39,22 @@ const CheckInOutPage = () => {
   const [walkinSearch, setWalkinSearch] = useState('');
   const [walkinNewGuest, setWalkinNewGuest] = useState({ last_name: '', first_name: '', phone: '', id_number: '' });
   const [walkinStay, setWalkinStay] = useState({ room_id: '', check_in_date: new Date().toISOString().split('T')[0], check_out_date: '', price_per_night: 0 });
+  const [checkoutConfirmOpen, setCheckoutConfirmOpen] = useState(false);
+  const [checkoutStay, setCheckoutStay] = useState<any>(null);
+
+  const getLiveStayUnits = (stay: any) => {
+    const start = new Date(stay.check_in_date);
+    const end = stay.actual_check_out ? new Date(stay.actual_check_out) : new Date();
+    if (stay.stay_type === 'sieste') {
+      return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 3600000));
+    }
+    return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000));
+  };
+
+  const getLiveEstimatedTotal = (stay: any) => {
+    const unitPrice = Number(stay.price_per_night || 0);
+    return getLiveStayUnits(stay) * unitPrice;
+  };
 
   useEffect(() => {
     const mode = searchParams.get('mode');
@@ -274,15 +292,39 @@ const CheckInOutPage = () => {
       if (stay.invoice_id) {
         const { data } = await supabase
           .from('invoices')
-          .select('id, guest_id, balance_due')
+          .select('id, guest_id, balance_due, total_amount, amount_paid, invoice_items(item_type, quantity, unit_price, subtotal)')
           .eq('id', stay.invoice_id)
           .maybeSingle();
         invoice = data;
       }
 
+      const liveUnits = getLiveStayUnits(stay);
+      const storedUnits = Number(stay.number_of_nights || 0);
+      const unitPrice = Number(stay.price_per_night || 0);
+      const itemType = stay.stay_type === 'sieste' ? 'sieste' : 'room';
+      const alreadyBilledUnits = (invoice?.invoice_items || [])
+        .filter((item: any) => item.item_type === itemType)
+        .reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
+      const missingUnits = Math.max(0, liveUnits - Math.max(storedUnits, alreadyBilledUnits));
+
+      if (missingUnits > 0 && stay.invoice_id) {
+        await addChargeToInvoice({
+          hotelId: hotel.id,
+          invoiceId: stay.invoice_id,
+          stayId: stay.id,
+          guestId: stay.guest_id,
+          description: stay.stay_type === 'sieste' ? `Extension sieste - ${missingUnits}h` : `Nuitees additionnelles - ${missingUnits} nuit(s)`,
+          itemType: itemType as any,
+          quantity: missingUnits,
+          unitPrice,
+        });
+      }
+
       await supabase.from('stays').update({
         status: 'checked_out',
         actual_check_out: new Date().toISOString(),
+        number_of_nights: stay.stay_type === 'sieste' ? stay.number_of_nights : liveUnits,
+        total_price: getLiveEstimatedTotal(stay),
         payment_status: (invoice?.balance_due <= 0 ? 'paid' : invoice?.balance_due > 0 ? 'partial' : 'pending') as any,
       } as any).eq('id', stay.id);
 
@@ -303,15 +345,8 @@ const CheckInOutPage = () => {
         .eq('journee', today)
         .eq('guest_id', stay.guest_id);
 
-      if (invoice?.balance_due > 0) {
-        await (supabase.from('debts' as any) as any).upsert({
-          hotel_id: hotel.id,
-          guest_id: stay.guest_id,
-          invoice_id: stay.invoice_id,
-          amount_due: invoice.balance_due,
-          checkout_date: new Date().toISOString(),
-        } as any);
-      }
+      // Optional debts module is not provisioned in this deployment.
+      // Keep checkout non-blocking and avoid 404 noise.
 
       await withAudit(hotel.id, profile.id, profile.full_name || '', 'check_out', 'stays', stay.id, { status: 'active' }, { status: 'checked_out' });
     },
@@ -434,15 +469,15 @@ const CheckInOutPage = () => {
                         </div>
                         <div>
                           <p className="font-semibold">{guest?.last_name} {guest?.first_name}</p>
-                          <p className="text-sm text-muted-foreground">{guest?.phone || '-'} • {s.number_of_nights || 0} nuit(s)</p>
+                          <p className="text-sm text-muted-foreground">{guest?.phone || '-'} • {getLiveStayUnits(s)} {s.stay_type === 'sieste' ? 'h' : 'nuit(s)'}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-6">
                         <div className="text-sm text-right">
                           <p className="flex items-center gap-1"><BedDouble className="h-3 w-3" />{room?.room_number || '-'}</p>
-                          <p className="text-muted-foreground">{formatFCFA(s.total_price)}</p>
+                          <p className="text-muted-foreground">{formatFCFA(getLiveEstimatedTotal(s))}</p>
                         </div>
-                        <Button variant="destructive" onClick={() => checkoutMutation.mutate(s)} disabled={checkoutMutation.isPending}>
+                        <Button variant="destructive" onClick={() => { setCheckoutStay(s); setCheckoutConfirmOpen(true); }} disabled={checkoutMutation.isPending}>
                           <LogOut className="h-4 w-4 mr-2" />{t('checkinout.tabs.checkout')}
                         </Button>
                       </div>
@@ -523,6 +558,52 @@ const CheckInOutPage = () => {
               </DialogFooter>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={checkoutConfirmOpen} onOpenChange={setCheckoutConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmer le check-out</DialogTitle>
+            <DialogDescription>
+              Le sejour sera cloture avec recalcul automatique de la duree et des montants dus.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                if (!checkoutStay || !hotel) return;
+                try {
+                  const dossier = await fetchCustomerDossierData(hotel.id, checkoutStay.guest_id);
+                  await generateCustomerDossier({
+                    guest: dossier.guest,
+                    hotel,
+                    stays: dossier.stays,
+                    siestes: dossier.siestes,
+                    payments: dossier.payments,
+                    generatedBy: profile?.full_name || 'Reception',
+                  });
+                } catch (error: any) {
+                  toast.error(error.message || 'Impossible de telecharger le dossier');
+                }
+              }}
+              disabled={!checkoutStay}
+            >
+              <Download className="h-4 w-4 mr-2" />Telecharger le dossier
+            </Button>
+            <Button variant="outline" onClick={() => setCheckoutConfirmOpen(false)}>{t('common.cancel')}</Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (!checkoutStay) return;
+                checkoutMutation.mutate(checkoutStay);
+                setCheckoutConfirmOpen(false);
+              }}
+            >
+              <LogOut className="h-4 w-4 mr-2" />{t('checkinout.tabs.checkout')}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

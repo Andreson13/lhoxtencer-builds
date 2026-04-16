@@ -5,7 +5,13 @@ import App from "./App.tsx";
 import { queryClient, queryPersister, queryPersistMaxAge } from "./lib/queryClient";
 import "./index.css";
 
-registerSW({ immediate: true });
+if (import.meta.env.PROD) {
+	registerSW({ immediate: true });
+} else if ("serviceWorker" in navigator) {
+	navigator.serviceWorker.getRegistrations().then((registrations) => {
+		registrations.forEach((registration) => registration.unregister());
+	});
+}
 
 createRoot(document.getElementById("root")!).render(
 	<PersistQueryClientProvider

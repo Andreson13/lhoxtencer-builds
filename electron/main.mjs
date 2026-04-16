@@ -5,6 +5,14 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 
+const getWindowIconPath = () => {
+  if (isDevelopment) {
+    return path.join(__dirname, '..', 'build', 'icon.ico');
+  }
+
+  return path.join(__dirname, 'assets', 'icon.ico');
+};
+
 const createMainWindow = () => {
   const mainWindow = new BrowserWindow({
     width: 1480,
@@ -14,6 +22,7 @@ const createMainWindow = () => {
     backgroundColor: '#0f172a',
     autoHideMenuBar: true,
     title: 'Hotel Harmony',
+    icon: getWindowIconPath(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       contextIsolation: true,

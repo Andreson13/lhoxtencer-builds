@@ -190,3 +190,598 @@ export const generateInvoicePDF = (hotel: any, invoice: any, items: any[], payme
   addFooter(doc);
   doc.save(`facture-${invoice.invoice_number}-${guestName.replace(/\s+/g, '-')}.pdf`);
 };
+
+const formatDateFR = (dateStr: string | null | undefined): string => {
+  if (!dateStr) return '-';
+  return new Date(dateStr).toLocaleDateString('fr-FR');
+};
+
+const formatDateTimeFR = (date: Date | string): string => {
+  return new Date(date).toLocaleString('fr-FR');
+};
+
+const formatPaymentMethod = (method: string): string => {
+  const methods: Record<string, string> = {
+    cash: 'Especes',
+    mtn_momo: 'MTN MOMO',
+    orange_money: 'Orange Money',
+    bank_transfer: 'Virement',
+  };
+  return methods[method] || method || '-';
+};
+
+const formatItemType = (type: string): string => {
+  const types: Record<string, string> = {
+    room: 'Hebergement',
+    restaurant: 'Restaurant',
+    bar: 'Bar',
+    minibar: 'Minibar',
+    extra: 'Extra',
+    sieste: 'Sieste',
+  };
+  return types[type] || type;
+};
+
+const getMostUsedCategory = (stays: any[]): string => {
+  const counts: Record<string, number> = {};
+  stays.forEach((s) => {
+    if (s.room_categories?.name) {
+      counts[s.room_categories.name] = (counts[s.room_categories.name] || 0) + 1;
+    }
+  });
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || '-';
+};
+
+const getMostUsedPaymentMethod = (payments: any[]): string => {
+  const counts: Record<string, number> = {};
+  payments.forEach((p) => {
+    if (p.payment_method) {
+      counts[p.payment_method] = (counts[p.payment_method] || 0) + 1;
+    }
+  });
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
+  return top ? formatPaymentMethod(top) : '-';
+};
+
+const fetchImageAsBase64 = async (url: string): Promise<string> => {
+  const response = await fetch(url);
+  const blob = await response.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+};
+
+function addPageFooter(doc: jsPDF, hotel: any, pageWidth: number, pageHeight: number, pageNum: number) {
+  doc.setFontSize(6.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(120, 120, 120);
+  doc.setDrawColor(200, 200, 200);
+  doc.setLineWidth(0.2);
+  doc.line(14, pageHeight - 10, pageWidth - 14, pageHeight - 10);
+  doc.text(hotel.name, 14, pageHeight - 6);
+  doc.text(`Page ${pageNum}`, pageWidth / 2, pageHeight - 6, { align: 'center' });
+  doc.text('HotelManager Pro', pageWidth - 14, pageHeight - 6, { align: 'right' });
+  doc.setTextColor(0, 0, 0);
+}
+
+function addDossierPageHeader(doc: jsPDF, guest: any, hotel: any, pageWidth: number, sectionTitle: string) {
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(120, 120, 120);
+  doc.text(hotel.name, 14, 10);
+  doc.text(`${(guest.last_name || '').toUpperCase()} ${guest.first_name || ''} - Dossier Client`, pageWidth / 2, 10, { align: 'center' });
+  doc.text(new Date().toLocaleDateString('fr-FR'), pageWidth - 14, 10, { align: 'right' });
+  doc.setDrawColor(200, 200, 200);
+  doc.line(14, 12, pageWidth - 14, 12);
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setFillColor(240, 242, 245);
+  doc.rect(14, 16, pageWidth - 28, 9, 'F');
+  doc.text(sectionTitle, 16, 22);
+}
+
+export async function generatePoliceRegister(params: {
+  hotel: any;
+  guests: any[];
+  periodStart: string;
+  periodEnd: string;
+  generatedBy: string;
+  download?: boolean;
+}) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  if (params.hotel.logo_url) {
+    try {
+      const logoBase64 = await fetchImageAsBase64(params.hotel.logo_url);
+      doc.addImage(logoBase64, 'PNG', 14, 8, 25, 25);
+    } catch {
+      // ignore logo errors
+    }
+  }
+
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text((params.hotel.name || '').toUpperCase(), pageWidth / 2, 14, { align: 'center' });
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text(params.hotel.address || '', pageWidth / 2, 19, { align: 'center' });
+  doc.text(`${params.hotel.city || ''} - Tel: ${params.hotel.phone || ''}`, pageWidth / 2, 23, { align: 'center' });
+
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'bold');
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.5);
+  doc.rect(pageWidth / 2 - 60, 27, 120, 10);
+  doc.text('REGISTRE DE POLICE / POLICE REGISTER', pageWidth / 2, 33.5, { align: 'center' });
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  const periodText = `Periode du ${formatDateFR(params.periodStart)} au ${formatDateFR(params.periodEnd)}`;
+  doc.text(periodText, pageWidth / 2, 43, { align: 'center' });
+  doc.text(`Genere le ${formatDateTimeFR(new Date())} par ${params.generatedBy}`, pageWidth / 2, 47, { align: 'center' });
+  doc.text(`Nombre de fiches: ${params.guests.length}`, 14, 47);
+
+  autoTable(doc, {
+    startY: 51,
+    head: [[
+      { content: 'N°', styles: { halign: 'center', cellWidth: 8 } },
+      { content: 'N° Chambre', styles: { halign: 'center', cellWidth: 15 } },
+      { content: 'Nom et Prenoms\nFull Name', styles: { halign: 'center', cellWidth: 38 } },
+      { content: 'Date & Lieu de Naissance\nDate & Place of Birth', styles: { halign: 'center', cellWidth: 28 } },
+      { content: 'Nationalite\nNationality', styles: { halign: 'center', cellWidth: 22 } },
+      { content: 'Qualite/Profession\nOccupation', styles: { halign: 'center', cellWidth: 25 } },
+      { content: 'Domicile Habituel\nPermanent Address', styles: { halign: 'center', cellWidth: 30 } },
+      { content: "Date d'Arrivee\nCheck-in", styles: { halign: 'center', cellWidth: 20 } },
+      { content: 'Date de Depart\nCheck-out', styles: { halign: 'center', cellWidth: 20 } },
+      { content: "Piece d'Identite\nID / Passport", styles: { halign: 'center', cellWidth: 28 } },
+      { content: 'Observations', styles: { halign: 'center', cellWidth: 24 } },
+    ]],
+    body: params.guests.map((row, index) => {
+      const guest = row.guest || {};
+      return [
+        { content: String(index + 1).padStart(3, '0'), styles: { halign: 'center' } },
+        { content: row.room_number || '-', styles: { halign: 'center' } },
+        { content: `${(guest.last_name || '').toUpperCase()} ${guest.first_name || ''}`, styles: { fontStyle: 'bold' } },
+        { content: guest.date_of_birth ? `${formatDateFR(guest.date_of_birth)}\n${guest.place_of_birth || ''}` : '-' },
+        { content: guest.nationality || '-' },
+        { content: guest.profession || '-' },
+        { content: guest.usual_address || '-' },
+        { content: row.check_in_date ? formatDateFR(row.check_in_date) : '-', styles: { halign: 'center' } },
+        { content: row.check_out_date ? formatDateFR(row.check_out_date) : '-', styles: { halign: 'center' } },
+        { content: guest.id_number ? `${guest.id_type || ''}\n${guest.id_number}` : '-' },
+        { content: row.observation || '' },
+      ];
+    }),
+    styles: {
+      fontSize: 7.5,
+      cellPadding: 2,
+      lineColor: [0, 0, 0],
+      lineWidth: 0.2,
+      overflow: 'linebreak',
+      valign: 'middle',
+    },
+    headStyles: {
+      fillColor: [15, 23, 42],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 7,
+      halign: 'center',
+      valign: 'middle',
+      minCellHeight: 12,
+    },
+    alternateRowStyles: {
+      fillColor: [245, 247, 250],
+    },
+    rowPageBreak: 'avoid',
+    didDrawPage: (data) => {
+      const pageCount = doc.getNumberOfPages();
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`${params.hotel.name} - Registre de Police - ${periodText}`, 14, pageHeight - 6);
+      doc.text(`Page ${data.pageNumber} / ${pageCount} - Document officiel - HotelManager Pro`, pageWidth - 14, pageHeight - 6, { align: 'right' });
+      doc.setDrawColor(0);
+      doc.setLineWidth(0.3);
+      doc.line(14, pageHeight - 9, pageWidth - 14, pageHeight - 9);
+    },
+  });
+
+  const finalY = (doc as any).lastAutoTable.finalY + 8;
+  if (finalY < pageHeight - 40) {
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Fait a ${params.hotel.city || '___________'}, le ___________________________`, 14, finalY + 8);
+    doc.text('Signature et cachet du Directeur / Manager:', 14, finalY + 18);
+    doc.rect(14, finalY + 22, 60, 20);
+    doc.text('Visa des autorites / Police Stamp:', pageWidth - 90, finalY + 18);
+    doc.rect(pageWidth - 90, finalY + 22, 76, 20);
+  }
+
+  const filename = `registre-police-${params.hotel.slug || 'hotel'}-${params.periodStart}-${params.periodEnd}.pdf`;
+  if (params.download === false) {
+    doc.autoPrint();
+    window.open(doc.output('bloburl'), '_blank');
+    return;
+  }
+  doc.save(filename);
+}
+
+export async function generateCustomerDossier(params: {
+  guest: any;
+  hotel: any;
+  stays: any[];
+  siestes: any[];
+  payments: any[];
+  generatedBy: string;
+}) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  if (params.hotel.logo_url) {
+    try {
+      const logo = await fetchImageAsBase64(params.hotel.logo_url);
+      doc.addImage(logo, 'PNG', pageWidth - 40, 8, 26, 26);
+    } catch {
+      // ignore logo errors
+    }
+  }
+
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.text((params.hotel.name || '').toUpperCase(), 14, 16);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text(params.hotel.address || '', 14, 21);
+  doc.text(`${params.hotel.city || ''} - ${params.hotel.phone || ''}`, 14, 25);
+
+  doc.setFillColor(15, 23, 42);
+  doc.rect(14, 32, pageWidth - 28, 12, 'F');
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(255, 255, 255);
+  doc.text('DOSSIER CLIENT / CUSTOMER FILE', pageWidth / 2, 39.5, { align: 'center' });
+  doc.setTextColor(0, 0, 0);
+
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`${(params.guest.last_name || '').toUpperCase()} ${params.guest.first_name || ''}`, pageWidth / 2, 56, { align: 'center' });
+
+  const totalStays = params.stays.length;
+  const totalSiestes = params.siestes.length;
+  const totalNights = params.stays.reduce((sum, s) => sum + (s.number_of_nights || 0), 0);
+  const totalPaid = params.payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const firstVisit = [...params.stays, ...params.siestes]
+    .sort((a: any, b: any) => new Date(a.check_in_date || a.arrival_date).getTime() - new Date(b.check_in_date || b.arrival_date).getTime())[0];
+
+  const statBoxes = [
+    { label: 'Sejours', value: String(totalStays) },
+    { label: 'Siestes', value: String(totalSiestes) },
+    { label: 'Nuits totales', value: String(totalNights) },
+    { label: 'Total paye', value: formatFCFA(totalPaid) },
+  ];
+
+  const boxWidth = (pageWidth - 28 - 12) / 4;
+  statBoxes.forEach((stat, i) => {
+    const x = 14 + i * (boxWidth + 4);
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.3);
+    doc.rect(x, 61, boxWidth, 18);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text(stat.value, x + boxWidth / 2, 72, { align: 'center' });
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text(stat.label.toUpperCase(), x + boxWidth / 2, 76, { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+  });
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setFillColor(240, 242, 245);
+  doc.rect(14, 84, pageWidth - 28, 7, 'F');
+  doc.text('INFORMATIONS PERSONNELLES / PERSONAL INFORMATION', 16, 88.5);
+
+  const personalFields = [
+    ['Nom / Last Name', params.guest.last_name?.toUpperCase() || '-'],
+    ['Prenoms / Given Names', params.guest.first_name || '-'],
+    ['Nom de jeune fille / Maiden Name', params.guest.maiden_name || '-'],
+    ['Date de naissance / Date of Birth', params.guest.date_of_birth ? formatDateFR(params.guest.date_of_birth) : '-'],
+    ['Lieu de naissance / Place of Birth', params.guest.place_of_birth || '-'],
+    ['Sexe / Gender', params.guest.gender === 'M' ? 'Masculin / Male' : params.guest.gender === 'F' ? 'Feminin / Female' : '-'],
+    ['Nationalite / Nationality', params.guest.nationality || '-'],
+    ['Pays de residence / Country of Residence', params.guest.country_of_residence || '-'],
+    ['Adresse / Address', params.guest.usual_address || '-'],
+    ['Profession / Occupation', params.guest.profession || '-'],
+    ['Telephone / Phone', params.guest.phone || '-'],
+    ['Email', params.guest.email || '-'],
+  ];
+
+  let y = 96;
+  personalFields.forEach(([label, value], i) => {
+    doc.setFillColor(i % 2 === 0 ? 250 : 255, i % 2 === 0 ? 250 : 255, i % 2 === 0 ? 250 : 255);
+    doc.rect(14, y - 3, pageWidth - 28, 6, 'F');
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(80, 80, 80);
+    doc.text(label, 16, y + 0.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0, 0, 0);
+    doc.text(String(value), 90, y + 0.5);
+    doc.setDrawColor(220, 220, 220);
+    doc.setLineWidth(0.1);
+    doc.line(14, y + 3, pageWidth - 14, y + 3);
+    y += 6;
+  });
+
+  y += 4;
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setFillColor(240, 242, 245);
+  doc.rect(14, y, pageWidth - 28, 7, 'F');
+  doc.text("PIECE D'IDENTITE / IDENTITY DOCUMENT", 16, y + 4.5);
+  y += 10;
+
+  const idFields = [
+    ["Type de piece / ID Type", params.guest.id_type || '-'],
+    ['Numero / Number', params.guest.id_number || '-'],
+    ['Delivree le / Issued on', params.guest.id_issued_on ? formatDateFR(params.guest.id_issued_on) : '-'],
+    ['Delivree a / Issued at', params.guest.id_issued_at || '-'],
+  ];
+
+  idFields.forEach(([label, value]) => {
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(80, 80, 80);
+    doc.text(label, 16, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0, 0, 0);
+    doc.text(String(value), 90, y);
+    doc.setDrawColor(220, 220, 220);
+    doc.line(14, y + 2, pageWidth - 14, y + 2);
+    y += 7;
+  });
+
+  y += 4;
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Signature du client / Customer Signature:', 14, y);
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.3);
+  doc.rect(14, y + 3, 70, 20);
+
+  if (params.guest.customer_signature_url) {
+    try {
+      const sigBase64 = await fetchImageAsBase64(params.guest.customer_signature_url);
+      doc.addImage(sigBase64, 'PNG', 15, y + 4, 68, 18);
+    } catch {
+      // ignore signature errors
+    }
+  }
+
+  addPageFooter(doc, params.hotel, pageWidth, pageHeight, 1);
+
+  doc.addPage();
+  addDossierPageHeader(doc, params.guest, params.hotel, pageWidth, 'HISTORIQUE DES SEJOURS / STAY HISTORY');
+
+  autoTable(doc, {
+    startY: 45,
+    head: [[
+      { content: 'N°', styles: { halign: 'center', cellWidth: 8 } },
+      { content: 'Type', styles: { halign: 'center', cellWidth: 15 } },
+      { content: 'Chambre', styles: { halign: 'center', cellWidth: 18 } },
+      { content: 'Categorie', styles: { cellWidth: 28 } },
+      { content: 'Arrivee', styles: { halign: 'center', cellWidth: 22 } },
+      { content: 'Depart', styles: { halign: 'center', cellWidth: 22 } },
+      { content: 'Nuits', styles: { halign: 'center', cellWidth: 12 } },
+      { content: 'Adultes', styles: { halign: 'center', cellWidth: 12 } },
+      { content: 'Montant total', styles: { halign: 'right', cellWidth: 25 } },
+      { content: 'Montant paye', styles: { halign: 'right', cellWidth: 25 } },
+      { content: 'Solde', styles: { halign: 'right', cellWidth: 20 } },
+      { content: 'Statut', styles: { halign: 'center', cellWidth: 18 } },
+    ]],
+    body: params.stays.map((stay, i) => [
+      { content: String(i + 1), styles: { halign: 'center' } },
+      { content: stay.stay_type === 'sieste' ? 'Sieste' : 'Nuit', styles: { halign: 'center' } },
+      { content: stay.rooms?.room_number || '-', styles: { halign: 'center' } },
+      { content: stay.room_categories?.name || '-' },
+      { content: stay.check_in_date ? formatDateFR(stay.check_in_date) : '-', styles: { halign: 'center' } },
+      { content: stay.actual_check_out ? formatDateFR(stay.actual_check_out) : (stay.check_out_date ? formatDateFR(stay.check_out_date) : '-'), styles: { halign: 'center' } },
+      { content: String(stay.number_of_nights || 0), styles: { halign: 'center' } },
+      { content: String(stay.number_of_adults || 1), styles: { halign: 'center' } },
+      { content: formatFCFA(stay.invoices?.total_amount || 0), styles: { halign: 'right' } },
+      { content: formatFCFA(stay.invoices?.amount_paid || 0), styles: { halign: 'right' } },
+      {
+        content: formatFCFA(stay.invoices?.balance_due || 0),
+        styles: { halign: 'right', textColor: (stay.invoices?.balance_due || 0) > 0 ? [220, 38, 38] : [16, 185, 129] },
+      },
+      {
+        content: stay.status === 'checked_out' ? 'Parti' : stay.status === 'active' ? 'En cours' : stay.status,
+        styles: { halign: 'center' },
+      },
+    ]),
+    foot: [[
+      { content: 'TOTAL', colSpan: 8, styles: { halign: 'right', fontStyle: 'bold' } },
+      { content: formatFCFA(params.stays.reduce((s, st) => s + (st.invoices?.total_amount || 0), 0)), styles: { halign: 'right', fontStyle: 'bold' } },
+      { content: formatFCFA(params.stays.reduce((s, st) => s + (st.invoices?.amount_paid || 0), 0)), styles: { halign: 'right', fontStyle: 'bold' } },
+      { content: formatFCFA(params.stays.reduce((s, st) => s + (st.invoices?.balance_due || 0), 0)), styles: { halign: 'right', fontStyle: 'bold', textColor: [220, 38, 38] } },
+      { content: '' },
+    ]],
+    styles: { fontSize: 7.5, cellPadding: 2, lineColor: [200, 200, 200], lineWidth: 0.2 },
+    headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontSize: 7, fontStyle: 'bold' },
+    footStyles: { fillColor: [240, 242, 245], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    didDrawPage: (data) => addPageFooter(doc, params.hotel, pageWidth, pageHeight, data.pageNumber),
+  });
+
+  if (params.siestes.length > 0) {
+    const siesteY = (doc as any).lastAutoTable.finalY + 10;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setFillColor(240, 242, 245);
+    doc.rect(14, siesteY, pageWidth - 28, 7, 'F');
+    doc.text('SIESTES', 16, siesteY + 4.5);
+
+    autoTable(doc, {
+      startY: siesteY + 10,
+      head: [[
+        { content: 'N°', styles: { halign: 'center', cellWidth: 10 } },
+        { content: 'Date', styles: { halign: 'center', cellWidth: 25 } },
+        { content: 'Chambre', styles: { halign: 'center', cellWidth: 20 } },
+        { content: 'Arrivee', styles: { halign: 'center', cellWidth: 20 } },
+        { content: 'Depart', styles: { halign: 'center', cellWidth: 20 } },
+        { content: 'Duree', styles: { halign: 'center', cellWidth: 15 } },
+        { content: 'Montant paye', styles: { halign: 'right', cellWidth: 30 } },
+        { content: 'Mode paiement', styles: { halign: 'center', cellWidth: 30 } },
+      ]],
+      body: params.siestes.map((sieste, i) => [
+        { content: String(i + 1), styles: { halign: 'center' } },
+        { content: formatDateFR(sieste.arrival_date), styles: { halign: 'center' } },
+        { content: sieste.rooms?.room_number || '-', styles: { halign: 'center' } },
+        { content: sieste.arrival_time || '-', styles: { halign: 'center' } },
+        { content: sieste.departure_time || '-', styles: { halign: 'center' } },
+        { content: sieste.duration_hours ? `${sieste.duration_hours}h` : '-', styles: { halign: 'center' } },
+        { content: formatFCFA(sieste.amount_paid || 0), styles: { halign: 'right' } },
+        { content: formatPaymentMethod(sieste.payment_method), styles: { halign: 'center' } },
+      ]),
+      styles: { fontSize: 7.5, cellPadding: 2 },
+      headStyles: { fillColor: [109, 40, 217], textColor: [255, 255, 255], fontSize: 7, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+    });
+  }
+
+  doc.addPage();
+  addDossierPageHeader(doc, params.guest, params.hotel, pageWidth, 'DETAIL DES FACTURES / INVOICE DETAILS');
+
+  let currentY = 45;
+  params.stays.forEach((stay, stayIndex) => {
+    if (!stay.invoices) return;
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setFillColor(59, 130, 246);
+    doc.setTextColor(255, 255, 255);
+    doc.rect(14, currentY, pageWidth - 28, 8, 'F');
+    doc.text(
+      `Sejour ${stayIndex + 1} - Chambre ${stay.rooms?.room_number || '?'} - ${formatDateFR(stay.check_in_date)} au ${formatDateFR(stay.check_out_date)} - Facture ${stay.invoices.invoice_number}`,
+      16,
+      currentY + 5.5,
+    );
+    doc.setTextColor(0, 0, 0);
+    currentY += 10;
+
+    autoTable(doc, {
+      startY: currentY,
+      head: [[
+        { content: 'Description', styles: { cellWidth: 80 } },
+        { content: 'Type', styles: { halign: 'center', cellWidth: 25 } },
+        { content: 'Qte', styles: { halign: 'center', cellWidth: 12 } },
+        { content: 'P.U. (FCFA)', styles: { halign: 'right', cellWidth: 28 } },
+        { content: 'Sous-total (FCFA)', styles: { halign: 'right', cellWidth: 30 } },
+      ]],
+      body: [
+        ...((stay.invoices.invoice_items || []).map((item: any) => [
+          item.description,
+          { content: formatItemType(item.item_type), styles: { halign: 'center' } },
+          { content: String(item.quantity), styles: { halign: 'center' } },
+          { content: formatFCFA(item.unit_price), styles: { halign: 'right' } },
+          { content: formatFCFA(item.subtotal), styles: { halign: 'right' } },
+        ])),
+        [{ content: 'Sous-total', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } }, { content: formatFCFA(stay.invoices.subtotal), styles: { halign: 'right', fontStyle: 'bold' } }],
+        ...(stay.invoices.tax_percentage > 0
+          ? [[{ content: `TVA (${stay.invoices.tax_percentage}%)`, colSpan: 4, styles: { halign: 'right' } }, { content: formatFCFA(stay.invoices.tax_amount), styles: { halign: 'right' } }]]
+          : []),
+        [{ content: 'TOTAL', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold', fillColor: [240, 242, 245] } }, { content: formatFCFA(stay.invoices.total_amount), styles: { halign: 'right', fontStyle: 'bold', fillColor: [240, 242, 245] } }],
+        [{ content: 'Montant paye', colSpan: 4, styles: { halign: 'right', textColor: [16, 185, 129] } }, { content: formatFCFA(stay.invoices.amount_paid), styles: { halign: 'right', textColor: [16, 185, 129] } }],
+        [{ content: 'Solde restant', colSpan: 4, styles: { halign: 'right', textColor: stay.invoices.balance_due > 0 ? [220, 38, 38] : [16, 185, 129], fontStyle: 'bold' } }, { content: formatFCFA(stay.invoices.balance_due), styles: { halign: 'right', textColor: stay.invoices.balance_due > 0 ? [220, 38, 38] : [16, 185, 129], fontStyle: 'bold' } }],
+      ],
+      styles: { fontSize: 8, cellPadding: 2, lineColor: [200, 200, 200], lineWidth: 0.2 },
+      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontSize: 7.5, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      margin: { left: 14, right: 14 },
+      didDrawPage: (data) => {
+        addPageFooter(doc, params.hotel, pageWidth, pageHeight, data.pageNumber);
+        currentY = data.cursor?.y || currentY;
+      },
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + 6;
+
+    const stayPayments = params.payments.filter((p) => p.invoice_id === stay.invoices?.id);
+    if (stayPayments.length > 0) {
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Paiements recus:', 14, currentY);
+      currentY += 4;
+      stayPayments.forEach((payment) => {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.text(`- ${formatDateTimeFR(payment.created_at)} - ${formatFCFA(payment.amount)} - ${formatPaymentMethod(payment.payment_method)} - Par: ${payment.recorded_by_name || '-'}`, 18, currentY);
+        currentY += 5;
+      });
+    }
+
+    currentY += 8;
+    if (currentY > pageHeight - 40) {
+      doc.addPage();
+      addDossierPageHeader(doc, params.guest, params.hotel, pageWidth, 'DETAIL DES FACTURES (suite)');
+      currentY = 45;
+    }
+  });
+
+  doc.addPage();
+  addDossierPageHeader(doc, params.guest, params.hotel, pageWidth, 'RESUME FINANCIER / FINANCIAL SUMMARY');
+
+  let summaryY = 50;
+  doc.setFillColor(15, 23, 42);
+  doc.roundedRect(14, summaryY, pageWidth - 28, 25, 3, 3, 'F');
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(255, 255, 255);
+  doc.text('VALEUR TOTALE CLIENT / TOTAL CUSTOMER VALUE', pageWidth / 2, summaryY + 9, { align: 'center' });
+  doc.setFontSize(18);
+  doc.text(formatFCFA(totalPaid), pageWidth / 2, summaryY + 20, { align: 'center' });
+  doc.setTextColor(0, 0, 0);
+  summaryY += 32;
+
+  autoTable(doc, {
+    startY: summaryY,
+    head: [['Indicateur', 'Valeur']],
+    body: [
+      ['Nombre de sejours (nuits)', String(totalStays)],
+      ['Nombre de siestes', String(totalSiestes)],
+      ['Total nuits passees', String(totalNights)],
+      ['Premiere visite', firstVisit ? formatDateFR(firstVisit.check_in_date || firstVisit.arrival_date) : '-'],
+      ['Derniere visite', params.stays.length > 0 ? formatDateFR(params.stays[0].check_in_date) : '-'],
+      ['Total facture', formatFCFA(params.stays.reduce((s, st) => s + (st.invoices?.total_amount || 0), 0))],
+      ['Total paye', formatFCFA(totalPaid)],
+      ['Solde restant du', formatFCFA(params.stays.reduce((s, st) => s + (st.invoices?.balance_due || 0), 0))],
+      ['Categorie preferee', getMostUsedCategory(params.stays)],
+      ['Mode de paiement prefere', getMostUsedPaymentMethod(params.payments)],
+    ],
+    styles: { fontSize: 9, cellPadding: 3 },
+    headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: { 0: { fontStyle: 'bold', textColor: [80, 80, 80] }, 1: { halign: 'right' } },
+    didDrawPage: (data) => addPageFooter(doc, params.hotel, pageWidth, pageHeight, data.pageNumber),
+  });
+
+  const lastY = (doc as any).lastAutoTable.finalY + 10;
+  doc.setFontSize(7.5);
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(120, 120, 120);
+  doc.text(`Document genere le ${formatDateTimeFR(new Date())} par ${params.generatedBy} - HotelManager Pro`, pageWidth / 2, lastY, { align: 'center' });
+  doc.text('Document confidentiel - Usage interne uniquement', pageWidth / 2, lastY + 5, { align: 'center' });
+
+  addPageFooter(doc, params.hotel, pageWidth, pageHeight, doc.getNumberOfPages());
+
+  const filename = `dossier-client-${(params.guest.last_name || '').toLowerCase()}-${(params.guest.first_name || '').toLowerCase()}-${new Date().toISOString().split('T')[0]}.pdf`;
+  doc.save(filename);
+}

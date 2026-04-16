@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useI18n } from '@/contexts/I18nContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
-import { useEnsureMainCourante } from '@/hooks/useMainCourante';
 import { reconcileMainCouranteForDate } from '@/services/transactionService';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { PaymentDialog } from '@/components/shared/PaymentDialog';
@@ -53,22 +52,26 @@ const MainCourantePage = () => {
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentContext, setPaymentContext] = useState<any>(null);
 
-  const ensureMC = useEnsureMainCourante();
-
-  // Auto-populate when date changes
-  useEffect(() => {
-    if (hotel?.id) {
-      ensureMC.mutate({ hotelId: hotel.id, date: selectedDate });
-    }
-  }, [hotel?.id, selectedDate]);
-
   const { data: entries, isLoading } = useQuery({
     queryKey: ['main-courante', hotel?.id, selectedDate],
     queryFn: async () => {
       await reconcileMainCouranteForDate(hotel!.id, selectedDate);
-      const { data, error } = await supabase.from('main_courante').select('*').eq('hotel_id', hotel!.id).eq('journee', selectedDate).order('room_number');
+      const { data, error } = await supabase.from('main_courante').select('*').eq('hotel_id', hotel!.id).eq('journee', selectedDate).order('updated_at', { ascending: false });
       if (error) throw error;
-      return data;
+
+      const deduped = new Map<string, any>();
+      for (const row of data || []) {
+        const key = `${row.guest_id || 'noguest'}|${row.room_number || 'noroom'}`;
+        if (!deduped.has(key)) {
+          deduped.set(key, row);
+        }
+      }
+
+      return Array.from(deduped.values()).sort((a, b) => {
+        const ra = Number(a.room_number) || 0;
+        const rb = Number(b.room_number) || 0;
+        return ra - rb;
+      });
     },
     enabled: !!hotel?.id,
   });

@@ -65,6 +65,17 @@ export async function addChargeToInvoice(params: {
   unitPrice: number;
   date?: string;
 }) {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!params.invoiceId || !uuidRegex.test(params.invoiceId)) {
+    throw new Error('Invalid invoice id for charge');
+  }
+  if (!Number.isFinite(params.quantity) || params.quantity <= 0) {
+    return;
+  }
+  if (!Number.isFinite(params.unitPrice) || params.unitPrice < 0) {
+    return;
+  }
+
   // Validate/fetch guest_id from stay if not provided
   let finalGuestId = params.guestId;
   if (!finalGuestId && params.stayId) {
@@ -444,6 +455,113 @@ export async function reconcileMainCouranteForDate(hotelId: string, date: string
       }
     }
   }
+}
+
+export async function synchronizeActiveStayAccruals(hotelId: string) {
+  const now = new Date();
+  const todayKey = toDateKey(now);
+
+  const { data: activeStays, error: staysError } = await supabase
+    .from('stays')
+    .select('id, hotel_id, guest_id, stay_type, check_in_date, actual_check_out, number_of_nights, price_per_night, total_price, invoice_id, status')
+    .eq('hotel_id', hotelId)
+    .eq('status', 'active');
+
+  if (staysError) throw staysError;
+  if (!activeStays?.length) {
+    return { scanned: 0, updated: 0, charged: 0 };
+  }
+
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const invoiceIds = activeStays
+    .map((stay: any) => stay.invoice_id)
+    .filter((value: any): value is string => typeof value === 'string' && uuidRegex.test(value));
+  const billedByInvoice = new Map<string, { room: number; sieste: number }>();
+
+  if (invoiceIds.length > 0) {
+    const { data: invoiceItems, error: invoiceItemsError } = await supabase
+      .from('invoice_items')
+      .select('invoice_id, item_type, quantity')
+      .eq('hotel_id', hotelId)
+      .in('invoice_id', invoiceIds as string[]);
+
+    if (!invoiceItemsError) {
+      for (const item of invoiceItems || []) {
+        if (!item.invoice_id) continue;
+        const bucket = billedByInvoice.get(item.invoice_id) || { room: 0, sieste: 0 };
+        if (item.item_type === 'room') bucket.room += Number(item.quantity || 0);
+        if (item.item_type === 'sieste') bucket.sieste += Number(item.quantity || 0);
+        billedByInvoice.set(item.invoice_id, bucket);
+      }
+    }
+  }
+
+  let updated = 0;
+  let charged = 0;
+
+  for (const stay of activeStays as any[]) {
+    try {
+    const isSieste = stay.stay_type === 'sieste';
+    const start = new Date(stay.check_in_date);
+    const end = stay.actual_check_out ? new Date(stay.actual_check_out) : now;
+    const elapsedUnits = isSieste
+      ? Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 3600000))
+      : Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000));
+
+    const unitPrice = Number(stay.price_per_night || 0);
+    const expectedTotal = elapsedUnits * unitPrice;
+    const billed = billedByInvoice.get(stay.invoice_id || '') || { room: 0, sieste: 0 };
+    const billedUnits = isSieste ? billed.sieste : billed.room;
+    const missingUnits = Math.max(0, elapsedUnits - billedUnits);
+
+    let invoiceId = stay.invoice_id;
+    if (!stay.guest_id || (typeof stay.guest_id === 'string' && !uuidRegex.test(stay.guest_id))) {
+      continue;
+    }
+    if (!invoiceId) {
+      const invoice = await getOrCreateInvoice(hotelId, stay.id, stay.guest_id);
+      invoiceId = invoice.id;
+    }
+
+    if (missingUnits > 0 && invoiceId) {
+      await addChargeToInvoice({
+        hotelId,
+        invoiceId,
+        stayId: stay.id,
+        guestId: stay.guest_id,
+        description: isSieste
+          ? `Extension sieste - ${missingUnits}h`
+          : `Nuitees additionnelles - ${missingUnits} nuit(s)`,
+        itemType: isSieste ? 'sieste' : 'room',
+        quantity: missingUnits,
+        unitPrice,
+        date: todayKey,
+      });
+      charged += 1;
+    }
+
+    const patch: any = { total_price: expectedTotal };
+    if (!isSieste) patch.number_of_nights = elapsedUnits;
+
+    const needsPatch = Number(stay.total_price || 0) !== expectedTotal || (!isSieste && Number(stay.number_of_nights || 0) !== elapsedUnits);
+    if (needsPatch) {
+      const { error: patchError } = await supabase
+        .from('stays')
+        .update(patch)
+        .eq('id', stay.id);
+      if (patchError) throw patchError;
+      updated += 1;
+    }
+    } catch (error) {
+      console.warn('stay accrual sync skipped for stay', stay?.id, error);
+    }
+  }
+
+  return {
+    scanned: activeStays.length,
+    updated,
+    charged,
+  };
 }
 
 export async function recordCashMovement(params: {
