@@ -15,8 +15,8 @@ import { toast } from 'sonner';
 import { Star, Send, UtensilsCrossed, Check, ShoppingCart, Plus, Minus, Bell, User } from 'lucide-react';
 
 const MenuPortalPage = () => {
-  const params = useParams<{ slug?: string; room?: string; hotelSlug?: string; roomNumber?: string }>();
-  const slug = params.slug || params.hotelSlug;
+  const params = useParams<{ slug?: string; room?: string; hotelSlug?: string; roomNumber?: string; hotelId?: string }>();
+  const slug = params.slug || params.hotelSlug || params.hotelId;
   const room = params.room || params.roomNumber;
   const [feedbackRating, setFeedbackRating] = useState(0);
   const [feedbackComment, setFeedbackComment] = useState('');
@@ -31,8 +31,14 @@ const MenuPortalPage = () => {
   const { data: hotel } = useQuery({
     queryKey: ['hotel-menu-public', slug],
     queryFn: async () => {
-      const { data } = await supabase.from('hotels').select('*').eq('slug', slug!).single();
-      return data;
+      const identifier = slug;
+      if (!identifier) return null;
+
+      const { data: bySlug } = await supabase.from('hotels').select('*').eq('slug', identifier).maybeSingle();
+      if (bySlug) return bySlug;
+
+      const { data: byId } = await supabase.from('hotels').select('*').eq('id', identifier).maybeSingle();
+      return byId;
     },
     enabled: !!slug,
   });

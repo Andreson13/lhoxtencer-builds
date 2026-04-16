@@ -24,7 +24,7 @@ const QRCodesPage = () => {
   });
 
   const baseUrl = window.location.origin;
-  const bookingUrl = `${baseUrl}/booking/${hotel?.slug}`;
+  const bookingUrl = `${baseUrl}/booking/hotel/${hotel?.id}`;
 
   const printAllQRCodes = async () => {
     if (!rooms?.length || !hotel) return;
@@ -35,7 +35,7 @@ const QRCodesPage = () => {
     for (let i = 0; i < rooms.length; i++) {
       if (i > 0) pdf.addPage();
       const room = rooms[i];
-      const menuUrl = `${baseUrl}/menu/${hotel.slug}/${room.room_number}`;
+      const menuUrl = `${baseUrl}/menu/hotel/${hotel.id}/${room.room_number}`;
 
       // Hotel name
       pdf.setFontSize(18);
@@ -73,7 +73,7 @@ const QRCodesPage = () => {
       pdf.text(menuUrl, pageW / 2, 250, { align: 'center' });
     }
 
-    pdf.save(`qr-codes-${hotel.slug}.pdf`);
+    pdf.save(`qr-codes-${hotel.id}.pdf`);
   };
 
   return (
@@ -103,7 +103,7 @@ const QRCodesPage = () => {
       <h2 className="text-lg font-semibold">QR Codes par chambre (menu & services)</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {rooms?.map(room => {
-          const menuUrl = `${baseUrl}/menu/${hotel?.slug}/${room.room_number}`;
+          const menuUrl = `${baseUrl}/menu/hotel/${hotel?.id}/${room.room_number}`;
           return (
             <Card key={room.id}>
               <CardHeader className="pb-2">

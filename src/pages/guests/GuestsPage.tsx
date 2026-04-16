@@ -14,6 +14,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { formatFCFA, formatDate, generateInvoiceNumber } from '@/utils/formatters';
 import { generateCustomerDossier, generatePoliceRegister } from '@/utils/pdfGenerators';
 import { fetchCustomerDossierData, fetchPoliceRegisterRows, getCurrentWeekRange } from '@/services/guestDocumentService';
+import { enqueueOfflineSubmission } from '@/services/offlineSubmissionQueue';
 import { getOrCreateInvoice, addChargeToInvoice } from '@/services/transactionService';
 import { withAudit } from '@/utils/auditLog';
 import { Button } from '@/components/ui/button';
@@ -146,6 +147,19 @@ const GuestsPage = () => {
     enabled: !!hotel?.id,
   });
 
+  const { data: allSiestes } = useQuery({
+    queryKey: ['siestes-all', hotel?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('siestes')
+        .select('id, guest_id, check_in_time, check_out_time, status')
+        .eq('hotel_id', hotel!.id)
+        .order('check_in_time', { ascending: false });
+      return data || [];
+    },
+    enabled: !!hotel?.id,
+  });
+
   const { data: rooms } = useQuery({
     queryKey: ['rooms-available', hotel?.id],
     queryFn: async () => {
@@ -207,8 +221,29 @@ const GuestsPage = () => {
         }
       }
     });
+
+    const siesteSeen = new Set<string>();
+    allSiestes?.forEach((s: any) => {
+      if (!s?.id || !s?.guest_id || siesteSeen.has(s.id)) return;
+      siesteSeen.add(s.id);
+      if (!map[s.guest_id]) map[s.guest_id] = { count: 0, lastVisit: null, hasActive: false, paymentStatus: null };
+
+      map[s.guest_id].count++;
+      const visitDate = s.check_out_time || s.check_in_time || null;
+      if (visitDate && (!map[s.guest_id].lastVisit || visitDate > map[s.guest_id].lastVisit!)) {
+        map[s.guest_id].lastVisit = visitDate;
+      }
+
+      if (s.status === 'active') {
+        map[s.guest_id].hasActive = true;
+        if (!map[s.guest_id].paymentStatus) {
+          map[s.guest_id].paymentStatus = 'pending';
+        }
+      }
+    });
+
     return map;
-  }, [allStays]);
+  }, [allStays, allSiestes]);
 
   const getLiveStayStats = (stay: any) => {
     const now = new Date();
@@ -325,6 +360,11 @@ const GuestsPage = () => {
     printable.print();
   };
 
+  const isNetworkIssue = (error: any) => {
+    const message = String(error?.message || error || '').toLowerCase();
+    return message.includes('fetch') || message.includes('network') || message.includes('offline') || message.includes('timeout');
+  };
+
   const saveMutation = useMutation({
     mutationFn: async (values: GuestForm) => {
       const payload: any = {
@@ -332,19 +372,80 @@ const GuestsPage = () => {
         hotel_id: hotel!.id,
         email: values.email || null,
       };
-      if (editingGuest) {
-        const { error } = await supabase.from('guests').update(payload).eq('id', editingGuest.id);
-        if (error) throw error;
-        await withAudit(hotel!.id, profile!.id, profile!.full_name || '', 'update', 'guests', editingGuest.id, editingGuest, payload);
-      } else {
-        const { data, error } = await supabase.from('guests').insert(payload).select().single();
-        if (error) throw error;
-        await withAudit(hotel!.id, profile!.id, profile!.full_name || '', 'create', 'guests', data.id, null, payload);
+      try {
+        if (editingGuest) {
+          const { error } = await supabase.from('guests').update(payload).eq('id', editingGuest.id);
+          if (error) throw error;
+          await withAudit(hotel!.id, profile!.id, profile!.full_name || '', 'update', 'guests', editingGuest.id, editingGuest, payload);
+        } else {
+          let existingGuest: any = null;
+          if (values.phone) {
+            const { data } = await supabase
+              .from('guests')
+              .select('id')
+              .eq('hotel_id', hotel!.id)
+              .eq('phone', values.phone)
+              .maybeSingle();
+            existingGuest = data;
+          }
+
+          if (!existingGuest && values.id_number) {
+            const { data } = await supabase
+              .from('guests')
+              .select('id')
+              .eq('hotel_id', hotel!.id)
+              .eq('id_number', values.id_number)
+              .maybeSingle();
+            existingGuest = data;
+          }
+
+          if (!existingGuest) {
+            const { data } = await supabase
+              .from('guests')
+              .select('id')
+              .eq('hotel_id', hotel!.id)
+              .ilike('last_name', values.last_name)
+              .ilike('first_name', values.first_name)
+              .maybeSingle();
+            existingGuest = data;
+          }
+
+          if (existingGuest?.id) {
+            const { error } = await supabase.from('guests').update(payload).eq('id', existingGuest.id);
+            if (error) throw error;
+            return { queued: false, duplicate: true };
+          }
+
+          const { data, error } = await supabase.from('guests').insert(payload).select().single();
+          if (error) throw error;
+          await withAudit(hotel!.id, profile!.id, profile!.full_name || '', 'create', 'guests', data.id, null, payload);
+        }
+        return { queued: false, duplicate: false };
+      } catch (error) {
+        if (isNetworkIssue(error)) {
+          enqueueOfflineSubmission({
+            type: 'guest-upsert',
+            createdAt: new Date().toISOString(),
+            payload: {
+              hotelId: hotel!.id,
+              guestId: editingGuest?.id,
+              values,
+            },
+          });
+          return { queued: true };
+        }
+        throw error;
       }
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['guests'] });
-      toast.success(editingGuest ? t('guests.updated') : t('guests.created'));
+      if (result?.queued) {
+        toast.success('Enregistre localement. Synchronisation en attente du reseau.');
+      } else if (result?.duplicate && !editingGuest) {
+        toast.success('Client deja existant mis a jour pour eviter un doublon.');
+      } else {
+        toast.success(editingGuest ? t('guests.updated') : t('guests.created'));
+      }
       closeDialog();
     },
     onError: (e: any) => toast.error(e.message),
@@ -354,53 +455,86 @@ const GuestsPage = () => {
     mutationFn: async (values: StayForm) => {
       if (!stayGuestId || !hotel || !profile) throw new Error('Missing context');
 
-      // Create stay first then link invoice and post charge via centralized service
-      const { data: stay, error: stayErr } = await supabase.from('stays').insert({
-        hotel_id: hotel.id,
-        guest_id: stayGuestId,
-        stay_type: values.stay_type,
-        room_id: values.room_id,
-        check_in_date: new Date(values.check_in_date).toISOString(),
-        check_out_date: new Date(values.check_out_date).toISOString(),
-        number_of_nights: nights,
-        number_of_adults: values.number_of_adults,
-        number_of_children: values.number_of_children,
-        arrangement: values.arrangement || null,
-        price_per_night: values.price_per_night,
-        total_price: totalPrice,
-        status: 'active',
-        payment_status: 'pending',
-        receptionist_id: profile.id,
-        receptionist_name: profile.full_name,
-        created_by: profile.id,
-        created_by_name: profile.full_name,
-        notes: values.notes || null,
-      } as any).select().single();
-      if (stayErr) throw stayErr;
+      try {
+        // Create stay first then link invoice and post charge via centralized service
+        const { data: stay, error: stayErr } = await supabase.from('stays').insert({
+          hotel_id: hotel.id,
+          guest_id: stayGuestId,
+          stay_type: values.stay_type,
+          room_id: values.room_id,
+          check_in_date: new Date(values.check_in_date).toISOString(),
+          check_out_date: new Date(values.check_out_date).toISOString(),
+          number_of_nights: nights,
+          number_of_adults: values.number_of_adults,
+          number_of_children: values.number_of_children,
+          arrangement: values.arrangement || null,
+          price_per_night: values.price_per_night,
+          total_price: totalPrice,
+          status: 'active',
+          payment_status: 'pending',
+          receptionist_id: profile.id,
+          receptionist_name: profile.full_name,
+          created_by: profile.id,
+          created_by_name: profile.full_name,
+          notes: values.notes || null,
+        } as any).select().single();
+        if (stayErr) throw stayErr;
 
-      const invoice = await getOrCreateInvoice(hotel.id, stay.id, stayGuestId);
-      await addChargeToInvoice({
-        hotelId: hotel.id,
-        invoiceId: invoice.id,
-        stayId: stay.id,
-        guestId: stayGuestId,
-        description: `Hébergement — ${nights} nuit(s)`,
-        itemType: 'room',
-        quantity: nights,
-        unitPrice: values.price_per_night,
-      });
+        const invoice = await getOrCreateInvoice(hotel.id, stay.id, stayGuestId);
+        await addChargeToInvoice({
+          hotelId: hotel.id,
+          invoiceId: invoice.id,
+          stayId: stay.id,
+          guestId: stayGuestId,
+          description: `Hébergement — ${nights} nuit(s)`,
+          itemType: 'room',
+          quantity: nights,
+          unitPrice: values.price_per_night,
+        });
 
-      // Safety: also update room to occupied
-      await supabase.from('rooms').update({ status: 'occupied' }).eq('id', values.room_id);
+        // Safety: also update room to occupied
+        await supabase.from('rooms').update({ status: 'occupied' }).eq('id', values.room_id);
 
-      await withAudit(hotel.id, profile.id, profile.full_name || '', 'create_stay', 'stays', stay.id, null, { guest_id: stayGuestId, room_id: values.room_id });
+        await withAudit(hotel.id, profile.id, profile.full_name || '', 'create_stay', 'stays', stay.id, null, { guest_id: stayGuestId, room_id: values.room_id });
+        return { queued: false };
+      } catch (error) {
+        if (isNetworkIssue(error)) {
+          enqueueOfflineSubmission({
+            type: 'guest-stay-create',
+            createdAt: new Date().toISOString(),
+            payload: {
+              hotelId: hotel.id,
+              guestId: stayGuestId,
+              values: {
+                stay_type: values.stay_type || 'night',
+                room_id: values.room_id,
+                check_in_date: values.check_in_date,
+                check_out_date: values.check_out_date,
+                number_of_adults: Number(values.number_of_adults || 1),
+                number_of_children: Number(values.number_of_children || 0),
+                arrangement: values.arrangement || undefined,
+                price_per_night: Number(values.price_per_night || 0),
+                notes: values.notes || undefined,
+              },
+              receptionist: {
+                id: profile.id,
+                full_name: profile.full_name || '',
+              },
+              nights,
+              totalPrice,
+            },
+          });
+          return { queued: true };
+        }
+        throw error;
+      }
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['stays-all'] });
       qc.invalidateQueries({ queryKey: ['guest-stays'] });
       qc.invalidateQueries({ queryKey: ['rooms'] });
       qc.invalidateQueries({ queryKey: ['invoices'] });
-      toast.success(t('guests.stayCreated'));
+      toast.success(result?.queued ? 'Sejour mis en file locale. Synchronisation en attente du reseau.' : t('guests.stayCreated'));
       setStayDialogOpen(false);
       stayForm.reset();
     },
@@ -903,7 +1037,7 @@ const GuestsPage = () => {
                     ? 'bg-orange-500'
                     : 'bg-red-600';
                 return (
-                  <TableRow key={g.id}>
+                  <TableRow key={g.id} className="cursor-pointer hover:bg-muted/40" onClick={() => navigate(`/guests/${g.id}`)}>
                     <TableCell className="font-medium">
                       {info.hasActive && <span className={`inline-block h-2.5 w-2.5 rounded-full mr-2 ${dotColor}`} />}
                       {g.last_name} {g.first_name}
@@ -914,7 +1048,7 @@ const GuestsPage = () => {
                     <TableCell>{g.id_number || '-'}</TableCell>
                     <TableCell className="text-center">{info.count}</TableCell>
                     <TableCell>{info.lastVisit ? formatDate(info.lastVisit) : '-'}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>

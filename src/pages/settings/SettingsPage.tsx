@@ -36,6 +36,15 @@ const SettingsPage = () => {
   const [hotelCity, setHotelCity] = useState(hotel?.city || '');
   const [hotelAddress, setHotelAddress] = useState(hotel?.address || '');
 
+  const slugifyHotelName = (value: string) =>
+    value
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 48);
+
   useEffect(() => {
     setHotelName(hotel?.name || '');
     setHotelPhone(hotel?.phone || '');
@@ -55,8 +64,15 @@ const SettingsPage = () => {
 
   const updateHotelMutation = useMutation({
     mutationFn: async () => {
+      const generatedSlugBase = slugifyHotelName(hotelName || hotel?.name || 'hotel');
+      const generatedSlug = `${generatedSlugBase || 'hotel'}-${(hotel?.id || '').slice(0, 6)}`;
       const { error } = await supabase.from('hotels').update({
-        name: hotelName, phone: hotelPhone, email: hotelEmail, city: hotelCity, address: hotelAddress,
+        name: hotelName,
+        slug: generatedSlug,
+        phone: hotelPhone,
+        email: hotelEmail,
+        city: hotelCity,
+        address: hotelAddress,
       }).eq('id', hotel!.id);
       if (error) throw error;
     },

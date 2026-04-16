@@ -11,6 +11,7 @@ import { formatFCFA, formatDate, generateInvoiceNumber } from '@/utils/formatter
 import { generateCustomerDossier } from '@/utils/pdfGenerators';
 import { fetchCustomerDossierData } from '@/services/guestDocumentService';
 import { getOrCreateInvoice, addChargeToInvoice } from '@/services/transactionService';
+import { enqueueOfflineSubmission } from '@/services/offlineSubmissionQueue';
 import { withAudit } from '@/utils/auditLog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,6 +42,11 @@ const CheckInOutPage = () => {
   const [walkinStay, setWalkinStay] = useState({ room_id: '', check_in_date: new Date().toISOString().split('T')[0], check_out_date: '', price_per_night: 0 });
   const [checkoutConfirmOpen, setCheckoutConfirmOpen] = useState(false);
   const [checkoutStay, setCheckoutStay] = useState<any>(null);
+
+  const isNetworkIssue = (error: any) => {
+    const message = String(error?.message || error || '').toLowerCase();
+    return message.includes('fetch') || message.includes('network') || message.includes('offline') || message.includes('timeout');
+  };
 
   const getLiveStayUnits = (stay: any) => {
     const start = new Date(stay.check_in_date);
@@ -114,101 +120,135 @@ const CheckInOutPage = () => {
     mutationFn: async (reservation: any) => {
       if (!hotel || !profile) throw new Error('Missing context');
 
-      // Find or create guest
-      let guestId: string;
-      if (reservation.guest_id) {
-        guestId = reservation.guest_id;
-      } else {
-        const nameParts = reservation.guest_name.split(' ');
-        const lastName = nameParts.slice(-1)[0];
-        const firstName = nameParts.slice(0, -1).join(' ') || reservation.guest_name;
-
-        // Check by phone first (stronger), then by name
-        let existingGuest: any = null;
-        if (reservation.guest_phone) {
-          const { data } = await supabase.from('guests')
-            .select('id')
-            .eq('hotel_id', hotel.id)
-            .eq('phone', reservation.guest_phone)
-            .limit(1)
-            .maybeSingle();
-          existingGuest = data;
-        }
-        if (!existingGuest) {
-          const { data } = await supabase.from('guests')
-            .select('id').eq('hotel_id', hotel.id)
-            .ilike('last_name', lastName).ilike('first_name', firstName)
-            .limit(1).maybeSingle();
-          existingGuest = data;
+      try {
+        const { data: existingStay } = await supabase
+          .from('stays')
+          .select('id')
+          .eq('hotel_id', hotel.id)
+          .eq('reservation_id', reservation.id)
+          .eq('status', 'active')
+          .maybeSingle();
+        if (existingStay?.id) {
+          return { queued: false, duplicate: true };
         }
 
-        if (existingGuest) {
-          guestId = existingGuest.id;
+        // Find or create guest
+        let guestId: string;
+        if (reservation.guest_id) {
+          guestId = reservation.guest_id;
         } else {
-          const { data: newGuest, error: gErr } = await supabase.from('guests').insert({
-            hotel_id: hotel.id,
-            last_name: lastName,
-            first_name: firstName,
-            phone: reservation.guest_phone,
-            email: reservation.guest_email,
-          }).select().single();
-          if (gErr) throw gErr;
-          guestId = newGuest.id;
+          const nameParts = reservation.guest_name.split(' ');
+          const lastName = nameParts.slice(-1)[0];
+          const firstName = nameParts.slice(0, -1).join(' ') || reservation.guest_name;
+
+          // Check by phone first (stronger), then by name
+          let existingGuest: any = null;
+          if (reservation.guest_phone) {
+            const { data } = await supabase.from('guests')
+              .select('id')
+              .eq('hotel_id', hotel.id)
+              .eq('phone', reservation.guest_phone)
+              .limit(1)
+              .maybeSingle();
+            existingGuest = data;
+          }
+          if (!existingGuest) {
+            const { data } = await supabase.from('guests')
+              .select('id').eq('hotel_id', hotel.id)
+              .ilike('last_name', lastName).ilike('first_name', firstName)
+              .limit(1).maybeSingle();
+            existingGuest = data;
+          }
+
+          if (existingGuest) {
+            guestId = existingGuest.id;
+          } else {
+            const { data: newGuest, error: gErr } = await supabase.from('guests').insert({
+              hotel_id: hotel.id,
+              last_name: lastName,
+              first_name: firstName,
+              phone: reservation.guest_phone,
+              email: reservation.guest_email,
+            }).select().single();
+            if (gErr) throw gErr;
+            guestId = newGuest.id;
+          }
         }
+
+        const nights = reservation.number_of_nights || 1;
+        const total = reservation.total_price || 0;
+
+        const { data: stay, error: stayErr } = await supabase.from('stays').insert({
+          hotel_id: hotel.id,
+          guest_id: guestId,
+          reservation_id: reservation.id,
+          stay_type: 'night',
+          room_id: reservation.room_id,
+          check_in_date: new Date().toISOString(),
+          check_out_date: reservation.check_out_date,
+          number_of_nights: nights,
+          number_of_adults: reservation.number_of_adults || 1,
+          number_of_children: reservation.number_of_children || 0,
+          price_per_night: total / Math.max(nights, 1),
+          total_price: total,
+          status: 'active',
+          payment_status: 'pending',
+          receptionist_id: profile.id,
+          receptionist_name: profile.full_name,
+          created_by: profile.id,
+          created_by_name: profile.full_name,
+        } as any).select().single();
+        if (stayErr) throw stayErr;
+
+        const invoice = await getOrCreateInvoice(hotel.id, stay.id, guestId);
+        await addChargeToInvoice({
+          hotelId: hotel.id,
+          invoiceId: invoice.id,
+          stayId: stay.id,
+          guestId,
+          description: `Hébergement — ${nights} nuit(s)`,
+          itemType: 'room',
+          quantity: nights,
+          unitPrice: total / Math.max(nights, 1),
+        });
+
+        // Update reservation status
+        await supabase.from('reservations').update({ status: 'checked_in' }).eq('id', reservation.id);
+
+        // Safety: update room
+        if (reservation.room_id) {
+          await supabase.from('rooms').update({ status: 'occupied' }).eq('id', reservation.room_id);
+        }
+
+        await withAudit(hotel.id, profile.id, profile.full_name || '', 'check_in', 'stays', stay.id, null, { reservation_id: reservation.id, room_id: reservation.room_id });
+        return { queued: false, duplicate: false };
+      } catch (error) {
+        if (isNetworkIssue(error)) {
+          enqueueOfflineSubmission({
+            type: 'checkin-reservation',
+            createdAt: new Date().toISOString(),
+            payload: {
+              hotelId: hotel.id,
+              profile: { id: profile.id, full_name: profile.full_name || '' },
+              reservation,
+            },
+          });
+          return { queued: true, duplicate: false };
+        }
+        throw error;
       }
-
-      const nights = reservation.number_of_nights || 1;
-      const total = reservation.total_price || 0;
-
-      const { data: stay, error: stayErr } = await supabase.from('stays').insert({
-        hotel_id: hotel.id,
-        guest_id: guestId,
-        reservation_id: reservation.id,
-        stay_type: 'night',
-        room_id: reservation.room_id,
-        check_in_date: new Date().toISOString(),
-        check_out_date: reservation.check_out_date,
-        number_of_nights: nights,
-        number_of_adults: reservation.number_of_adults || 1,
-        number_of_children: reservation.number_of_children || 0,
-        price_per_night: total / Math.max(nights, 1),
-        total_price: total,
-        status: 'active',
-        payment_status: 'pending',
-        receptionist_id: profile.id,
-        receptionist_name: profile.full_name,
-        created_by: profile.id,
-        created_by_name: profile.full_name,
-      } as any).select().single();
-      if (stayErr) throw stayErr;
-
-      const invoice = await getOrCreateInvoice(hotel.id, stay.id, guestId);
-      await addChargeToInvoice({
-        hotelId: hotel.id,
-        invoiceId: invoice.id,
-        stayId: stay.id,
-        guestId,
-        description: `Hébergement — ${nights} nuit(s)`,
-        itemType: 'room',
-        quantity: nights,
-        unitPrice: total / Math.max(nights, 1),
-      });
-
-      // Update reservation status
-      await supabase.from('reservations').update({ status: 'checked_in' }).eq('id', reservation.id);
-
-      // Safety: update room
-      if (reservation.room_id) {
-        await supabase.from('rooms').update({ status: 'occupied' }).eq('id', reservation.room_id);
-      }
-
-      await withAudit(hotel.id, profile.id, profile.full_name || '', 'check_in', 'stays', stay.id, null, { reservation_id: reservation.id, room_id: reservation.room_id });
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['reservations-checkin'] });
       qc.invalidateQueries({ queryKey: ['active-stays-checkout'] });
       qc.invalidateQueries({ queryKey: ['rooms'] });
-      toast.success(t('checkinout.checkin.success'));
+      if (result?.duplicate) {
+        toast.info('Cette reservation est deja enregistree en check-in.');
+      } else if (result?.queued) {
+        toast.success('Check-in mis en file locale. Synchronisation en attente du reseau.');
+      } else {
+        toast.success(t('checkinout.checkin.success'));
+      }
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -217,63 +257,143 @@ const CheckInOutPage = () => {
   const walkinCheckinMutation = useMutation({
     mutationFn: async () => {
       if (!hotel || !profile) throw new Error('Missing context');
-      let guestId = walkinGuestId;
 
-      // Create new guest if needed
-      if (!guestId) {
-        const { data: newGuest, error } = await supabase.from('guests').insert({
+      try {
+        let guestId = walkinGuestId;
+
+        // Reuse guest before creating a new one
+        if (!guestId && walkinNewGuest.phone) {
+          const { data: byPhone } = await supabase
+            .from('guests')
+            .select('id')
+            .eq('hotel_id', hotel.id)
+            .eq('phone', walkinNewGuest.phone)
+            .maybeSingle();
+          if (byPhone?.id) guestId = byPhone.id;
+        }
+
+        if (!guestId && walkinNewGuest.id_number) {
+          const { data: byIdCard } = await supabase
+            .from('guests')
+            .select('id')
+            .eq('hotel_id', hotel.id)
+            .eq('id_number', walkinNewGuest.id_number)
+            .maybeSingle();
+          if (byIdCard?.id) guestId = byIdCard.id;
+        }
+
+        if (!guestId && walkinNewGuest.last_name && walkinNewGuest.first_name) {
+          const { data: byName } = await supabase
+            .from('guests')
+            .select('id')
+            .eq('hotel_id', hotel.id)
+            .ilike('last_name', walkinNewGuest.last_name)
+            .ilike('first_name', walkinNewGuest.first_name)
+            .maybeSingle();
+          if (byName?.id) guestId = byName.id;
+        }
+
+        // Create new guest if needed
+        if (!guestId) {
+          const { data: newGuest, error } = await supabase.from('guests').insert({
+            hotel_id: hotel.id,
+            last_name: walkinNewGuest.last_name,
+            first_name: walkinNewGuest.first_name,
+            phone: walkinNewGuest.phone || null,
+            id_number: walkinNewGuest.id_number || null,
+          }).select().single();
+          if (error) throw error;
+          guestId = newGuest.id;
+        }
+
+        const { data: existingStay } = await supabase
+          .from('stays')
+          .select('id')
+          .eq('hotel_id', hotel.id)
+          .eq('room_id', walkinStay.room_id)
+          .eq('guest_id', guestId!)
+          .eq('status', 'active')
+          .maybeSingle();
+        if (existingStay?.id) {
+          return { queued: false, duplicate: true };
+        }
+
+        const room = availableRooms?.find(r => r.id === walkinStay.room_id);
+        const ppn = walkinStay.price_per_night || room?.price_per_night || 0;
+        const nights = walkinStay.check_out_date ? Math.max(1, Math.ceil((new Date(walkinStay.check_out_date).getTime() - new Date(walkinStay.check_in_date).getTime()) / 86400000)) : 1;
+        const total = ppn * nights;
+
+        const { data: stay } = await supabase.from('stays').insert({
           hotel_id: hotel.id,
-          last_name: walkinNewGuest.last_name,
-          first_name: walkinNewGuest.first_name,
-          phone: walkinNewGuest.phone || null,
-          id_number: walkinNewGuest.id_number || null,
-        }).select().single();
-        if (error) throw error;
-        guestId = newGuest.id;
+          guest_id: guestId!,
+          stay_type: 'night',
+          room_id: walkinStay.room_id,
+          check_in_date: new Date(walkinStay.check_in_date).toISOString(),
+          check_out_date: walkinStay.check_out_date ? new Date(walkinStay.check_out_date).toISOString() : null,
+          number_of_nights: nights,
+          price_per_night: ppn,
+          total_price: total,
+          status: 'active',
+          payment_status: 'pending',
+          receptionist_id: profile.id,
+          receptionist_name: profile.full_name,
+          created_by: profile.id,
+          created_by_name: profile.full_name,
+        } as any).select().single();
+
+        const invoice = await getOrCreateInvoice(hotel.id, stay?.id, guestId!);
+        await addChargeToInvoice({
+          hotelId: hotel.id,
+          invoiceId: invoice.id,
+          stayId: stay?.id,
+          guestId: guestId!,
+          description: `Hébergement — ${nights} nuit(s)`,
+          itemType: 'room',
+          quantity: nights,
+          unitPrice: ppn,
+        });
+
+        await supabase.from('rooms').update({ status: 'occupied' }).eq('id', walkinStay.room_id);
+        await withAudit(hotel.id, profile.id, profile.full_name || '', 'walkin_check_in', 'stays', stay?.id, null, { guest_id: guestId, room_id: walkinStay.room_id });
+        return { queued: false, duplicate: false };
+      } catch (error) {
+        if (isNetworkIssue(error)) {
+          enqueueOfflineSubmission({
+            type: 'walkin-checkin',
+            createdAt: new Date().toISOString(),
+            payload: {
+              hotelId: hotel.id,
+              profile: { id: profile.id, full_name: profile.full_name || '' },
+              walkinGuestId,
+              walkinNewGuest: {
+                last_name: walkinNewGuest.last_name,
+                first_name: walkinNewGuest.first_name,
+                phone: walkinNewGuest.phone || '',
+                id_number: walkinNewGuest.id_number || '',
+              },
+              walkinStay: {
+                room_id: walkinStay.room_id,
+                check_in_date: walkinStay.check_in_date,
+                check_out_date: walkinStay.check_out_date || '',
+                price_per_night: Number(walkinStay.price_per_night || 0),
+              },
+            },
+          });
+          return { queued: true, duplicate: false };
+        }
+        throw error;
       }
-
-      const room = availableRooms?.find(r => r.id === walkinStay.room_id);
-      const ppn = walkinStay.price_per_night || room?.price_per_night || 0;
-      const nights = walkinStay.check_out_date ? Math.max(1, Math.ceil((new Date(walkinStay.check_out_date).getTime() - new Date(walkinStay.check_in_date).getTime()) / 86400000)) : 1;
-      const total = ppn * nights;
-
-      const { data: stay } = await supabase.from('stays').insert({
-        hotel_id: hotel.id,
-        guest_id: guestId!,
-        stay_type: 'night',
-        room_id: walkinStay.room_id,
-        check_in_date: new Date(walkinStay.check_in_date).toISOString(),
-        check_out_date: walkinStay.check_out_date ? new Date(walkinStay.check_out_date).toISOString() : null,
-        number_of_nights: nights,
-        price_per_night: ppn,
-        total_price: total,
-        status: 'active',
-        payment_status: 'pending',
-        receptionist_id: profile.id,
-        receptionist_name: profile.full_name,
-        created_by: profile.id,
-        created_by_name: profile.full_name,
-      } as any).select().single();
-
-      const invoice = await getOrCreateInvoice(hotel.id, stay?.id, guestId!);
-      await addChargeToInvoice({
-        hotelId: hotel.id,
-        invoiceId: invoice.id,
-        stayId: stay?.id,
-        guestId: guestId!,
-        description: `Hébergement — ${nights} nuit(s)`,
-        itemType: 'room',
-        quantity: nights,
-        unitPrice: ppn,
-      });
-
-      await supabase.from('rooms').update({ status: 'occupied' }).eq('id', walkinStay.room_id);
-      await withAudit(hotel.id, profile.id, profile.full_name || '', 'walkin_check_in', 'stays', stay?.id, null, { guest_id: guestId, room_id: walkinStay.room_id });
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['active-stays-checkout'] });
       qc.invalidateQueries({ queryKey: ['rooms'] });
-      toast.success(t('checkinout.walkin.success'));
+      if (result?.duplicate) {
+        toast.info('Ce client est deja enregistre dans cette chambre.');
+      } else if (result?.queued) {
+        toast.success('Check-in walk-in mis en file locale. Synchronisation en attente du reseau.');
+      } else {
+        toast.success(t('checkinout.walkin.success'));
+      }
       setWalkinOpen(false);
       setWalkinStep(1);
       setWalkinGuestId(null);

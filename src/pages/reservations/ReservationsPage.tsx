@@ -11,6 +11,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { formatFCFA, formatDate, generateInvoiceNumber, generateReservationNumber } from '@/utils/formatters';
 import { withAudit } from '@/utils/auditLog';
+import { enqueueOfflineSubmission } from '@/services/offlineSubmissionQueue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -104,6 +105,11 @@ const ReservationsPage = () => {
   const selectedCategory = categories?.find(c => c.id === form.category_id);
   const estimatedBalance = Math.max(0, Number(form.total_price || 0) - Number(form.deposit_paid || 0));
 
+  const isNetworkIssue = (error: any) => {
+    const message = String(error?.message || error || '').toLowerCase();
+    return message.includes('fetch') || message.includes('network') || message.includes('offline') || message.includes('timeout');
+  };
+
   const handleCategoryChange = (catId: string) => {
     const cat = categories?.find(c => c.id === catId);
     setForm(f => ({
@@ -117,139 +123,177 @@ const ReservationsPage = () => {
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!hotel || !profile) throw new Error('Missing context');
+      try {
+        // Link existing guest when possible, and only create on NEW reservation when user opted in.
+        let guestId = selectedGuestId || editing?.guest_id || null;
+        if (!guestId && createGuestRecord && form.guest_name && !editing) {
+          const nameParts = form.guest_name.trim().split(' ').filter(Boolean);
+          const lastName = nameParts[0] || form.guest_name;
+          const firstName = nameParts.slice(1).join(' ') || '';
 
-      // Link existing guest when possible, and only create on NEW reservation when user opted in.
-      let guestId = selectedGuestId || editing?.guest_id || null;
-      if (!guestId && createGuestRecord && form.guest_name && !editing) {
-        const nameParts = form.guest_name.trim().split(' ').filter(Boolean);
-        const lastName = nameParts[0] || form.guest_name;
-        const firstName = nameParts.slice(1).join(' ') || '';
+          // Try to reuse an existing guest before creating a new one.
+          let existingGuest: any = null;
+          if (form.guest_phone) {
+            const { data } = await supabase
+              .from('guests')
+              .select('id')
+              .eq('hotel_id', hotel.id)
+              .eq('phone', form.guest_phone)
+              .maybeSingle();
+            existingGuest = data;
+          }
+          if (!existingGuest) {
+            const { data } = await supabase
+              .from('guests')
+              .select('id')
+              .eq('hotel_id', hotel.id)
+              .ilike('last_name', lastName)
+              .ilike('first_name', firstName || lastName)
+              .maybeSingle();
+            existingGuest = data;
+          }
 
-        // Try to reuse an existing guest before creating a new one.
-        let existingGuest: any = null;
-        if (form.guest_phone) {
-          const { data } = await supabase
-            .from('guests')
-            .select('id')
-            .eq('hotel_id', hotel.id)
-            .eq('phone', form.guest_phone)
-            .maybeSingle();
-          existingGuest = data;
-        }
-        if (!existingGuest) {
-          const { data } = await supabase
-            .from('guests')
-            .select('id')
-            .eq('hotel_id', hotel.id)
-            .ilike('last_name', lastName)
-            .ilike('first_name', firstName || lastName)
-            .maybeSingle();
-          existingGuest = data;
-        }
-
-        if (existingGuest?.id) {
-          guestId = existingGuest.id;
-        } else {
-          const { data: g } = await supabase.from('guests').insert({
-            hotel_id: hotel.id,
-            last_name: lastName,
-            first_name: firstName || lastName,
-            phone: form.guest_phone || null,
-            email: form.guest_email || null,
-          }).select().single();
-          if (g) guestId = g.id;
-        }
-      }
-
-      const payload: any = {
-        hotel_id: hotel.id,
-        guest_name: form.guest_name,
-        guest_phone: form.guest_phone || null,
-        guest_email: form.guest_email || null,
-        category_id: form.category_id || null,
-        room_id: form.room_id || null,
-        check_in_date: form.check_in_date,
-        check_out_date: form.check_out_date,
-        number_of_nights: nights,
-        number_of_adults: form.number_of_adults,
-        number_of_children: form.number_of_children,
-        total_price: form.total_price,
-        deposit_paid: form.deposit_paid,
-        payment_method_cash: form.payment_method_cash,
-        payment_method_om: form.payment_method_om,
-        payment_method_momo: form.payment_method_momo,
-        source: form.source,
-        special_requests: form.special_requests || null,
-        guest_id: guestId || null,
-      };
-
-      let reservationId = editing?.id;
-      if (editing) {
-        payload.reservation_number = editing.reservation_number;
-        const { error } = await supabase.from('reservations').update(payload).eq('id', editing.id);
-        if (error) throw error;
-      } else {
-        payload.reservation_number = generateReservationNumber();
-        payload.created_by = profile.id;
-        const { data: createdReservation, error } = await supabase.from('reservations').insert(payload).select('id').single();
-        if (error) throw error;
-        reservationId = createdReservation?.id;
-      }
-
-      // Ensure reservations appear in Billing with correct acompte/solde values.
-      if (reservationId) {
-        const amountPaid = Number(form.deposit_paid || 0);
-        const totalAmount = Number(form.total_price || 0);
-        const balanceDue = Math.max(0, totalAmount - amountPaid);
-        const invoiceStatus = balanceDue <= 0 ? 'paid' : amountPaid > 0 ? 'partial' : 'open';
-
-        const { data: existingInvoice } = await supabase
-          .from('invoices')
-          .select('id')
-          .eq('hotel_id', hotel.id)
-          .eq('reservation_id', reservationId)
-          .maybeSingle();
-
-        if (existingInvoice?.id) {
-          const { error: invoiceUpdateError } = await supabase
-            .from('invoices')
-            .update({
-              guest_id: guestId,
-              subtotal: totalAmount,
-              total_amount: totalAmount,
-              amount_paid: amountPaid,
-              balance_due: balanceDue,
-              status: invoiceStatus,
-            } as any)
-            .eq('id', existingInvoice.id);
-          if (invoiceUpdateError) throw invoiceUpdateError;
-        } else {
-          const { error: invoiceInsertError } = await supabase
-            .from('invoices')
-            .insert({
+          if (existingGuest?.id) {
+            guestId = existingGuest.id;
+          } else {
+            const { data: g } = await supabase.from('guests').insert({
               hotel_id: hotel.id,
-              guest_id: guestId,
-              reservation_id: reservationId,
-              invoice_number: generateInvoiceNumber(),
-              status: invoiceStatus,
-              subtotal: totalAmount,
-              total_amount: totalAmount,
-              amount_paid: amountPaid,
-              balance_due: balanceDue,
-            } as any);
-          if (invoiceInsertError) throw invoiceInsertError;
+              last_name: lastName,
+              first_name: firstName || lastName,
+              phone: form.guest_phone || null,
+              email: form.guest_email || null,
+            }).select().single();
+            if (g) guestId = g.id;
+          }
         }
-      }
 
-      if (profile && hotel) {
-        await withAudit(hotel.id, profile.id, profile.full_name || '', editing ? 'update_reservation' : 'create_reservation', 'reservations', editing?.id, null, payload);
+        const payload: any = {
+          hotel_id: hotel.id,
+          guest_name: form.guest_name,
+          guest_phone: form.guest_phone || null,
+          guest_email: form.guest_email || null,
+          category_id: form.category_id || null,
+          room_id: form.room_id || null,
+          check_in_date: form.check_in_date,
+          check_out_date: form.check_out_date,
+          number_of_nights: nights,
+          number_of_adults: form.number_of_adults,
+          number_of_children: form.number_of_children,
+          total_price: form.total_price,
+          deposit_paid: form.deposit_paid,
+          payment_method_cash: form.payment_method_cash,
+          payment_method_om: form.payment_method_om,
+          payment_method_momo: form.payment_method_momo,
+          source: form.source,
+          special_requests: form.special_requests || null,
+          guest_id: guestId || null,
+        };
+
+        let reservationId = editing?.id;
+        if (editing) {
+          payload.reservation_number = editing.reservation_number;
+          const { error } = await supabase.from('reservations').update(payload).eq('id', editing.id);
+          if (error) throw error;
+        } else {
+          payload.reservation_number = generateReservationNumber();
+          payload.created_by = profile.id;
+          const { data: createdReservation, error } = await supabase.from('reservations').insert(payload).select('id').single();
+          if (error) throw error;
+          reservationId = createdReservation?.id;
+        }
+
+        // Ensure reservations appear in Billing with correct acompte/solde values.
+        if (reservationId) {
+          const amountPaid = Number(form.deposit_paid || 0);
+          const totalAmount = Number(form.total_price || 0);
+          const balanceDue = Math.max(0, totalAmount - amountPaid);
+          const invoiceStatus = balanceDue <= 0 ? 'paid' : amountPaid > 0 ? 'partial' : 'open';
+
+          const { data: existingInvoice } = await supabase
+            .from('invoices')
+            .select('id')
+            .eq('hotel_id', hotel.id)
+            .eq('reservation_id', reservationId)
+            .maybeSingle();
+
+          if (existingInvoice?.id) {
+            const { error: invoiceUpdateError } = await supabase
+              .from('invoices')
+              .update({
+                guest_id: guestId,
+                subtotal: totalAmount,
+                total_amount: totalAmount,
+                amount_paid: amountPaid,
+                balance_due: balanceDue,
+                status: invoiceStatus,
+              } as any)
+              .eq('id', existingInvoice.id);
+            if (invoiceUpdateError) throw invoiceUpdateError;
+          } else {
+            const { error: invoiceInsertError } = await supabase
+              .from('invoices')
+              .insert({
+                hotel_id: hotel.id,
+                guest_id: guestId,
+                reservation_id: reservationId,
+                invoice_number: generateInvoiceNumber(),
+                status: invoiceStatus,
+                subtotal: totalAmount,
+                total_amount: totalAmount,
+                amount_paid: amountPaid,
+                balance_due: balanceDue,
+              } as any);
+            if (invoiceInsertError) throw invoiceInsertError;
+          }
+        }
+
+        if (profile && hotel) {
+          await withAudit(hotel.id, profile.id, profile.full_name || '', editing ? 'update_reservation' : 'create_reservation', 'reservations', editing?.id, null, payload);
+        }
+        return { queued: false };
+      } catch (error) {
+        if (isNetworkIssue(error)) {
+          enqueueOfflineSubmission({
+            type: 'reservation-save',
+            createdAt: new Date().toISOString(),
+            payload: {
+              hotelId: hotel.id,
+              profileId: profile.id,
+              reservationId: editing?.id,
+              reservationNumber: editing?.reservation_number,
+              selectedGuestId,
+              createGuestRecord: !!createGuestRecord,
+              nights,
+              form: {
+                guest_name: form.guest_name,
+                guest_phone: form.guest_phone,
+                guest_email: form.guest_email,
+                category_id: form.category_id,
+                room_id: form.room_id,
+                check_in_date: form.check_in_date,
+                check_out_date: form.check_out_date,
+                number_of_adults: Number(form.number_of_adults || 1),
+                number_of_children: Number(form.number_of_children || 0),
+                total_price: Number(form.total_price || 0),
+                deposit_paid: Number(form.deposit_paid || 0),
+                payment_method_cash: !!form.payment_method_cash,
+                payment_method_om: !!form.payment_method_om,
+                payment_method_momo: !!form.payment_method_momo,
+                source: form.source,
+                special_requests: form.special_requests || '',
+              },
+            },
+          });
+          return { queued: true };
+        }
+        throw error;
       }
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['reservations'] });
       qc.invalidateQueries({ queryKey: ['invoices'] });
       qc.invalidateQueries({ queryKey: ['guests'] });
-      toast.success(editing ? t('reservations.updated') : t('reservations.created'));
+      toast.success(result?.queued ? 'Reservation mise en file locale. Synchronisation en attente du reseau.' : (editing ? t('reservations.updated') : t('reservations.created')));
       closeDialog();
     },
     onError: (e: any) => toast.error(e.message),
@@ -533,7 +577,7 @@ const ReservationsPage = () => {
 
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog}>{t('common.cancel')}</Button>
-            <Button onClick={() => saveMutation.mutate()} disabled={!form.guest_name || !form.check_in_date || !form.check_out_date || saveMutation.isPending}>{t('common.save')}</Button>
+            <Button onClick={() => { if (!saveMutation.isPending) saveMutation.mutate(); }} disabled={!form.guest_name || !form.check_in_date || !form.check_out_date || saveMutation.isPending}>{t('common.save')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

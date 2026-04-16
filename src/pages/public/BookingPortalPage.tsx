@@ -37,7 +37,8 @@ import './BookingPortalPage.css';
 const featureIcons: Record<string, any> = { WiFi: Wifi, TV: Tv, AC: Wind };
 
 const BookingPortalPage = () => {
-  const { slug } = useParams<{ slug: string }>();
+  const { slug, hotelId } = useParams<{ slug?: string; hotelId?: string }>();
+  const hotelKey = slug || hotelId;
   const [submitted, setSubmitted] = useState(false);
   const [resNumber, setResNumber] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
@@ -51,12 +52,18 @@ const BookingPortalPage = () => {
   });
 
   const { data: hotel } = useQuery({
-    queryKey: ['hotel-public', slug],
+    queryKey: ['hotel-public', hotelKey],
     queryFn: async () => {
-      const { data } = await supabase.from('hotels').select('*').eq('slug', slug!).single();
-      return data;
+      const identifier = slug || hotelId;
+      if (!identifier) return null;
+
+      const { data: bySlug } = await supabase.from('hotels').select('*').eq('slug', identifier).maybeSingle();
+      if (bySlug) return bySlug;
+
+      const { data: byId } = await supabase.from('hotels').select('*').eq('id', identifier).maybeSingle();
+      return byId;
     },
-    enabled: !!slug,
+    enabled: !!hotelKey,
   });
 
   const { data: categories } = useQuery({

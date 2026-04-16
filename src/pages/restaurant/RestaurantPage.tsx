@@ -24,6 +24,7 @@ import { toast } from 'sonner';
 import { UtensilsCrossed, Plus, Pencil, Trash2 } from 'lucide-react';
 import { generateOrderNumber } from '@/utils/formatters';
 import { addChargeToInvoice } from '@/services/transactionService';
+import { enqueueOfflineSubmission } from '@/services/offlineSubmissionQueue';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -50,6 +51,11 @@ const RestaurantPage = () => {
   const [isWalkin, setIsWalkin] = useState(false);
   const [walkinName, setWalkinName] = useState('');
   const [walkinTable, setWalkinTable] = useState('');
+
+  const isNetworkIssue = (error: any) => {
+    const message = String(error?.message || error || '').toLowerCase();
+    return message.includes('fetch') || message.includes('network') || message.includes('offline') || message.includes('timeout');
+  };
 
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm({ resolver: zodResolver(menuSchema) });
 
@@ -105,49 +111,70 @@ const RestaurantPage = () => {
 
   const createOrderMutation = useMutation({
     mutationFn: async () => {
-      const totalAmount = cart.reduce((s, c) => s + c.item.price * c.quantity, 0);
-      // Fetch stay/guest/invoice info if room selected (orderRoom is room UUID, not number)
-      let stayId: string | null = null;
-      let guestId: string | null = null;
-      let invoiceId: string | null = null;
-      if (orderRoom && !isWalkin) {
-        const { data: stayData } = await supabase
-          .from('stays')
-          .select('id, guest_id, invoice_id, guests(first_name, last_name)')
-          .eq('room_id', orderRoom)
-          .eq('status', 'active')
-          .maybeSingle();
-        if (stayData) {
-          stayId = stayData.id;
-          guestId = stayData.guest_id;
-          invoiceId = stayData.invoice_id;
+      try {
+        const totalAmount = cart.reduce((s, c) => s + c.item.price * c.quantity, 0);
+        // Fetch stay/guest/invoice info if room selected (orderRoom is room UUID, not number)
+        let stayId: string | null = null;
+        let guestId: string | null = null;
+        let invoiceId: string | null = null;
+        if (orderRoom && !isWalkin) {
+          const { data: stayData } = await supabase
+            .from('stays')
+            .select('id, guest_id, invoice_id, guests(first_name, last_name)')
+            .eq('room_id', orderRoom)
+            .eq('status', 'active')
+            .maybeSingle();
+          if (stayData) {
+            stayId = stayData.id;
+            guestId = stayData.guest_id;
+            invoiceId = stayData.invoice_id;
+          }
         }
-      }
-      const { data: order, error } = await supabase.from('restaurant_orders').insert({
-        hotel_id: hotel!.id,
-        order_number: generateOrderNumber(),
-        room_id: !isWalkin && orderRoom ? orderRoom : null,
-        stay_id: stayId,
-        guest_id: guestId,
-        invoice_id: invoiceId,
-        billed_to_room: !!stayId,
-        is_walkin: isWalkin,
-        walkin_name: walkinName || null,
-        walkin_table: walkinTable || null,
-        total_amount: totalAmount,
-        created_by: profile?.id,
-        status: 'pending',
-      }).select().single();
-      if (error) throw error;
+        const { data: order, error } = await supabase.from('restaurant_orders').insert({
+          hotel_id: hotel!.id,
+          order_number: generateOrderNumber(),
+          room_id: !isWalkin && orderRoom ? orderRoom : null,
+          stay_id: stayId,
+          guest_id: guestId,
+          invoice_id: invoiceId,
+          billed_to_room: !!stayId,
+          is_walkin: isWalkin,
+          walkin_name: walkinName || null,
+          walkin_table: walkinTable || null,
+          total_amount: totalAmount,
+          created_by: profile?.id,
+          status: 'pending',
+        }).select().single();
+        if (error) throw error;
 
-      const items = cart.map(c => ({
-        hotel_id: hotel!.id, order_id: order.id, item_id: c.item.id,
-        quantity: c.quantity, unit_price: c.item.price, subtotal: c.item.price * c.quantity,
-      }));
-      const { error: itemsError } = await supabase.from('restaurant_order_items').insert(items);
-      if (itemsError) throw itemsError;
+        const items = cart.map(c => ({
+          hotel_id: hotel!.id, order_id: order.id, item_id: c.item.id,
+          quantity: c.quantity, unit_price: c.item.price, subtotal: c.item.price * c.quantity,
+        }));
+        const { error: itemsError } = await supabase.from('restaurant_order_items').insert(items);
+        if (itemsError) throw itemsError;
+        return { queued: false };
+      } catch (error) {
+        if (isNetworkIssue(error)) {
+          enqueueOfflineSubmission({
+            type: 'restaurant-order-create',
+            createdAt: new Date().toISOString(),
+            payload: {
+              hotelId: hotel!.id,
+              profileId: profile?.id,
+              orderRoom,
+              isWalkin,
+              walkinName,
+              walkinTable,
+              cart: cart.map((c) => ({ itemId: c.item.id, price: Number(c.item.price || 0), quantity: Number(c.quantity || 0) })),
+            },
+          });
+          return { queued: true };
+        }
+        throw error;
+      }
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['restaurant-orders'] }); toast.success(t('restaurant.created')); setOrderDialogOpen(false); setCart([]); setOrderRoom(''); setWalkinName(''); setWalkinTable(''); setIsWalkin(false); },
+    onSuccess: (result) => { qc.invalidateQueries({ queryKey: ['restaurant-orders'] }); toast.success(result?.queued ? 'Commande mise en file locale. Synchronisation en attente du reseau.' : t('restaurant.created')); setOrderDialogOpen(false); setCart([]); setOrderRoom(''); setWalkinName(''); setWalkinTable(''); setIsWalkin(false); },
     onError: (e: any) => toast.error(e.message),
   });
 

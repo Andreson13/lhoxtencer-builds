@@ -98,8 +98,7 @@ export const fetchCustomerDossierData = async (hotelId: string, guestId: string)
     .from('stays')
     .select(`
       *,
-      rooms(room_number),
-      room_categories(name, color),
+      rooms(room_number, room_categories(name, color)),
       invoices(
         id, invoice_number, subtotal, tax_percentage, tax_amount,
         total_amount, amount_paid, balance_due, status,

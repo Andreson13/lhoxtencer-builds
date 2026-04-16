@@ -3,6 +3,8 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { useI18n } from '@/contexts/I18nContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useStayAccrualSync } from '@/hooks/useStayAccrualSync';
+import { processOfflineSubmissionQueue } from '@/services/offlineSubmissionQueue';
+import { toast } from 'sonner';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 
@@ -16,7 +18,14 @@ export const AppLayout = () => {
   useStayAccrualSync(hotel?.id);
 
   useEffect(() => {
-    const markOnline = () => setIsOnline(true);
+    const markOnline = () => {
+      setIsOnline(true);
+      processOfflineSubmissionQueue().then((result) => {
+        if (result.processed > 0) {
+          toast.success(`${result.processed} enregistrement(s) synchronise(s)`);
+        }
+      }).catch(() => undefined);
+    };
     const markOffline = () => setIsOnline(false);
 
     window.addEventListener('online', markOnline);
@@ -27,6 +36,14 @@ export const AppLayout = () => {
       window.removeEventListener('offline', markOffline);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isOnline) return;
+    const timer = window.setInterval(() => {
+      processOfflineSubmissionQueue().catch(() => undefined);
+    }, 20000);
+    return () => window.clearInterval(timer);
+  }, [isOnline]);
 
   useEffect(() => {
     const section = location.pathname

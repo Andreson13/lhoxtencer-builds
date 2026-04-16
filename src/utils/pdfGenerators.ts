@@ -225,8 +225,9 @@ const formatItemType = (type: string): string => {
 const getMostUsedCategory = (stays: any[]): string => {
   const counts: Record<string, number> = {};
   stays.forEach((s) => {
-    if (s.room_categories?.name) {
-      counts[s.room_categories.name] = (counts[s.room_categories.name] || 0) + 1;
+    const categoryName = s.room_categories?.name || s.rooms?.room_categories?.name;
+    if (categoryName) {
+      counts[categoryName] = (counts[categoryName] || 0) + 1;
     }
   });
   return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || '-';
@@ -591,7 +592,7 @@ export async function generateCustomerDossier(params: {
       { content: String(i + 1), styles: { halign: 'center' } },
       { content: stay.stay_type === 'sieste' ? 'Sieste' : 'Nuit', styles: { halign: 'center' } },
       { content: stay.rooms?.room_number || '-', styles: { halign: 'center' } },
-      { content: stay.room_categories?.name || '-' },
+      { content: stay.room_categories?.name || stay.rooms?.room_categories?.name || '-' },
       { content: stay.check_in_date ? formatDateFR(stay.check_in_date) : '-', styles: { halign: 'center' } },
       { content: stay.actual_check_out ? formatDateFR(stay.actual_check_out) : (stay.check_out_date ? formatDateFR(stay.check_out_date) : '-'), styles: { halign: 'center' } },
       { content: String(stay.number_of_nights || 0), styles: { halign: 'center' } },
