@@ -54,7 +54,14 @@ export const useEnsureMainCourante = () => {
           .maybeSingle();
 
         const isCheckInDay = toLocalDateKey(stay.check_in_date) === date;
-        const hebergement = isCheckInDay ? (stay.price_per_night || 0) : 0;
+        const negotiatedTotal = Number(stay.arrangement_price || 0);
+        const configuredUnits = stay.stay_type === 'sieste'
+          ? 1
+          : Math.max(1, Number(stay.number_of_nights || 1));
+        const effectiveUnitPrice = negotiatedTotal > 0
+          ? negotiatedTotal / configuredUnits
+          : Number(stay.price_per_night || 0);
+        const hebergement = isCheckInDay ? effectiveUnitPrice : 0;
         const reportVeille = prevEntry?.a_reporter || 0;
 
         await supabase.from('main_courante').insert({

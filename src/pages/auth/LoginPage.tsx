@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -22,6 +22,7 @@ type LoginForm = z.infer<typeof loginSchema>;
 const LoginPage = () => {
   const { signIn } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { lang, setLang } = useI18n();
   const [loading, setLoading] = useState(false);
   const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
@@ -33,7 +34,8 @@ const LoginPage = () => {
     try {
       await signIn(data.email, data.password);
       toast.success('Connexion réussie');
-      navigate('/dashboard');
+      const nextPath = searchParams.get('next');
+      navigate(nextPath || '/dashboard');
     } catch (error: any) {
       toast.error(error.message || 'Erreur de connexion');
     } finally {

@@ -15,7 +15,7 @@ import { formatFCFA, formatDate, generateInvoiceNumber } from '@/utils/formatter
 import { generateCustomerDossier, generatePoliceRegister } from '@/utils/pdfGenerators';
 import { fetchCustomerDossierData, fetchPoliceRegisterRows, getCurrentWeekRange } from '@/services/guestDocumentService';
 import { enqueueOfflineSubmission } from '@/services/offlineSubmissionQueue';
-import { getOrCreateInvoice, addChargeToInvoice } from '@/services/transactionService';
+import { getOrCreateInvoice, addChargeToInvoice, isSiesteInvoiceItem } from '@/services/transactionService';
 import { withAudit } from '@/utils/auditLog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -137,11 +137,12 @@ const GuestsPage = () => {
   const { data: allStays } = useQuery({
     queryKey: ['stays-all', hotel?.id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('stays')
-        .select('id, guest_id, status, check_in_date, room_id, rooms(room_number), invoices(balance_due, amount_paid, total_amount)')
+        .select('id, guest_id, status, check_in_date, room_id, rooms(room_number), invoices!stays_invoice_id_fkey(balance_due, amount_paid, total_amount)')
         .eq('hotel_id', hotel!.id)
         .order('check_in_date', { ascending: false });
+      if (error) throw error;
       return data || [];
     },
     enabled: !!hotel?.id,
@@ -152,9 +153,10 @@ const GuestsPage = () => {
     queryFn: async () => {
       const { data } = await supabase
         .from('siestes')
-        .select('id, guest_id, check_in_time, check_out_time, status')
+        .select('id, guest_id, arrival_date, arrival_time, departure_date, departure_time')
         .eq('hotel_id', hotel!.id)
-        .order('check_in_time', { ascending: false });
+        .order('arrival_date', { ascending: false })
+        .order('arrival_time', { ascending: false });
       return data || [];
     },
     enabled: !!hotel?.id,
@@ -229,12 +231,12 @@ const GuestsPage = () => {
       if (!map[s.guest_id]) map[s.guest_id] = { count: 0, lastVisit: null, hasActive: false, paymentStatus: null };
 
       map[s.guest_id].count++;
-      const visitDate = s.check_out_time || s.check_in_time || null;
+      const visitDate = s.departure_date || s.arrival_date || null;
       if (visitDate && (!map[s.guest_id].lastVisit || visitDate > map[s.guest_id].lastVisit!)) {
         map[s.guest_id].lastVisit = visitDate;
       }
 
-      if (s.status === 'active') {
+      if (!s.departure_time) {
         map[s.guest_id].hasActive = true;
         if (!map[s.guest_id].paymentStatus) {
           map[s.guest_id].paymentStatus = 'pending';
@@ -250,14 +252,20 @@ const GuestsPage = () => {
     const checkIn = new Date(stay.check_in_date);
     const endDate = stay.actual_check_out ? new Date(stay.actual_check_out) : now;
     const isSieste = stay.stay_type === 'sieste';
-    const baseUnitPrice = Number(stay.price_per_night || 0);
+    const negotiatedTotal = Number(stay.arrangement_price || 0);
+    const configuredUnits = isSieste
+      ? 1
+      : Math.max(1, Number(stay.number_of_nights || 1));
+    const baseUnitPrice = negotiatedTotal > 0
+      ? negotiatedTotal / configuredUnits
+      : Number(stay.price_per_night || 0);
 
     const elapsedUnits = isSieste
       ? Math.max(1, Math.ceil((endDate.getTime() - checkIn.getTime()) / 3600000))
       : Math.max(1, Math.ceil((endDate.getTime() - checkIn.getTime()) / 86400000));
 
     const invoiceItems = stay.invoices?.invoice_items || [];
-    const roomItems = invoiceItems.filter((item: any) => item.item_type === (isSieste ? 'sieste' : 'room'));
+    const roomItems = invoiceItems.filter((item: any) => isSieste ? isSiesteInvoiceItem(item) : item.item_type === 'room');
     const billedRoomSubtotal = roomItems.reduce((sum: number, item: any) => sum + Number(item.subtotal || 0), 0);
 
     const expectedRoomSubtotal = elapsedUnits * baseUnitPrice;
@@ -276,10 +284,10 @@ const GuestsPage = () => {
     };
   };
 
-  const getCategoryLabel = (type: string) => {
-    if (type === 'room') return t('guests.history.lodging');
-    if (type === 'restaurant') return t('guests.history.restaurant');
-    if (type === 'bar' || type === 'minibar') return t('guests.history.bar');
+  const getCategoryLabel = (item: any) => {
+    if (item?.item_type === 'room' || isSiesteInvoiceItem(item)) return t('guests.history.lodging');
+    if (item?.item_type === 'restaurant') return t('guests.history.restaurant');
+    if (item?.item_type === 'bar' || item?.item_type === 'minibar') return t('guests.history.bar');
     return t('guests.history.extras');
   };
 
@@ -300,7 +308,7 @@ const GuestsPage = () => {
       Extras: [],
     };
     filteredHistoryItems.forEach((it: any) => {
-      const category = getCategoryLabel(it.item_type || 'extra');
+      const category = getCategoryLabel(it);
       groups[category].push(it);
     });
     return groups;
@@ -615,10 +623,15 @@ const GuestsPage = () => {
 
   // ---- GUEST PROFILE VIEW ----
   if (selectedGuestId && selectedGuest) {
-    const activeStay = (guestStays || [])
+    const activeStays = (guestStays || [])
       .filter((s: any) => s.status === 'active')
-      .sort((a: any, b: any) => new Date(b.check_in_date).getTime() - new Date(a.check_in_date).getTime())[0];
-    const activeLiveStats = activeStay ? getLiveStayStats(activeStay) : null;
+      .sort((a: any, b: any) => new Date(b.check_in_date).getTime() - new Date(a.check_in_date).getTime());
+    const activeStaySummaries = activeStays.map((stay: any) => ({
+      stay,
+      liveStats: getLiveStayStats(stay),
+    }));
+    const totalActiveEstimated = activeStaySummaries.reduce((sum, entry) => sum + (entry.liveStats?.estimatedTotal || Number((entry.stay as any).invoices?.total_amount || entry.stay.total_price || 0)), 0);
+    const totalActiveBalance = activeStaySummaries.reduce((sum, entry) => sum + (entry.liveStats?.estimatedBalance || Number((entry.stay as any).invoices?.balance_due || 0)), 0);
     const lifetimeValue = guestStays?.reduce((sum, s: any) => sum + ((s as any).invoices?.amount_paid || 0), 0) || 0;
     return (
       <div className="page-container space-y-6">
@@ -658,39 +671,54 @@ const GuestsPage = () => {
         </Card>
 
         {/* Active stay */}
-        {activeStay && (
+        {activeStaySummaries.length > 0 && (
           <Card className="border-primary">
-            <CardHeader><CardTitle className="flex items-center gap-2"><BedDouble className="h-5 w-5" />{t('guests.profile.activeStay')}</CardTitle></CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-4 gap-4 text-sm">
-                <div><span className="text-muted-foreground">{t('reports.table.room')}:</span> <span className="font-bold">{(activeStay as any).rooms?.room_number}</span></div>
-                <div><span className="text-muted-foreground">{t('guests.profile.checkin')}:</span> {formatDate(activeStay.check_in_date)}</div>
-                <div><span className="text-muted-foreground">{t('guests.profile.checkout')}:</span> {formatDate(activeStay.check_out_date)}</div>
-                <div><span className="text-muted-foreground">{t('common.total')}:</span> <span className="font-bold">{formatFCFA(activeLiveStats?.estimatedTotal || ((activeStay as any).invoices?.total_amount || activeStay.total_price))}</span></div>
-              </div>
-              <div className="mt-2 text-sm text-muted-foreground">
-                Duree en cours: <span className="font-medium">{activeLiveStats?.elapsedUnits || 0} {activeLiveStats?.unitLabel || ''}</span>
-                {(activeLiveStats?.deltaRoomCharge || 0) > 0 && (
-                  <span className="ml-2 text-orange-600">(+{formatFCFA(activeLiveStats?.deltaRoomCharge || 0)} a regulariser)</span>
-                )}
-              </div>
-              {(activeLiveStats?.estimatedBalance || (activeStay as any).invoices?.balance_due || 0) > 0 && (
-                <div className="mt-4 flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
-                  <p className="text-destructive font-semibold">{t('guests.profile.balance')}: {formatFCFA(activeLiveStats?.estimatedBalance || (activeStay as any).invoices?.balance_due || 0)}</p>
-                  <Button className="bg-green-600 hover:bg-green-700" onClick={() => {
-                    setPaymentContext({
-                      invoiceId: activeStay.invoice_id,
-                      stayId: activeStay.id,
-                      guestId: activeStay.guest_id,
-                      currentBalance: activeLiveStats?.estimatedBalance || (activeStay as any).invoices?.balance_due || 0,
-                      invoiceNumber: (activeStay as any).invoices?.invoice_number,
-                      roomNumber: (activeStay as any).rooms?.room_number,
-                      guestName: `${selectedGuest.last_name} ${selectedGuest.first_name}`,
-                    });
-                    setPaymentDialogOpen(true);
-                  }}>{t('guests.profile.markPaid')}</Button>
+            <CardHeader><CardTitle className="flex items-center gap-2"><BedDouble className="h-5 w-5" />{activeStaySummaries.length > 1 ? 'Séjours actifs' : t('guests.profile.activeStay')}</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              {activeStaySummaries.length > 1 && (
+                <div className="grid gap-4 md:grid-cols-3 rounded-md border bg-primary/5 p-4 text-sm">
+                  <div><span className="text-muted-foreground">Services actifs:</span> <span className="font-bold">{activeStaySummaries.length}</span></div>
+                  <div><span className="text-muted-foreground">{t('common.total')}:</span> <span className="font-bold">{formatFCFA(totalActiveEstimated)}</span></div>
+                  <div><span className="text-muted-foreground">{t('guests.profile.balance')}:</span> <span className="font-bold text-destructive">{formatFCFA(totalActiveBalance)}</span></div>
                 </div>
               )}
+
+              {activeStaySummaries.map(({ stay, liveStats }) => {
+                const currentBalance = liveStats?.estimatedBalance || Number((stay as any).invoices?.balance_due || 0);
+                return (
+                  <div key={stay.id} className="rounded-md border p-4">
+                    <div className="grid grid-cols-1 gap-4 text-sm md:grid-cols-4">
+                      <div><span className="text-muted-foreground">{t('reports.table.room')}:</span> <span className="font-bold">{(stay as any).rooms?.room_number}</span></div>
+                      <div><span className="text-muted-foreground">{t('guests.profile.checkin')}:</span> {formatDate(stay.check_in_date)}</div>
+                      <div><span className="text-muted-foreground">{t('guests.profile.checkout')}:</span> {formatDate(stay.check_out_date)}</div>
+                      <div><span className="text-muted-foreground">{t('common.total')}:</span> <span className="font-bold">{formatFCFA(liveStats?.estimatedTotal || Number((stay as any).invoices?.total_amount || stay.total_price || 0))}</span></div>
+                    </div>
+                    <div className="mt-2 text-sm text-muted-foreground">
+                      Duree en cours: <span className="font-medium">{liveStats?.elapsedUnits || 0} {liveStats?.unitLabel || ''}</span>
+                      {(liveStats?.deltaRoomCharge || 0) > 0 && (
+                        <span className="ml-2 text-orange-600">(+{formatFCFA(liveStats?.deltaRoomCharge || 0)} a regulariser)</span>
+                      )}
+                    </div>
+                    {currentBalance > 0 && (
+                      <div className="mt-4 flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
+                        <p className="text-destructive font-semibold">{t('guests.profile.balance')}: {formatFCFA(currentBalance)}</p>
+                        <Button className="bg-green-600 hover:bg-green-700" onClick={() => {
+                          setPaymentContext({
+                            invoiceId: stay.invoice_id,
+                            stayId: stay.id,
+                            guestId: stay.guest_id,
+                            currentBalance,
+                            invoiceNumber: (stay as any).invoices?.invoice_number,
+                            roomNumber: (stay as any).rooms?.room_number,
+                            guestName: `${selectedGuest.last_name} ${selectedGuest.first_name}`,
+                          });
+                          setPaymentDialogOpen(true);
+                        }}>{t('guests.profile.markPaid')}</Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </CardContent>
           </Card>
         )}
@@ -780,7 +808,7 @@ const GuestsPage = () => {
                                       {invoice.invoice_items.map((item: any, idx: number) => (
                                         <TableRow key={`${s.id}-${idx}`}>
                                           <TableCell>{item.description}</TableCell>
-                                          <TableCell>{item.item_type}</TableCell>
+                                          <TableCell>{isSiesteInvoiceItem(item) ? 'sieste' : item.item_type}</TableCell>
                                           <TableCell className="text-right">{item.quantity}</TableCell>
                                           <TableCell className="text-right">{formatFCFA(item.unit_price)}</TableCell>
                                           <TableCell className="text-right">{formatFCFA(item.subtotal)}</TableCell>

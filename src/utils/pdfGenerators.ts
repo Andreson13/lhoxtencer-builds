@@ -210,13 +210,15 @@ const formatPaymentMethod = (method: string): string => {
   return methods[method] || method || '-';
 };
 
-const formatItemType = (type: string): string => {
+const formatItemType = (type: string, description?: string): string => {
+  if (type === 'service' && /sieste/i.test(description || '')) return 'Sieste';
   const types: Record<string, string> = {
     room: 'Hebergement',
     restaurant: 'Restaurant',
     bar: 'Bar',
     minibar: 'Minibar',
     extra: 'Extra',
+    service: 'Service',
     sieste: 'Sieste',
   };
   return types[type] || type;
@@ -690,7 +692,7 @@ export async function generateCustomerDossier(params: {
       body: [
         ...((stay.invoices.invoice_items || []).map((item: any) => [
           item.description,
-          { content: formatItemType(item.item_type), styles: { halign: 'center' } },
+          { content: formatItemType(item.item_type, item.description), styles: { halign: 'center' } },
           { content: String(item.quantity), styles: { halign: 'center' } },
           { content: formatFCFA(item.unit_price), styles: { halign: 'right' } },
           { content: formatFCFA(item.subtotal), styles: { halign: 'right' } },

@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { supabase } from '@/integrations/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
 
+const PROFILE_STORAGE_KEY = 'hotel-harmony-auth-profile';
+
 export interface Profile {
   id: string;
   hotel_id: string | null;
@@ -41,6 +43,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const persistProfile = (value: Profile | null) => {
+    setProfile(value);
+
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (!value) {
+      window.localStorage.removeItem(PROFILE_STORAGE_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(value));
+  };
+
+  const restoreProfile = (userId: string) => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
+    const rawProfile = window.localStorage.getItem(PROFILE_STORAGE_KEY);
+    if (!rawProfile) {
+      return null;
+    }
+
+    try {
+      const cachedProfile = JSON.parse(rawProfile) as Profile;
+      return cachedProfile.id === userId ? cachedProfile : null;
+    } catch {
+      window.localStorage.removeItem(PROFILE_STORAGE_KEY);
+      return null;
+    }
+  };
+
   const fetchProfile = async (userId: string) => {
     const { data, error } = await supabase
       .from('profiles')
@@ -53,7 +89,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     if (data) {
-      setProfile(data as unknown as Profile);
+      persistProfile(data as unknown as Profile);
     }
   };
 
@@ -66,12 +102,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(session?.user ?? null);
 
         if (session?.user) {
+          const cachedProfile = restoreProfile(session.user.id);
+          if (cachedProfile) {
+            persistProfile(cachedProfile);
+          }
+
           try {
             await fetchProfile(session.user.id);
           } catch (error) {
             console.error('Failed to load profile during session bootstrap', error);
-            setProfile(null);
+            if (!cachedProfile) {
+              persistProfile(null);
+            }
           }
+        } else {
+          persistProfile(null);
         }
       })
       .finally(() => {
@@ -80,12 +125,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
 
         if (!session?.user) {
-          setProfile(null);
+          persistProfile(null);
           setLoading(false);
           return;
         }
@@ -94,20 +139,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           return;
         }
 
-        const shouldBlockUi = event === 'SIGNED_IN' || event === 'USER_UPDATED';
-
-        if (shouldBlockUi) {
-          setLoading(true);
+        const cachedProfile = restoreProfile(session.user.id);
+        if (cachedProfile) {
+          persistProfile(cachedProfile);
         }
 
         try {
           await fetchProfile(session.user.id);
         } catch (error) {
           console.error('Failed to refresh profile after auth state change', error);
-        } finally {
-          if (shouldBlockUi) {
-            setLoading(false);
-          }
         }
       }
     );
@@ -122,7 +162,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    setProfile(null);
+    persistProfile(null);
   };
 
   const refreshProfile = async () => {

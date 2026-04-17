@@ -1,6 +1,7 @@
 import React from 'react';
 import { Bell, Menu, LogOut, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,8 +9,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/AuthContext';
+import { useHotel } from '@/contexts/HotelContext';
 import { useI18n } from '@/contexts/I18nContext';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -17,6 +20,7 @@ interface HeaderProps {
 
 export const Header = ({ onToggleSidebar }: HeaderProps) => {
   const { profile, signOut } = useAuth();
+  const { hotel, managedHotels, switchHotel } = useHotel();
   const { t } = useI18n();
   const navigate = useNavigate();
 
@@ -32,6 +36,29 @@ export const Header = ({ onToggleSidebar }: HeaderProps) => {
       </Button>
 
       <div className="flex items-center gap-2">
+        {managedHotels.length > 1 && (
+          <Select
+            value={hotel?.id || ''}
+            onValueChange={async (hotelId) => {
+              try {
+                await switchHotel(hotelId);
+                navigate('/dashboard');
+              } catch (error: any) {
+                toast.error(error?.message || 'Impossible de changer d\'hôtel');
+              }
+            }}
+          >
+            <SelectTrigger className="w-[200px] h-9">
+              <SelectValue placeholder="Choisir hôtel" />
+            </SelectTrigger>
+            <SelectContent>
+              {managedHotels.map((managedHotel) => (
+                <SelectItem key={managedHotel.id} value={managedHotel.id}>{managedHotel.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
         <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')} title={t('header.notifications')}>
           <Bell className="h-5 w-5" />
         </Button>

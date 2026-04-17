@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { PaymentDialog } from '@/components/shared/PaymentDialog';
+import { isSiesteInvoiceItem } from '@/services/transactionService';
 import { formatFCFA, formatDate, generateInvoiceNumber } from '@/utils/formatters';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +22,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { toast } from 'sonner';
 import { Receipt, Plus, CreditCard } from 'lucide-react';
+
+const formatInvoiceItemType = (item: any) => {
+  if (isSiesteInvoiceItem(item)) return 'sieste';
+  return item.item_type || '-';
+};
 
 const BillingPage = () => {
   useRoleGuard(['admin', 'manager', 'receptionist', 'accountant']);
@@ -90,7 +96,7 @@ const BillingPage = () => {
                       {(inv as any).invoice_items?.map((item: any) => (
                         <TableRow key={item.id}>
                           <TableCell>{item.description}</TableCell>
-                          <TableCell>{item.item_type}</TableCell>
+                          <TableCell>{formatInvoiceItemType(item)}</TableCell>
                           <TableCell className="text-right">{item.quantity}</TableCell>
                           <TableCell className="text-right">{formatFCFA(item.unit_price)}</TableCell>
                           <TableCell className="text-right">{formatFCFA(item.subtotal)}</TableCell>

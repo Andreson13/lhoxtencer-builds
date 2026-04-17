@@ -67,17 +67,40 @@ const CashExpensesPage = () => {
     enabled: !!hotel?.id,
   });
 
+  const { data: pendingReceivables } = useQuery({
+    queryKey: ['cash-pending-receivables', hotel?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('stays')
+        .select('id, total_price, payment_status, invoices!stays_invoice_id_fkey(balance_due, amount_paid)')
+        .eq('hotel_id', hotel!.id)
+        .eq('status', 'active');
+
+      return (data || []).reduce((sum: number, row: any) => {
+        const invoiceBalance = Number(row.invoices?.balance_due || 0);
+        if (invoiceBalance > 0) {
+          return sum + invoiceBalance;
+        }
+        if (row.payment_status === 'paid') {
+          return sum;
+        }
+        return sum + Number(row.total_price || 0);
+      }, 0);
+    },
+    enabled: !!hotel?.id,
+  });
+
   const totalIn = movements?.filter(m => m.type === 'in').reduce((s, m) => s + m.amount, 0) || 0;
   const totalOut = movements?.filter(m => m.type === 'out').reduce((s, m) => s + m.amount, 0) || 0;
-  const expectedBalance = (currentSession?.opening_balance || 0) + totalIn - totalOut;
+  const cashExpectedBalance = (currentSession?.opening_balance || 0) + totalIn - totalOut;
 
   const manualCloseMutation = useMutation({
     mutationFn: async () => {
       if (!currentSession) return;
-      const diff = physicalCount - expectedBalance;
+      const diff = physicalCount - cashExpectedBalance;
       const { error } = await supabase.from('cash_sessions').update({
         status: 'closed', closed_at: new Date().toISOString(), closed_by: profile?.id,
-        expected_balance: expectedBalance, closing_balance: physicalCount, difference: diff,
+        expected_balance: cashExpectedBalance, closing_balance: physicalCount, difference: diff,
       }).eq('id', currentSession.id);
       if (error) throw error;
     },
@@ -121,11 +144,12 @@ const CashExpensesPage = () => {
               <Badge>Ouverte automatiquement</Badge>
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-4 gap-4">
+          <CardContent className="grid grid-cols-2 gap-4 lg:grid-cols-5">
             <div><p className="text-sm text-muted-foreground">Solde d'ouverture</p><p className="text-xl font-bold">{formatFCFA(currentSession.opening_balance)}</p></div>
             <div><p className="text-sm text-muted-foreground">Entrées</p><p className="text-xl font-bold text-green-600">{formatFCFA(totalIn)}</p></div>
             <div><p className="text-sm text-muted-foreground">Sorties</p><p className="text-xl font-bold text-destructive">{formatFCFA(totalOut)}</p></div>
-            <div><p className="text-sm text-muted-foreground">Solde attendu</p><p className="text-xl font-bold">{formatFCFA(expectedBalance)}</p></div>
+            <div><p className="text-sm text-muted-foreground">Solde caisse attendu</p><p className="text-xl font-bold">{formatFCFA(cashExpectedBalance)}</p></div>
+            <div><p className="text-sm text-muted-foreground">A encaisser</p><p className="text-xl font-bold text-orange-600">{formatFCFA(pendingReceivables || 0)}</p></div>
           </CardContent>
         </Card>
       )}
@@ -138,7 +162,7 @@ const CashExpensesPage = () => {
 
         <TabsContent value="cash" className="mt-4 space-y-4">
           {(profile?.role === 'admin' || profile?.role === 'manager') && currentSession && (
-            <Button variant="destructive" onClick={() => { setPhysicalCount(expectedBalance); setManualCloseOpen(true); }}>Clôture manuelle</Button>
+            <Button variant="destructive" onClick={() => { setPhysicalCount(cashExpectedBalance); setManualCloseOpen(true); }}>Clôture manuelle</Button>
           )}
           {movements && movements.length > 0 && (
             <div className="rounded-md border">
@@ -200,12 +224,12 @@ const CashExpensesPage = () => {
         <DialogContent>
           <DialogHeader><DialogTitle>Clôture manuelle de la caisse</DialogTitle><DialogDescription>Comptez le cash physique</DialogDescription></DialogHeader>
           <div className="space-y-4">
-            <div><Label>Solde attendu</Label><Input value={formatFCFA(expectedBalance)} readOnly className="bg-muted" /></div>
+            <div><Label>Solde caisse attendu</Label><Input value={formatFCFA(cashExpectedBalance)} readOnly className="bg-muted" /></div>
             <div><Label>Comptage physique</Label><Input type="number" value={physicalCount} onChange={e => setPhysicalCount(Number(e.target.value))} /></div>
             <div>
               <Label>Différence</Label>
-              <p className={`text-lg font-bold ${physicalCount - expectedBalance >= 0 ? 'text-green-600' : 'text-destructive'}`}>
-                {formatFCFA(physicalCount - expectedBalance)}
+              <p className={`text-lg font-bold ${physicalCount - cashExpectedBalance >= 0 ? 'text-green-600' : 'text-destructive'}`}>
+                {formatFCFA(physicalCount - cashExpectedBalance)}
               </p>
             </div>
           </div>

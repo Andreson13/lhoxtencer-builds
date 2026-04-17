@@ -63,10 +63,19 @@ const DashboardPage = () => {
     queryFn: async () => {
       const { data } = await supabase
         .from('stays')
-        .select('id, invoices(balance_due)')
+        .select('id, total_price, payment_status, invoices!stays_invoice_id_fkey(balance_due, amount_paid)')
         .eq('hotel_id', hotelId!)
         .eq('status', 'active');
-      return (data || []).reduce((sum: number, row: any) => sum + (row.invoices?.balance_due || 0), 0);
+      return (data || []).reduce((sum: number, row: any) => {
+        const invoiceBalance = Number(row.invoices?.balance_due || 0);
+        if (invoiceBalance > 0) {
+          return sum + invoiceBalance;
+        }
+        if (row.payment_status === 'paid') {
+          return sum;
+        }
+        return sum + Number(row.total_price || 0);
+      }, 0);
     },
     enabled: !!hotelId,
   });

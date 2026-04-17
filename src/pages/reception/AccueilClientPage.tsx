@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { Search, Moon, Clock, CalendarCheck, User, BedDouble, Check, ArrowRight } from 'lucide-react';
+import { Search, Moon, Clock, CalendarCheck, User, BedDouble, Check, ArrowRight, Loader2 } from 'lucide-react';
 
 const AccueilClientPage = () => {
   useRoleGuard(['admin', 'manager', 'receptionist']);
@@ -42,10 +42,22 @@ const AccueilClientPage = () => {
   const [numAdults, setNumAdults] = useState(1);
   const [numChildren, setNumChildren] = useState(0);
   const [negotiatedPrice, setNegotiatedPrice] = useState<number | null>(null);
-  const [payNow, setPayNow] = useState(false);
+  const [payNow, setPayNow] = useState<boolean | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<string[]>(['cash']);
   const [success, setSuccess] = useState<{ room: string; guest: string } | null>(null);
   const [prefillApplied, setPrefillApplied] = useState(false);
+  const serviceSectionRef = useRef<HTMLDivElement | null>(null);
+  const categorySectionRef = useRef<HTMLDivElement | null>(null);
+  const roomSelectionRef = useRef<HTMLDivElement | null>(null);
+  const detailsSectionRef = useRef<HTMLDivElement | null>(null);
+  const paymentSectionRef = useRef<HTMLDivElement | null>(null);
+  const finalizeSectionRef = useRef<HTMLDivElement | null>(null);
+  const guestReadyRef = useRef(false);
+  const serviceReadyRef = useRef(false);
+  const categoryReadyRef = useRef(false);
+  const roomReadyRef = useRef(false);
+  const detailsReadyRef = useRef(false);
+  const paymentReadyRef = useRef(false);
 
   const toDateKey = (value: string | null | undefined) => {
     if (!value) return '';
@@ -158,6 +170,65 @@ const AccueilClientPage = () => {
     ? (selectedCategory?.price_sieste || 0)
     : (selectedCategory?.price_per_night || 0) * nights;
   const finalPrice = negotiatedPrice != null && negotiatedPrice > 0 ? negotiatedPrice : basePrice;
+  const hasGuestIdentity = Boolean(selectedGuestId || (newGuest.last_name.trim() && newGuest.first_name.trim()));
+  const hasBookableService = Boolean(serviceType && serviceType !== 'reservation');
+  const detailsComplete = serviceType === 'night'
+    ? Boolean(checkInDate && checkOutDate)
+    : Boolean(arrivalTime && durationHours > 0);
+  const paymentDecisionMade = payNow !== null;
+
+  useEffect(() => {
+    if (hasGuestIdentity && !guestReadyRef.current) {
+      serviceSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    guestReadyRef.current = hasGuestIdentity;
+  }, [hasGuestIdentity]);
+
+  useEffect(() => {
+    if (hasBookableService && !serviceReadyRef.current) {
+      categorySectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    serviceReadyRef.current = hasBookableService;
+  }, [hasBookableService]);
+
+  useEffect(() => {
+    const hasCategory = Boolean(selectedCategoryId && hasBookableService);
+    if (hasCategory && !categoryReadyRef.current) {
+      roomSelectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    categoryReadyRef.current = hasCategory;
+  }, [hasBookableService, selectedCategoryId]);
+
+  useEffect(() => {
+    const hasRoom = Boolean(selectedRoomId && hasBookableService);
+    if (hasRoom && !roomReadyRef.current) {
+      detailsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    roomReadyRef.current = hasRoom;
+  }, [hasBookableService, selectedRoomId]);
+
+  useEffect(() => {
+    if (detailsComplete && selectedRoomId && !detailsReadyRef.current) {
+      paymentSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    detailsReadyRef.current = detailsComplete;
+  }, [detailsComplete, selectedRoomId]);
+
+  useEffect(() => {
+    if (paymentDecisionMade && detailsComplete && !paymentReadyRef.current) {
+      finalizeSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    paymentReadyRef.current = paymentDecisionMade;
+  }, [detailsComplete, paymentDecisionMade]);
+
+  const reservationHint = useMemo(() => {
+    if (!reservationPrefill) return null;
+    return {
+      number: reservationPrefill.reservation_number,
+      name: reservationPrefill.guest_name,
+      status: reservationPrefill.status,
+    };
+  }, [reservationPrefill]);
 
   const finalizeMutation = useMutation({
     mutationFn: async () => {
@@ -192,7 +263,7 @@ const AccueilClientPage = () => {
         stayData.check_in_date = new Date(checkInDate).toISOString();
         stayData.check_out_date = checkOutDate ? new Date(checkOutDate).toISOString() : null;
         stayData.number_of_nights = nights;
-        stayData.price_per_night = selectedCategory?.price_per_night || 0;
+        stayData.price_per_night = finalPrice / Math.max(nights, 1);
       } else {
         stayData.check_in_date = new Date().toISOString();
       }
@@ -201,10 +272,14 @@ const AccueilClientPage = () => {
       const { data: stay, error: stayErr } = await supabase.from('stays').insert(stayData).select().single();
       if (stayErr) throw stayErr;
 
-      // Room occupied
-      await supabase.from('rooms').update({ status: 'occupied' }).eq('id', selectedRoomId);
+      const [roomUpdateResult, invoice] = await Promise.all([
+        supabase.from('rooms').update({ status: 'occupied' }).eq('id', selectedRoomId),
+        getOrCreateInvoice(hotel.id, stay.id, guestId),
+      ]);
 
-      const invoice = await getOrCreateInvoice(hotel.id, stay.id, guestId);
+      if (roomUpdateResult.error) {
+        throw roomUpdateResult.error;
+      }
 
       const chargeDescription = serviceType === 'sieste'
         ? `Sieste — ${durationHours}h`
@@ -248,9 +323,9 @@ const AccueilClientPage = () => {
         });
       }
 
-      await withAudit(hotel.id, profile.id, profile.full_name || '', 'check_in', 'stays', stay.id, null, { guest_id: guestId, room_id: selectedRoomId, service: serviceType });
+      void withAudit(hotel.id, profile.id, profile.full_name || '', 'check_in', 'stays', stay.id, null, { guest_id: guestId, room_id: selectedRoomId, service: serviceType });
 
-      return { room: room?.room_number || '', guest: guestName };
+      return { room: selectedRoom?.room_number || '', guest: guestName };
     },
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['rooms'] });
@@ -270,7 +345,13 @@ const AccueilClientPage = () => {
     setCheckInDate(new Date().toISOString().split('T')[0]); setCheckOutDate('');
     setArrivalTime(new Date().toTimeString().slice(0, 5)); setDurationHours(3);
     setNumAdults(1); setNumChildren(0); setNegotiatedPrice(null);
-    setPayNow(false); setPaymentMethods(['cash']); setSuccess(null);
+    setPayNow(null); setPaymentMethods(['cash']); setSuccess(null);
+    guestReadyRef.current = false;
+    serviceReadyRef.current = false;
+    categoryReadyRef.current = false;
+    roomReadyRef.current = false;
+    detailsReadyRef.current = false;
+    paymentReadyRef.current = false;
   };
 
   // Success screen
@@ -294,15 +375,7 @@ const AccueilClientPage = () => {
     );
   }
 
-  const canFinalize = (selectedGuestId || (newGuest.last_name && newGuest.first_name)) && serviceType && selectedRoomId;
-  const reservationHint = useMemo(() => {
-    if (!reservationPrefill) return null;
-    return {
-      number: reservationPrefill.reservation_number,
-      name: reservationPrefill.guest_name,
-      status: reservationPrefill.status,
-    };
-  }, [reservationPrefill]);
+  const canFinalize = hasGuestIdentity && hasBookableService && selectedRoomId && detailsComplete && paymentDecisionMade;
 
   return (
     <div className="page-container">
@@ -372,6 +445,7 @@ const AccueilClientPage = () => {
           </Card>
 
           {/* Section B — Service Type */}
+          <div ref={serviceSectionRef}>
           <Card>
             <CardHeader><CardTitle className="text-base">2. Service</CardTitle></CardHeader>
             <CardContent>
@@ -394,9 +468,11 @@ const AccueilClientPage = () => {
               </div>
             </CardContent>
           </Card>
+          </div>
 
           {/* Section C — Category & Room */}
           {serviceType && serviceType !== 'reservation' && (
+            <div ref={categorySectionRef}>
             <Card>
               <CardHeader><CardTitle className="text-base">3. Catégorie & Chambre</CardTitle></CardHeader>
               <CardContent className="space-y-4">
@@ -415,7 +491,7 @@ const AccueilClientPage = () => {
                   ))}
                 </div>
                 {selectedCategoryId && (
-                  <div>
+                  <div ref={roomSelectionRef}>
                     <Label className="text-sm font-semibold">Chambres disponibles</Label>
                     {!availableRooms?.length ? (
                       <p className="text-sm text-muted-foreground mt-2">Aucune chambre disponible dans cette catégorie</p>
@@ -434,10 +510,12 @@ const AccueilClientPage = () => {
                 )}
               </CardContent>
             </Card>
+            </div>
           )}
 
           {/* Section D — Details */}
           {serviceType && serviceType !== 'reservation' && selectedRoomId && (
+            <div ref={detailsSectionRef}>
             <Card>
               <CardHeader><CardTitle className="text-base">4. Détails</CardTitle></CardHeader>
               <CardContent>
@@ -472,16 +550,25 @@ const AccueilClientPage = () => {
                 </div>
               </CardContent>
             </Card>
+            </div>
           )}
 
           {/* Section E — Payment */}
           {serviceType && serviceType !== 'reservation' && selectedRoomId && (
+            <div ref={paymentSectionRef}>
             <Card>
               <CardHeader><CardTitle className="text-base">5. Paiement</CardTitle></CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <Switch checked={payNow} onCheckedChange={setPayNow} />
-                  <Label>Payer maintenant</Label>
+                <div className="space-y-2">
+                  <Label>Le client paye maintenant ?</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Button type="button" variant={payNow === true ? 'default' : 'outline'} onClick={() => setPayNow(true)}>
+                      Oui, payer maintenant
+                    </Button>
+                    <Button type="button" variant={payNow === false ? 'default' : 'outline'} onClick={() => setPayNow(false)}>
+                      Non, paiement plus tard
+                    </Button>
+                  </div>
                 </div>
                 {payNow && (
                   <div className="flex gap-4">
@@ -496,6 +583,7 @@ const AccueilClientPage = () => {
                 )}
               </CardContent>
             </Card>
+            </div>
           )}
         </div>
 
@@ -556,14 +644,17 @@ const AccueilClientPage = () => {
                     </div>
                   )}
                   <p className="text-3xl font-bold mt-1">{formatFCFA(finalPrice)}</p>
-                  {payNow && <Badge className="mt-1 bg-green-600">Paiement immédiat</Badge>}
-                  {!payNow && serviceType && <Badge variant="outline" className="mt-1">Paiement en attente</Badge>}
+                  {payNow === true && <Badge className="mt-1 bg-green-600">Paiement immédiat</Badge>}
+                  {payNow === false && serviceType && <Badge variant="outline" className="mt-1">Paiement en attente</Badge>}
                 </div>
 
-                <Button className="w-full mt-4" size="lg" disabled={!canFinalize || finalizeMutation.isPending}
-                  onClick={() => finalizeMutation.mutate()}>
-                  <ArrowRight className="h-4 w-4 mr-2" />Finaliser l'accueil
-                </Button>
+                <div ref={finalizeSectionRef}>
+                  <Button className="w-full mt-4" size="lg" disabled={!canFinalize || finalizeMutation.isPending}
+                    onClick={() => finalizeMutation.mutate()}>
+                    {finalizeMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ArrowRight className="h-4 w-4 mr-2" />}
+                    {finalizeMutation.isPending ? 'Finalisation en cours...' : "Finaliser l'accueil"}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </div>

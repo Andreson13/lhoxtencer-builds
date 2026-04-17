@@ -2,6 +2,23 @@ import { supabase } from '@/lib/supabase';
 import { generateInvoiceNumber } from '@/utils/formatters';
 import { logAudit } from '@/utils/auditLog';
 
+export const getCompatibleInvoiceItemType = (itemType: string) => {
+  if (itemType === 'sieste') return 'service';
+  if (itemType === 'bar') return 'minibar';
+  return itemType;
+};
+
+export const isSiesteInvoiceItem = (item: { item_type?: string | null; description?: string | null }) => {
+  if (item.item_type === 'sieste') return true;
+  return item.item_type === 'service' && /sieste/i.test(item.description || '');
+};
+
+const runInBackground = (task: Promise<unknown>, label: string) => {
+  void task.catch((error) => {
+    console.error(label, error);
+  });
+};
+
 const toDateKey = (date = new Date()) => {
   const d = typeof date === 'string' ? new Date(date) : date;
   const y = d.getFullYear();
@@ -60,7 +77,7 @@ export async function addChargeToInvoice(params: {
   stayId: string;
   guestId: string;
   description: string;
-  itemType: 'room' | 'restaurant' | 'bar' | 'minibar' | 'extra' | 'sieste' | 'service';
+  itemType: 'room' | 'restaurant' | 'bar' | 'minibar' | 'extra' | 'sieste' | 'service' | 'other';
   quantity: number;
   unitPrice: number;
   date?: string;
@@ -86,12 +103,13 @@ export async function addChargeToInvoice(params: {
 
   const date = params.date || toDateKey();
   const subtotal = params.quantity * params.unitPrice;
+  const storedItemType = getCompatibleInvoiceItemType(params.itemType);
 
   const { error: itemError } = await supabase.from('invoice_items').insert({
     hotel_id: params.hotelId,
     invoice_id: params.invoiceId,
     description: params.description,
-    item_type: params.itemType,
+    item_type: storedItemType,
     quantity: params.quantity,
     unit_price: params.unitPrice,
     subtotal,
@@ -125,7 +143,7 @@ export async function addChargeToInvoice(params: {
     .update({ payment_status: 'pending' } as any)
     .eq('id', params.stayId);
 
-  await reconcileMainCouranteForDate(params.hotelId, date);
+  runInBackground(reconcileMainCouranteForDate(params.hotelId, date), 'reconcileMainCouranteForDate after addChargeToInvoice failed');
 }
 
 export async function recordPayment(params: {
@@ -205,7 +223,7 @@ export async function recordPayment(params: {
     { amount: params.amount, method: params.paymentMethod, invoice_id: params.invoiceId },
   );
 
-  await reconcileMainCouranteForDate(params.hotelId, date);
+  runInBackground(reconcileMainCouranteForDate(params.hotelId, date), 'reconcileMainCouranteForDate after recordPayment failed');
 
   return payment;
 }
@@ -463,7 +481,7 @@ export async function synchronizeActiveStayAccruals(hotelId: string) {
 
   const { data: activeStays, error: staysError } = await supabase
     .from('stays')
-    .select('id, hotel_id, guest_id, stay_type, check_in_date, actual_check_out, number_of_nights, price_per_night, total_price, invoice_id, status')
+    .select('id, hotel_id, guest_id, stay_type, check_in_date, actual_check_out, number_of_nights, price_per_night, arrangement_price, total_price, invoice_id, status')
     .eq('hotel_id', hotelId)
     .eq('status', 'active');
 
@@ -481,7 +499,7 @@ export async function synchronizeActiveStayAccruals(hotelId: string) {
   if (invoiceIds.length > 0) {
     const { data: invoiceItems, error: invoiceItemsError } = await supabase
       .from('invoice_items')
-      .select('invoice_id, item_type, quantity')
+      .select('invoice_id, item_type, description, quantity')
       .eq('hotel_id', hotelId)
       .in('invoice_id', invoiceIds as string[]);
 
@@ -490,7 +508,7 @@ export async function synchronizeActiveStayAccruals(hotelId: string) {
         if (!item.invoice_id) continue;
         const bucket = billedByInvoice.get(item.invoice_id) || { room: 0, sieste: 0 };
         if (item.item_type === 'room') bucket.room += Number(item.quantity || 0);
-        if (item.item_type === 'sieste') bucket.sieste += Number(item.quantity || 0);
+        if (isSiesteInvoiceItem(item)) bucket.sieste += Number(item.quantity || 0);
         billedByInvoice.set(item.invoice_id, bucket);
       }
     }
@@ -508,7 +526,13 @@ export async function synchronizeActiveStayAccruals(hotelId: string) {
       ? Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 3600000))
       : Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000));
 
-    const unitPrice = Number(stay.price_per_night || 0);
+    const negotiatedTotal = Number(stay.arrangement_price || 0);
+    const configuredUnits = isSieste
+      ? 1
+      : Math.max(1, Number(stay.number_of_nights || 1));
+    const unitPrice = negotiatedTotal > 0
+      ? negotiatedTotal / configuredUnits
+      : Number(stay.price_per_night || 0);
     const expectedTotal = elapsedUnits * unitPrice;
     const billed = billedByInvoice.get(stay.invoice_id || '') || { room: 0, sieste: 0 };
     const billedUnits = isSieste ? billed.sieste : billed.room;

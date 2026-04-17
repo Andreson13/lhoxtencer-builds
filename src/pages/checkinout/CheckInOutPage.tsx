@@ -10,7 +10,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { formatFCFA, formatDate, generateInvoiceNumber } from '@/utils/formatters';
 import { generateCustomerDossier } from '@/utils/pdfGenerators';
 import { fetchCustomerDossierData } from '@/services/guestDocumentService';
-import { getOrCreateInvoice, addChargeToInvoice } from '@/services/transactionService';
+import { getOrCreateInvoice, addChargeToInvoice, isSiesteInvoiceItem } from '@/services/transactionService';
 import { enqueueOfflineSubmission } from '@/services/offlineSubmissionQueue';
 import { withAudit } from '@/utils/auditLog';
 import { Button } from '@/components/ui/button';
@@ -58,7 +58,13 @@ const CheckInOutPage = () => {
   };
 
   const getLiveEstimatedTotal = (stay: any) => {
-    const unitPrice = Number(stay.price_per_night || 0);
+    const negotiatedTotal = Number(stay.arrangement_price || 0);
+    const configuredUnits = stay.stay_type === 'sieste'
+      ? 1
+      : Math.max(1, Number(stay.number_of_nights || 1));
+    const unitPrice = negotiatedTotal > 0
+      ? negotiatedTotal / configuredUnits
+      : Number(stay.price_per_night || 0);
     return getLiveStayUnits(stay) * unitPrice;
   };
 
@@ -417,7 +423,7 @@ const CheckInOutPage = () => {
         if (stay.invoice_id) {
           const { data } = await supabase
             .from('invoices')
-            .select('id, guest_id, balance_due, total_amount, amount_paid, invoice_items(item_type, quantity, unit_price, subtotal)')
+            .select('id, guest_id, balance_due, total_amount, amount_paid, invoice_items(item_type, description, quantity, unit_price, subtotal)')
             .eq('id', stay.invoice_id)
             .maybeSingle();
           invoice = data;
@@ -425,10 +431,15 @@ const CheckInOutPage = () => {
 
         const liveUnits = getLiveStayUnits(stay);
         const storedUnits = Number(stay.number_of_nights || 0);
-        const unitPrice = Number(stay.price_per_night || 0);
-        const itemType = stay.stay_type === 'sieste' ? 'sieste' : 'room';
+        const negotiatedTotal = Number(stay.arrangement_price || 0);
+        const configuredUnits = stay.stay_type === 'sieste'
+          ? 1
+          : Math.max(1, Number(stay.number_of_nights || 1));
+        const unitPrice = negotiatedTotal > 0
+          ? negotiatedTotal / configuredUnits
+          : Number(stay.price_per_night || 0);
         const alreadyBilledUnits = (invoice?.invoice_items || [])
-          .filter((item: any) => item.item_type === itemType)
+          .filter((item: any) => stay.stay_type === 'sieste' ? isSiesteInvoiceItem(item) : item.item_type === 'room')
           .reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
         const missingUnits = Math.max(0, liveUnits - Math.max(storedUnits, alreadyBilledUnits));
 
@@ -439,7 +450,7 @@ const CheckInOutPage = () => {
             stayId: stay.id,
             guestId: stay.guest_id,
             description: stay.stay_type === 'sieste' ? `Extension sieste - ${missingUnits}h` : `Nuitees additionnelles - ${missingUnits} nuit(s)`,
-            itemType: itemType as any,
+            itemType: (stay.stay_type === 'sieste' ? 'sieste' : 'room') as any,
             quantity: missingUnits,
             unitPrice,
           });
@@ -492,7 +503,9 @@ const CheckInOutPage = () => {
               invoiceId: stay.invoice_id,
               stayType: stay.stay_type,
               storedUnits: Number(stay.number_of_nights || 0),
-              unitPrice: Number(stay.price_per_night || 0),
+              unitPrice: Number(stay.arrangement_price || 0) > 0
+                ? Number(stay.arrangement_price || 0) / Math.max(1, Number(stay.number_of_nights || 1))
+                : Number(stay.price_per_night || 0),
             },
           });
           return { queued: true, noop: false };

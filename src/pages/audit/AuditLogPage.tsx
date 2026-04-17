@@ -20,14 +20,19 @@ const AuditLogPage = () => {
   const { data: logs, isLoading } = useQuery({
     queryKey: ['audit-logs', hotel?.id],
     queryFn: async () => {
-      const { data } = await supabase.from('audit_logs').select('*').eq('hotel_id', hotel!.id).order('created_at', { ascending: false }).limit(200);
+      const { data } = await supabase
+        .from('audit_logs')
+        .select('*, profiles!audit_logs_user_id_fkey(full_name, email)')
+        .eq('hotel_id', hotel!.id)
+        .order('created_at', { ascending: false })
+        .limit(200);
       return data || [];
     },
     enabled: !!hotel?.id,
   });
 
-  const filtered = logs?.filter(l =>
-    !search || `${l.action} ${l.user_name} ${l.table_name}`.toLowerCase().includes(search.toLowerCase())
+  const filtered = logs?.filter((log: any) =>
+    !search || `${log.action} ${log.user_name || ''} ${log.profiles?.full_name || ''} ${log.profiles?.email || ''} ${log.table_name}`.toLowerCase().includes(search.toLowerCase())
   ) || [];
 
   return (
@@ -54,10 +59,10 @@ const AuditLogPage = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map(log => (
+              {filtered.map((log: any) => (
                 <TableRow key={log.id}>
                   <TableCell className="text-sm">{formatDateTime(log.created_at)}</TableCell>
-                  <TableCell className="font-medium">{log.user_name || '-'}</TableCell>
+                  <TableCell className="font-medium">{log.user_name || log.profiles?.full_name || log.profiles?.email || (log.user_id ? `#${String(log.user_id).slice(0, 8)}` : '-')}</TableCell>
                   <TableCell><Badge variant="outline">{log.action}</Badge></TableCell>
                   <TableCell className="font-mono text-sm">{log.table_name || '-'}</TableCell>
                   <TableCell className="text-sm text-muted-foreground max-w-xs truncate">

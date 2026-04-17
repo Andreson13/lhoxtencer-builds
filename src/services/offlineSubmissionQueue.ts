@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { addChargeToInvoice, getOrCreateInvoice } from '@/services/transactionService';
+import { addChargeToInvoice, getOrCreateInvoice, isSiesteInvoiceItem } from '@/services/transactionService';
 
 const QUEUE_KEY = 'hotel-harmony-offline-submit-queue';
 
@@ -611,7 +611,7 @@ const processCheckoutStay = async (item: CheckoutStayItem) => {
   const p = item.payload;
   const { data: stay } = await supabase
     .from('stays')
-    .select('id, status, guest_id, room_id, stay_type, check_in_date, actual_check_out, number_of_nights, price_per_night, total_price, invoice_id')
+    .select('id, status, guest_id, room_id, stay_type, check_in_date, actual_check_out, number_of_nights, price_per_night, arrangement_price, total_price, invoice_id')
     .eq('hotel_id', p.hotelId)
     .eq('id', p.stayId)
     .maybeSingle();
@@ -622,7 +622,7 @@ const processCheckoutStay = async (item: CheckoutStayItem) => {
   if (stay.invoice_id || p.invoiceId) {
     const { data } = await supabase
       .from('invoices')
-      .select('id, balance_due, amount_paid, invoice_items(item_type, quantity, unit_price, subtotal)')
+      .select('id, balance_due, amount_paid, invoice_items(item_type, description, quantity, unit_price, subtotal)')
       .eq('id', stay.invoice_id || p.invoiceId)
       .maybeSingle();
     invoice = data;
@@ -635,10 +635,15 @@ const processCheckoutStay = async (item: CheckoutStayItem) => {
     ? Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 3600000))
     : Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000));
   const storedUnits = Number(stay.number_of_nights || p.storedUnits || 0);
-  const unitPrice = Number(stay.price_per_night || p.unitPrice || 0);
-  const itemType = isSieste ? 'sieste' : 'room';
+  const negotiatedTotal = Number((stay as any).arrangement_price || 0);
+  const configuredUnits = isSieste
+    ? 1
+    : Math.max(1, Number(stay.number_of_nights || p.storedUnits || 1));
+  const unitPrice = negotiatedTotal > 0
+    ? negotiatedTotal / configuredUnits
+    : Number(stay.price_per_night || p.unitPrice || 0);
   const alreadyBilledUnits = (invoice?.invoice_items || [])
-    .filter((invoiceItem: any) => invoiceItem.item_type === itemType)
+    .filter((invoiceItem: any) => isSieste ? isSiesteInvoiceItem(invoiceItem) : invoiceItem.item_type === 'room')
     .reduce((sum: number, invoiceItem: any) => sum + Number(invoiceItem.quantity || 0), 0);
   const missingUnits = Math.max(0, liveUnits - Math.max(storedUnits, alreadyBilledUnits));
 
@@ -649,7 +654,7 @@ const processCheckoutStay = async (item: CheckoutStayItem) => {
       stayId: stay.id,
       guestId: stay.guest_id || p.guestId,
       description: isSieste ? `Extension sieste - ${missingUnits}h` : `Nuitees additionnelles - ${missingUnits} nuit(s)`,
-      itemType: itemType as any,
+      itemType: (isSieste ? 'sieste' : 'room') as any,
       quantity: missingUnits,
       unitPrice,
     });

@@ -2,12 +2,14 @@ import { BrowserRouter, HashRouter, Route, Routes, Navigate } from "react-router
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { GlobalMutationOverlay } from "@/components/shared/GlobalMutationOverlay";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { HotelProvider } from "@/contexts/HotelContext";
+import { HotelProvider, useHotel } from "@/contexts/HotelContext";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 import LoginPage from "@/pages/auth/LoginPage";
 import OnboardingPage from "@/pages/auth/OnboardingPage";
+import InviteJoinPage from "@/pages/auth/InviteJoinPage";
 import AccueilClientPage from "@/pages/reception/AccueilClientPage";
 import DashboardPage from "@/pages/dashboard/DashboardPage";
 import RoomsPage from "@/pages/rooms/RoomsPage";
@@ -30,6 +32,7 @@ import QRCodesPage from "@/pages/qrcodes/QRCodesPage";
 import SettingsPage from "@/pages/settings/SettingsPage";
 import AuditLogPage from "@/pages/audit/AuditLogPage";
 import PoliceRegisterPage from "@/pages/gestion/PoliceRegisterPage";
+import SuperAdminHotelsPage from "@/pages/admin/SuperAdminHotelsPage";
 import AccessDeniedPage from "@/pages/AccessDeniedPage";
 import NotFound from "@/pages/NotFound";
 import BookingPortalPage from "@/pages/public/BookingPortalPage";
@@ -43,9 +46,14 @@ const Router = isDesktopShell ? HashRouter : BrowserRouter;
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, profile, loading } = useAuth();
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><p className="text-muted-foreground">Chargement...</p></div>;
+  const { loading: hotelLoading } = useHotel();
+
+  if (loading || (user && !profile) || (profile?.hotel_id && hotelLoading)) {
+    return <div className="min-h-screen flex items-center justify-center"><p className="text-muted-foreground">Chargement...</p></div>;
+  }
+
   if (!user) return <Navigate to="/login" replace />;
-  if (!profile?.hotel_id) return <Navigate to="/onboarding" replace />;
+  if (profile && !profile.hotel_id && !profile.is_super_admin) return <Navigate to="/onboarding" replace />;
   return <>{children}</>;
 };
 
@@ -56,11 +64,13 @@ const App = () => (
         <TooltipProvider>
           <Toaster />
           <Sonner />
+          <GlobalMutationOverlay />
           <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <Routes>
                 {/* Public routes */}
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/onboarding" element={<OnboardingPage />} />
+                <Route path="/invite/join" element={<InviteJoinPage />} />
                 <Route path="/access-denied" element={<AccessDeniedPage />} />
                 <Route path="/booking/:slug" element={<BookingPortalPage />} />
                 <Route path="/booking/hotel/:hotelId" element={<BookingPortalPage />} />
@@ -95,6 +105,7 @@ const App = () => (
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/audit" element={<AuditLogPage />} />
                   <Route path="/police-register" element={<PoliceRegisterPage />} />
+                  <Route path="/superadmin" element={<SuperAdminHotelsPage />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />
             </Routes>
