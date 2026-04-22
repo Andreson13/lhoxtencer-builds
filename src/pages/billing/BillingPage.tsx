@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
+import { usePermission } from '@/hooks/usePermission';
 import { useI18n } from '@/contexts/I18nContext';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -33,6 +34,8 @@ const BillingPage = () => {
   const { t } = useI18n();
   const { profile } = useAuth();
   const { hotel } = useHotel();
+  const canRecordPayment = usePermission('billing.record_payment');
+  const canVoidInvoice = usePermission('billing.void_invoice');
   const qc = useQueryClient();
   const [searchParams] = useSearchParams();
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -42,7 +45,12 @@ const BillingPage = () => {
   const { data: invoices, isLoading } = useQuery({
     queryKey: ['invoices', hotel?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from('invoices').select('*, invoice_items(*), guests(last_name, first_name), stays(id, guest_id, rooms(room_number))').eq('hotel_id', hotel!.id).order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('invoices').select(`
+        *,
+        invoice_items(*),
+        guests(id, last_name, first_name),
+        stays!invoices_stay_id_fkey(id, guest_id, room_id, rooms(room_number))
+      `).eq('hotel_id', hotel!.id).order('created_at', { ascending: false });
       if (error) throw error;
       return data;
     },
@@ -50,14 +58,26 @@ const BillingPage = () => {
   });
 
   const queryInvoiceId = searchParams.get('invoiceId');
-  const visibleInvoices = queryInvoiceId ? (invoices || []).filter((inv: any) => inv.id === queryInvoiceId) : (invoices || []);
+  const filteredInvoices = queryInvoiceId ? (invoices || []).filter((inv: any) => inv.id === queryInvoiceId) : (invoices || []);
+  const visibleInvoices = queryInvoiceId && filteredInvoices.length === 0 ? (invoices || []) : filteredInvoices;
   const openInvoices = visibleInvoices.filter((inv: any) => !['paid', 'cancelled'].includes(inv.status || 'open')).length;
   const paidInvoices = visibleInvoices.filter((inv: any) => inv.status === 'paid').length;
   const outstandingTotal = visibleInvoices.reduce((sum: number, inv: any) => sum + Number(inv.balance_due || 0), 0);
 
+  useEffect(() => {
+    if (!queryInvoiceId || !invoices?.length) return;
+    const exists = invoices.some((inv: any) => inv.id === queryInvoiceId);
+    if (!exists) {
+      setOpenInvoiceId(undefined);
+    }
+  }, [queryInvoiceId, invoices]);
+
   return (
     <div className="page-container space-y-6">
       <PageHeader title={t('billing.title')} subtitle={`${visibleInvoices.length || 0} ${t('billing.subtitle')}`} />
+      {queryInvoiceId && filteredInvoices.length === 0 && (
+        <p className="text-sm text-muted-foreground">Facture ciblée introuvable, affichage de toutes les factures.</p>
+      )}
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border bg-card p-4 shadow-sm">
@@ -112,7 +132,7 @@ const BillingPage = () => {
                       <p>{t('billing.total.paid')}: {formatFCFA(inv.amount_paid)}</p>
                       <p className="text-destructive font-semibold">{t('billing.total.balance')}: {formatFCFA(inv.balance_due)}</p>
                     </div>
-                    {inv.status !== 'paid' && inv.status !== 'cancelled' && (
+                    {inv.status !== 'paid' && inv.status !== 'cancelled' && canRecordPayment && (
                       <Button onClick={() => { setSelectedInvoice(inv); setPaymentDialogOpen(true); }}>
                         <CreditCard className="h-4 w-4 mr-2" />{t('billing.recordPayment')}
                       </Button>

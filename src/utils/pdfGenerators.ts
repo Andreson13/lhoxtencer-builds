@@ -146,17 +146,44 @@ export const generateInvoicePDF = (hotel: any, invoice: any, items: any[], payme
   doc.text(`Client: ${guestName}`, 30, y);
   y += 10;
 
-  // Items table
+  // Split items into room charges and taxes/fixed charges
+  const roomItems = items.filter(i => i.item_type === 'room' || i.item_type === 'service' || i.item_type === 'sieste' || i.item_type === 'extra' || i.item_type === 'minibar' || i.item_type === 'restaurant' || i.item_type === 'bar' || i.item_type === 'other');
+  const taxItems = items.filter(i => i.item_type === 'tax');
+  const fixedItems = items.filter(i => i.item_type === 'extra' && (i.description?.toLowerCase().includes('wifi') || i.description?.toLowerCase().includes('internet') || i.description?.toLowerCase().includes('canal') || i.description?.toLowerCase().includes('linge')));
+  // For display, room items excludes fixed items
+  const mainItems = items.filter(i => i.item_type !== 'tax');
+
+  // Main items table
   autoTable(doc, {
     startY: y,
     head: [['Description', 'Type', 'Qté', 'P.U.', 'Sous-total']],
-    body: items.map(i => [i.description, i.item_type || '-', String(i.quantity || 1), formatFCFA(i.unit_price), formatFCFA(i.subtotal)]),
+    body: mainItems.map(i => [i.description, i.item_type || '-', String(i.quantity || 1), formatFCFA(i.unit_price), formatFCFA(i.subtotal)]),
     theme: 'striped',
     styles: { fontSize: 9 },
     headStyles: { fillColor: [59, 130, 246] },
   });
 
-  y = (doc as any).lastAutoTable.finalY + 10;
+  y = (doc as any).lastAutoTable.finalY + 5;
+
+  // Taxes section
+  if (taxItems.length > 0) {
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setFillColor(245, 245, 245);
+    doc.rect(20, y, 170, 7, 'F');
+    doc.text('Taxes & Frais obligatoires', 25, y + 5);
+    y += 10;
+    autoTable(doc, {
+      startY: y,
+      head: [['Description', 'Qté', 'P.U.', 'Sous-total']],
+      body: taxItems.map(i => [i.description, String(i.quantity || 1), formatFCFA(i.unit_price), formatFCFA(i.subtotal)]),
+      theme: 'grid',
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [100, 100, 100] },
+    });
+    y = (doc as any).lastAutoTable.finalY + 5;
+  }
+
   doc.setFontSize(11);
   doc.text(`Sous-total: ${formatFCFA(invoice.subtotal)}`, 140, y);
   y += 6;
@@ -788,3 +815,115 @@ export async function generateCustomerDossier(params: {
   const filename = `dossier-client-${(params.guest.last_name || '').toLowerCase()}-${(params.guest.first_name || '').toLowerCase()}-${new Date().toISOString().split('T')[0]}.pdf`;
   doc.save(filename);
 }
+
+type ReportData = {
+  summary: {
+    occupancyRate: number;
+    totalCheckIns: number;
+    totalRevenue: number;
+    totalPaid: number;
+    totalExpenses: number;
+    netProfit: number;
+    restaurantRevenue: number;
+  };
+  topRooms?: Array<{ room_number: string; stays: number; nights: number }>;
+  topFoodItems?: Array<{ name: string; count: number; revenue: number }>;
+  topGuests?: Array<{ name: string; tier: string; loyalty_points: number; total: number }>;
+};
+
+const renderReportPdf = (
+  hotel: any,
+  title: string,
+  periodLabel: string,
+  data: ReportData,
+  filePrefix: string,
+) => {
+  const doc = new jsPDF();
+  let y = addHeader(doc, hotel, title);
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Période: ${periodLabel}`, 20, y);
+  y += 6;
+  doc.text(`Généré le: ${new Date().toLocaleString('fr-FR')}`, 20, y);
+  y += 8;
+
+  autoTable(doc, {
+    startY: y,
+    head: [['Indicateur', 'Valeur']],
+    body: [
+      ['Taux occupation', `${data.summary.occupancyRate}%`],
+      ['Check-ins', String(data.summary.totalCheckIns)],
+      ['Revenu total', formatFCFA(data.summary.totalRevenue)],
+      ['Montant payé', formatFCFA(data.summary.totalPaid)],
+      ['Dépenses', formatFCFA(data.summary.totalExpenses)],
+      ['Profit net', formatFCFA(data.summary.netProfit)],
+      ['CA restaurant', formatFCFA(data.summary.restaurantRevenue)],
+    ],
+    theme: 'grid',
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [30, 41, 59] },
+  });
+
+  y = (doc as any).lastAutoTable.finalY + 8;
+
+  if ((data.topRooms || []).length > 0) {
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Top chambres', 20, y);
+    autoTable(doc, {
+      startY: y + 2,
+      head: [['Chambre', 'Séjours', 'Nuits']],
+      body: (data.topRooms || []).slice(0, 10).map((r) => [r.room_number, String(r.stays), String(r.nights)]),
+      theme: 'striped',
+      styles: { fontSize: 8.5 },
+      headStyles: { fillColor: [59, 130, 246] },
+    });
+    y = (doc as any).lastAutoTable.finalY + 8;
+  }
+
+  if ((data.topFoodItems || []).length > 0) {
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Top produits / plats', 20, y);
+    autoTable(doc, {
+      startY: y + 2,
+      head: [['Article', 'Qté', 'CA']],
+      body: (data.topFoodItems || []).slice(0, 10).map((r) => [r.name, String(r.count), formatFCFA(r.revenue)]),
+      theme: 'striped',
+      styles: { fontSize: 8.5 },
+      headStyles: { fillColor: [16, 185, 129] },
+    });
+    y = (doc as any).lastAutoTable.finalY + 8;
+  }
+
+  if ((data.topGuests || []).length > 0) {
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Top clients (dépenses)', 20, y);
+    autoTable(doc, {
+      startY: y + 2,
+      head: [['Client', 'Niveau', 'Points', 'Dépenses']],
+      body: (data.topGuests || []).slice(0, 10).map((g) => [g.name, g.tier, String(g.loyalty_points || 0), formatFCFA(g.total)]),
+      theme: 'striped',
+      styles: { fontSize: 8.5 },
+      headStyles: { fillColor: [245, 158, 11] },
+    });
+  }
+
+  addFooter(doc);
+  const dateKey = new Date().toISOString().split('T')[0];
+  doc.save(`${filePrefix}-${dateKey}.pdf`);
+};
+
+export const generateWeeklyReport = (hotel: any, dateRange: { start: string; end: string }, data: ReportData) => {
+  renderReportPdf(hotel, 'RAPPORT HEBDOMADAIRE', `${formatDate(dateRange.start)} au ${formatDate(dateRange.end)}`, data, 'rapport-hebdomadaire');
+};
+
+export const generateDailyReport = (hotel: any, dateRange: { start: string; end: string }, data: ReportData) => {
+  renderReportPdf(hotel, 'RAPPORT JOURNALIER', `${formatDate(dateRange.start)}`, data, 'rapport-journalier');
+};
+
+export const generateMonthlyReport = (hotel: any, dateRange: { start: string; end: string }, data: ReportData) => {
+  renderReportPdf(hotel, 'RAPPORT MENSUEL', `${formatDate(dateRange.start)} au ${formatDate(dateRange.end)}`, data, 'rapport-mensuel');
+};

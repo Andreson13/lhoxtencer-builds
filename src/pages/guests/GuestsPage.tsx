@@ -30,7 +30,10 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { Users, Plus, Search, Pencil, Trash2, BedDouble, Eye, ArrowLeft, ChevronDown, ChevronUp, Download, FileText, MoreVertical } from 'lucide-react';
+import { Users, Plus, Search, Pencil, Trash2, BedDouble, Eye, ArrowLeft, ChevronDown, ChevronUp, Download, FileText, MoreVertical, ScanLine, ShieldAlert } from 'lucide-react';
+import { TierBadge } from '@/components/shared/TierBadge';
+import { usePermission } from '@/hooks/usePermission';
+import { CniScanner, CniData } from '@/components/shared/CniScanner';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -78,11 +81,17 @@ const GuestsPage = () => {
   const navigate = useNavigate();
   const { guestId: guestIdParam } = useParams();
   const qc = useQueryClient();
+  const canChangeTier = usePermission('guests.change_tier');
+  const canViewFinancial = usePermission('guests.view_financial');
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [stayDialogOpen, setStayDialogOpen] = useState(false);
   const [editingGuest, setEditingGuest] = useState<any>(null);
   const [deleteGuest, setDeleteGuest] = useState<any>(null);
+  const [cniScannerOpen, setCniScannerOpen] = useState(false);
+  const [tierDialogOpen, setTierDialogOpen] = useState(false);
+  const [tierTargetGuest, setTierTargetGuest] = useState<any>(null);
+  const [tierForm, setTierForm] = useState({ tier: 'regular', notes: '' });
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
   const [stayGuestId, setStayGuestId] = useState<string | null>(null);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -284,6 +293,17 @@ const GuestsPage = () => {
     };
   };
 
+  const getExactNights = (stay: any) => {
+    if (stay?.stay_type === 'sieste') return '-';
+    const start = stay?.check_in_date ? new Date(stay.check_in_date) : null;
+    const endRaw = stay?.actual_check_out || stay?.check_out_date;
+    const end = endRaw ? new Date(endRaw) : null;
+    if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      return stay?.number_of_nights || '-';
+    }
+    return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000));
+  };
+
   const getCategoryLabel = (item: any) => {
     if (item?.item_type === 'room' || isSiesteInvoiceItem(item)) return t('guests.history.lodging');
     if (item?.item_type === 'restaurant') return t('guests.history.restaurant');
@@ -313,6 +333,23 @@ const GuestsPage = () => {
     });
     return groups;
   }, [filteredHistoryItems]);
+
+  const handlePreviewIdDocument = (url?: string | null) => {
+    if (!url) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleDownloadIdDocument = (url?: string | null) => {
+    if (!url) return;
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.download = 'piece-identite';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const categoryTotals = React.useMemo(() => {
     const totals: Record<string, number> = {};
@@ -650,9 +687,27 @@ const GuestsPage = () => {
         <Card>
           <CardHeader><CardTitle>{t('guests.profile.personalInfo')}</CardTitle></CardHeader>
           <CardContent>
-            <div className="mb-4 p-3 rounded-lg bg-primary/10 border border-primary/20">
-              <p className="text-sm text-muted-foreground">{t('guests.profile.lifetimeValue')}</p>
-              <p className="text-2xl font-bold text-primary">{formatFCFA(lifetimeValue)}</p>
+            <div className="mb-4 flex gap-3">
+              <div className="flex-1 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                <p className="text-sm text-muted-foreground">{t('guests.profile.lifetimeValue')}</p>
+                <p className="text-2xl font-bold text-primary">{formatFCFA(lifetimeValue)}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/50 border flex flex-col gap-2 items-start">
+                <p className="text-sm text-muted-foreground">Niveau fidélité</p>
+                <div className="flex items-center gap-2">
+                  <TierBadge tier={(selectedGuest as any).tier || 'regular'} />
+                  <span className="text-sm font-medium">{(selectedGuest as any).loyalty_points || 0} pts</span>
+                </div>
+                {canChangeTier && (
+                  <Button size="sm" variant="outline" onClick={() => {
+                    setTierTargetGuest(selectedGuest);
+                    setTierForm({ tier: (selectedGuest as any).tier || 'regular', notes: (selectedGuest as any).tier_notes || '' });
+                    setTierDialogOpen(true);
+                  }}>
+                    <ShieldAlert className="h-4 w-4 mr-1" />Changer le niveau
+                  </Button>
+                )}
+              </div>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               <div><span className="text-muted-foreground">{t('guests.profile.gender')}:</span> {selectedGuest.gender || '-'}</div>
@@ -667,6 +722,19 @@ const GuestsPage = () => {
               <div><span className="text-muted-foreground">{t('guests.profile.issuedOn')}:</span> {formatDate(selectedGuest.id_issued_on)}</div>
               <div><span className="text-muted-foreground">{t('guests.profile.issuedAt')}:</span> {selectedGuest.id_issued_at || '-'}</div>
             </div>
+            {(selectedGuest as any).id_document_url && (
+              <div className="mt-4 rounded-md border p-3">
+                <p className="text-sm font-medium mb-2">Pièce scannée</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" onClick={() => handlePreviewIdDocument((selectedGuest as any).id_document_url)}>
+                    <Eye className="h-4 w-4 mr-1" />Aperçu CNI
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => handleDownloadIdDocument((selectedGuest as any).id_document_url)}>
+                    <Download className="h-4 w-4 mr-1" />Télécharger CNI
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -736,8 +804,9 @@ const GuestsPage = () => {
                     <TableHead>{t('reports.table.room')}</TableHead>
                     <TableHead>{t('billing.table.type')}</TableHead>
                     <TableHead>{t('guests.profile.checkin')}</TableHead>
-                    <TableHead>{t('guests.profile.checkout')}</TableHead>
-                    <TableHead>{t('reports.table.nights')}</TableHead>
+                    <TableHead>Départ prévu</TableHead>
+                    <TableHead>Départ final</TableHead>
+                    <TableHead>Nuits exactes</TableHead>
                     <TableHead className="text-right">{t('common.total')}</TableHead>
                     <TableHead className="text-right">{t('guests.profile.balance')}</TableHead>
                     <TableHead>{t('common.status')}</TableHead>
@@ -754,8 +823,9 @@ const GuestsPage = () => {
                           <TableCell className="font-mono">{(s as any).rooms?.room_number || '-'}</TableCell>
                           <TableCell><Badge variant="outline">{s.stay_type === 'sieste' ? t('guests.dialog.stayDay') : t('guests.dialog.stayNight')}</Badge></TableCell>
                           <TableCell>{formatDate(s.check_in_date)}</TableCell>
-                          <TableCell>{formatDate(s.actual_check_out || s.check_out_date)}</TableCell>
-                          <TableCell>{s.number_of_nights || '-'}</TableCell>
+                          <TableCell>{formatDate(s.check_out_date)}</TableCell>
+                          <TableCell>{formatDate(s.actual_check_out)}</TableCell>
+                          <TableCell>{getExactNights(s)}</TableCell>
                           <TableCell className="text-right">{formatFCFA(invoice?.total_amount || s.total_price)}</TableCell>
                           <TableCell className="text-right text-destructive font-medium">{formatFCFA(invoice?.balance_due || 0)}</TableCell>
                           <TableCell><StatusBadge status={s.status || 'active'} /></TableCell>
@@ -788,7 +858,7 @@ const GuestsPage = () => {
                         </TableRow>
                         {isExpanded && (
                           <TableRow>
-                            <TableCell colSpan={9}>
+                            <TableCell colSpan={10}>
                               {!invoice?.invoice_items?.length ? (
                                 <p className="text-sm text-muted-foreground py-2">{t('guests.profile.noInvoiceLines')}</p>
                               ) : (
@@ -947,7 +1017,15 @@ const GuestsPage = () => {
               <h3 className="text-lg font-semibold mb-3">{t('guests.dialog.idSection')}</h3>
               <div className="grid grid-cols-4 gap-4">
                 <div><Label>{t('guests.dialog.idType')}</Label><Select onValueChange={v => guestForm.setValue('id_type', v)} value={guestForm.watch('id_type') || ''}><SelectTrigger><SelectValue placeholder={t('guests.dialog.idType')} /></SelectTrigger><SelectContent><SelectItem value="cni">CNI</SelectItem><SelectItem value="passport">Passeport</SelectItem><SelectItem value="permit">Permis</SelectItem></SelectContent></Select></div>
-                <div><Label>{t('guests.dialog.idNumber')}</Label><Input {...guestForm.register('id_number')} /></div>
+                <div>
+                  <Label>{t('guests.dialog.idNumber')}</Label>
+                  <div className="flex gap-2">
+                    <Input {...guestForm.register('id_number')} />
+                    <Button type="button" variant="outline" size="icon" title="Scanner la CNI" onClick={() => setCniScannerOpen(true)}>
+                      <ScanLine className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
                 <div><Label>{t('guests.dialog.idIssuedOn')}</Label><Input type="date" {...guestForm.register('id_issued_on')} /></div>
                 <div><Label>{t('guests.dialog.idIssuedAt')}</Label><Input {...guestForm.register('id_issued_at')} /></div>
               </div>
@@ -964,6 +1042,20 @@ const GuestsPage = () => {
   }
 
   function renderStayDialog() {
+          <CniScanner
+            open={cniScannerOpen}
+            onClose={() => setCniScannerOpen(false)}
+            hotelId={hotel?.id || ''}
+            onConfirm={(data: CniData) => {
+              if (data.last_name) guestForm.setValue('last_name', data.last_name);
+              if (data.first_name) guestForm.setValue('first_name', data.first_name);
+              if (data.nationality) guestForm.setValue('nationality', data.nationality);
+              if (data.id_number) guestForm.setValue('id_number', data.id_number);
+              if (data.date_of_birth) guestForm.setValue('date_of_birth', data.date_of_birth);
+              if (data.place_of_birth) guestForm.setValue('place_of_birth', data.place_of_birth);
+              toast.success('Données CNI appliquées');
+            }}
+          />
     return (
       <Dialog open={stayDialogOpen} onOpenChange={v => { if (!v) { setStayDialogOpen(false); stayForm.reset(); } }}>
         <DialogContent className="max-w-2xl">
@@ -1069,6 +1161,7 @@ const GuestsPage = () => {
                     <TableCell className="font-medium">
                       {info.hasActive && <span className={`inline-block h-2.5 w-2.5 rounded-full mr-2 ${dotColor}`} />}
                       {g.last_name} {g.first_name}
+                      {(g as any).tier && (g as any).tier !== 'regular' && <span className="ml-2"><TierBadge tier={(g as any).tier} /></span>}
                       {info.hasActive && <Badge variant="default" className="ml-2 text-xs">{t('guests.present')}</Badge>}
                     </TableCell>
                     <TableCell>{g.phone || '-'}</TableCell>
@@ -1100,6 +1193,53 @@ const GuestsPage = () => {
       {renderGuestDialog()}
       {renderStayDialog()}
       <ConfirmDialog open={!!deleteGuest} onOpenChange={() => setDeleteGuest(null)} title={t('guests.deleteTitle')} description={`${t('delete.title')} ${deleteGuest?.last_name || ''} ${deleteGuest?.first_name || ''} ?`} onConfirm={() => deleteMutation.mutate(deleteGuest.id)} confirmLabel={t('guests.deleteConfirm')} variant="destructive" />
+
+      {/* Tier Change Dialog */}
+      <Dialog open={tierDialogOpen} onOpenChange={setTierDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Changer le niveau — {tierTargetGuest?.last_name} {tierTargetGuest?.first_name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Nouveau niveau</Label>
+              <Select value={tierForm.tier} onValueChange={v => setTierForm(p => ({ ...p, tier: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="regular">Regular</SelectItem>
+                  <SelectItem value="silver">Silver</SelectItem>
+                  <SelectItem value="gold">Gold</SelectItem>
+                  <SelectItem value="vip">VIP</SelectItem>
+                  <SelectItem value="blacklist">Blacklist</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Notes / Raison</Label>
+              <Textarea value={tierForm.notes} onChange={e => setTierForm(p => ({ ...p, notes: e.target.value }))} placeholder="Raison du changement de niveau..." />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTierDialogOpen(false)}>Annuler</Button>
+            <Button onClick={async () => {
+              if (!tierTargetGuest) return;
+              try {
+                const { error } = await supabase.from('guests').update({
+                  tier: tierForm.tier,
+                  tier_notes: tierForm.notes || null,
+                  tier_assigned_by: profile?.id,
+                  tier_assigned_at: new Date().toISOString(),
+                } as any).eq('id', tierTargetGuest.id);
+                if (error) throw error;
+                qc.invalidateQueries({ queryKey: ['guests'] });
+                qc.invalidateQueries({ queryKey: ['guest', tierTargetGuest.id] });
+                toast.success('Niveau mis à jour');
+                setTierDialogOpen(false);
+              } catch (e: any) { toast.error(e.message); }
+            }}>Enregistrer</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

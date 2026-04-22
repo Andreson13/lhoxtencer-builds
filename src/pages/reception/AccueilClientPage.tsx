@@ -7,7 +7,11 @@ import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { formatFCFA, generateInvoiceNumber } from '@/utils/formatters';
 import { getOrCreateInvoice, addChargeToInvoice, recordPayment } from '@/services/transactionService';
+import { applyTaxesAndFixedCharges } from '@/services/taxService';
+import { applyTierBenefitsPricing, getActiveTierBenefits } from '@/services/tierService';
 import { withAudit } from '@/utils/auditLog';
+import { TierBadge } from '@/components/shared/TierBadge';
+import { CniScanner, CniData } from '@/components/shared/CniScanner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { Search, Moon, Clock, CalendarCheck, User, BedDouble, Check, ArrowRight, Loader2 } from 'lucide-react';
+import { Search, Moon, Clock, CalendarCheck, User, BedDouble, Check, ArrowRight, Loader2, ScanLine, AlertTriangle, Star } from 'lucide-react';
 
 const AccueilClientPage = () => {
   useRoleGuard(['admin', 'manager', 'receptionist']);
@@ -45,6 +49,8 @@ const AccueilClientPage = () => {
   const [payNow, setPayNow] = useState<boolean | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<string[]>(['cash']);
   const [success, setSuccess] = useState<{ room: string; guest: string } | null>(null);
+  const [cniScannerOpen, setCniScannerOpen] = useState(false);
+  const [blacklistConfirmed, setBlacklistConfirmed] = useState(false);
   const [prefillApplied, setPrefillApplied] = useState(false);
   const serviceSectionRef = useRef<HTMLDivElement | null>(null);
   const categorySectionRef = useRef<HTMLDivElement | null>(null);
@@ -73,14 +79,19 @@ const AccueilClientPage = () => {
   const { data: existingGuests } = useQuery({
     queryKey: ['guest-search-accueil', hotel?.id, guestSearch],
     queryFn: async () => {
-      if (guestSearch.length < 2) return [];
-      const { data } = await supabase.from('guests').select('id, last_name, first_name, phone, id_number, nationality')
+      if (guestSearch.length < 1) return [];
+      const searchTerm = guestSearch.trim();
+      
+      // First try exact prefix match on full name
+      const { data } = await supabase.from('guests').select('id, last_name, first_name, phone, id_number, nationality, tier, loyalty_points')
         .eq('hotel_id', hotel!.id)
-        .or(`last_name.ilike.%${guestSearch}%,first_name.ilike.%${guestSearch}%,phone.ilike.%${guestSearch}%,id_number.ilike.%${guestSearch}%`)
-        .limit(10);
+        // Search with fuzzy/partial matching
+        .or(`last_name.ilike.${searchTerm}%,first_name.ilike.${searchTerm}%,last_name.ilike.%${searchTerm}%,first_name.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%,id_number.ilike.%${searchTerm}%`)
+        .order('last_name, first_name')
+        .limit(20);
       return data || [];
     },
-    enabled: !!hotel?.id && guestSearch.length >= 2,
+    enabled: !!hotel?.id && guestSearch.length >= 1,
   });
 
   const { data: categories } = useQuery({
@@ -170,6 +181,18 @@ const AccueilClientPage = () => {
     ? (selectedCategory?.price_sieste || 0)
     : (selectedCategory?.price_per_night || 0) * nights;
   const finalPrice = negotiatedPrice != null && negotiatedPrice > 0 ? negotiatedPrice : basePrice;
+  const guestTier = (selectedGuestData as any)?.tier || 'regular';
+
+  const { data: activeTierBenefits = [] } = useQuery({
+    queryKey: ['accueil-tier-benefits', hotel?.id, guestTier],
+    queryFn: async () => getActiveTierBenefits(hotel!.id, guestTier),
+    enabled: !!hotel?.id && !!selectedGuestData?.id && guestTier !== 'regular' && guestTier !== 'blacklist',
+  });
+
+  const tierPricingPreview = useMemo(() => {
+    const units = serviceType === 'night' ? Math.max(1, nights) : 1;
+    return applyTierBenefitsPricing(finalPrice, units, activeTierBenefits as any);
+  }, [finalPrice, nights, serviceType, activeTierBenefits]);
   const hasGuestIdentity = Boolean(selectedGuestId || (newGuest.last_name.trim() && newGuest.first_name.trim()));
   const hasBookableService = Boolean(serviceType && serviceType !== 'reservation');
   const detailsComplete = serviceType === 'night'
@@ -250,6 +273,16 @@ const AccueilClientPage = () => {
         guestId = g.id;
       }
 
+      const { data: tierData } = await supabase
+        .from('guests')
+        .select('tier')
+        .eq('id', guestId)
+        .maybeSingle();
+      const effectiveTier = tierData?.tier || 'regular';
+      const tierBenefits = await getActiveTierBenefits(hotel.id, effectiveTier);
+      const pricing = applyTierBenefitsPricing(finalPrice, serviceType === 'night' ? nights : 1, tierBenefits);
+      const appliedTotal = pricing.discountedTotal;
+
       // Create stay first, then attach invoice for full transaction chain linking
       const stayData: any = {
         hotel_id: hotel.id, guest_id: guestId, stay_type: serviceType === 'sieste' ? 'sieste' : 'night',
@@ -257,17 +290,17 @@ const AccueilClientPage = () => {
         receptionist_id: profile.id, receptionist_name: profile.full_name,
         created_by: profile.id, created_by_name: profile.full_name,
         number_of_adults: numAdults, number_of_children: numChildren,
-        total_price: finalPrice,
+        total_price: appliedTotal,
       };
       if (serviceType === 'night') {
         stayData.check_in_date = new Date(checkInDate).toISOString();
         stayData.check_out_date = checkOutDate ? new Date(checkOutDate).toISOString() : null;
         stayData.number_of_nights = nights;
-        stayData.price_per_night = finalPrice / Math.max(nights, 1);
+        stayData.price_per_night = pricing.unitPrice;
       } else {
         stayData.check_in_date = new Date().toISOString();
       }
-      if (negotiatedPrice != null && negotiatedPrice > 0) stayData.arrangement_price = negotiatedPrice;
+      if (negotiatedPrice != null && negotiatedPrice > 0) stayData.arrangement_price = appliedTotal;
 
       const { data: stay, error: stayErr } = await supabase.from('stays').insert(stayData).select().single();
       if (stayErr) throw stayErr;
@@ -290,11 +323,22 @@ const AccueilClientPage = () => {
         invoiceId: invoice.id,
         stayId: stay.id,
         guestId,
-        description: chargeDescription,
+        description: `${chargeDescription}${pricing.discountPercent > 0 ? ` — Avantage fidélité ${pricing.discountPercent}%` : ''}`,
         itemType: serviceType === 'sieste' ? 'sieste' : 'room',
         quantity: serviceType === 'sieste' ? 1 : nights,
-        unitPrice: serviceType === 'sieste' ? finalPrice : (finalPrice / Math.max(nights, 1)),
+        unitPrice: serviceType === 'sieste' ? appliedTotal : pricing.unitPrice,
       });
+
+      // Feature 1: Apply taxes & fixed charges for night stays
+      if (serviceType === 'night') {
+        await applyTaxesAndFixedCharges({
+          hotelId: hotel.id,
+          invoiceId: invoice.id,
+          stayId: stay.id,
+          guestId,
+          numberOfNights: nights,
+        });
+      }
 
       // If sieste, also create sieste record
       if (serviceType === 'sieste') {
@@ -302,7 +346,7 @@ const AccueilClientPage = () => {
           hotel_id: hotel.id, guest_id: guestId, full_name: guestName,
           room_id: selectedRoomId, arrival_date: new Date().toISOString().split('T')[0],
           arrival_time: arrivalTime, duration_hours: durationHours,
-          amount_paid: payNow ? finalPrice : 0, payment_method: paymentMethods[0] || 'cash',
+          amount_paid: payNow ? appliedTotal : 0, payment_method: paymentMethods[0] || 'cash',
           recorded_by: profile.id, created_by: profile.id, created_by_name: profile.full_name,
           invoice_id: invoice.id,
         } as any);
@@ -314,7 +358,7 @@ const AccueilClientPage = () => {
           invoiceId: invoice.id,
           stayId: stay.id,
           guestId,
-          amount: finalPrice,
+          amount: appliedTotal,
           paymentMethod: paymentMethods[0] || 'cash',
           userId: profile.id,
           userName: profile.full_name || '',
@@ -346,6 +390,7 @@ const AccueilClientPage = () => {
     setArrivalTime(new Date().toTimeString().slice(0, 5)); setDurationHours(3);
     setNumAdults(1); setNumChildren(0); setNegotiatedPrice(null);
     setPayNow(null); setPaymentMethods(['cash']); setSuccess(null);
+    setBlacklistConfirmed(false);
     guestReadyRef.current = false;
     serviceReadyRef.current = false;
     categoryReadyRef.current = false;
@@ -375,7 +420,8 @@ const AccueilClientPage = () => {
     );
   }
 
-  const canFinalize = hasGuestIdentity && hasBookableService && selectedRoomId && detailsComplete && paymentDecisionMade;
+  const canFinalize = hasGuestIdentity && hasBookableService && selectedRoomId && detailsComplete && paymentDecisionMade
+    && ((selectedGuestData as any)?.tier !== 'blacklist' || blacklistConfirmed);
 
   return (
     <div className="page-container">
@@ -407,17 +453,77 @@ const AccueilClientPage = () => {
               {existingGuests && existingGuests.length > 0 && !selectedGuestId && (
                 <div className="border rounded-md max-h-40 overflow-y-auto">
                   {existingGuests.map(g => (
-                    <button key={g.id} onClick={() => { setSelectedGuestId(g.id); setSelectedGuestData(g); setGuestSearch(`${g.last_name} ${g.first_name}`); }}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex justify-between">
+                    <button key={g.id} onClick={() => {
+                      setSelectedGuestId(g.id);
+                      setSelectedGuestData(g);
+                      setGuestSearch(`${g.last_name} ${g.first_name}`);
+                      if ((g as any).tier === 'blacklist') setBlacklistConfirmed(false);
+                    }}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex justify-between items-center">
                       <span className="font-medium">{g.last_name} {g.first_name}</span>
-                      <span className="text-muted-foreground">{g.phone || g.id_number || ''}</span>
+                      <div className="flex items-center gap-2">
+                        {(g as any).tier && (g as any).tier !== 'regular' && <TierBadge tier={(g as any).tier} />}
+                        <span className="text-muted-foreground">{g.phone || g.id_number || ''}</span>
+                      </div>
                     </button>
                   ))}
                 </div>
               )}
+              {/* Blacklist warning */}
+              {selectedGuestData && (selectedGuestData as any).tier === 'blacklist' && !blacklistConfirmed && (
+                <div className="bg-red-50 border border-red-300 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center gap-2 text-red-700 font-semibold">
+                    <AlertTriangle className="h-5 w-5" />
+                    Client en liste noire
+                  </div>
+                  <p className="text-sm text-red-600">{(selectedGuestData as any).tier_notes || 'Ce client est en liste noire.'}</p>
+                  <Button variant="destructive" size="sm" onClick={() => setBlacklistConfirmed(true)}>
+                    Confirmer — procéder quand même
+                  </Button>
+                </div>
+              )}
+              {/* VIP / Gold banner */}
+              {selectedGuestData && (selectedGuestData as any).tier === 'vip' && (
+                <div className="bg-purple-50 border border-purple-300 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-purple-700 font-semibold">
+                    <Star className="h-5 w-5 fill-purple-500" />
+                    Client VIP — {selectedGuestData.last_name} {selectedGuestData.first_name}
+                  </div>
+                  <p className="text-sm text-purple-600">Points de fidélité: {(selectedGuestData as any).loyalty_points || 0}</p>
+                </div>
+              )}
+              {selectedGuestData && (selectedGuestData as any).tier === 'gold' && (
+                <div className="bg-amber-50 border border-amber-300 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-amber-700 font-semibold">
+                    <Star className="h-5 w-5 fill-amber-500" />
+                    Client Gold — {selectedGuestData.last_name} {selectedGuestData.first_name}
+                  </div>
+                  <p className="text-sm text-amber-600">Points de fidélité: {(selectedGuestData as any).loyalty_points || 0}</p>
+                </div>
+              )}
+              {selectedGuestData && activeTierBenefits.length > 0 && (
+                <div className="bg-emerald-50 border border-emerald-300 rounded-lg p-3 space-y-1">
+                  <p className="text-sm font-semibold text-emerald-700">Avantages appliqués automatiquement</p>
+                  <div className="flex flex-wrap gap-1">
+                    {activeTierBenefits.map((benefit: any) => (
+                      <Badge key={benefit.id} variant="outline" className="text-emerald-700 border-emerald-300">
+                        {benefit.benefit_type === 'discount_percentage' ? `Remise ${benefit.benefit_value}%` : (benefit.description || benefit.benefit_type)}
+                      </Badge>
+                    ))}
+                  </div>
+                  {tierPricingPreview.discountPercent > 0 && (
+                    <p className="text-xs text-emerald-700">
+                      Prix ajusté: {formatFCFA(tierPricingPreview.originalTotal)} → {formatFCFA(tierPricingPreview.discountedTotal)}
+                    </p>
+                  )}
+                </div>
+              )}
               {selectedGuestData && (
                 <div className="bg-muted/50 rounded-lg p-3 text-sm">
-                  <p className="font-semibold">{selectedGuestData.last_name} {selectedGuestData.first_name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold">{selectedGuestData.last_name} {selectedGuestData.first_name}</p>
+                    {(selectedGuestData as any).tier && <TierBadge tier={(selectedGuestData as any).tier} />}
+                  </div>
                   <p className="text-muted-foreground">{selectedGuestData.phone || '-'} • {selectedGuestData.nationality || '-'} • {selectedGuestData.id_number || '-'}</p>
                 </div>
               )}
@@ -427,7 +533,15 @@ const AccueilClientPage = () => {
                   <div><Label>Prénom *</Label><Input value={newGuest.first_name} onChange={e => setNewGuest(p => ({ ...p, first_name: e.target.value }))} /></div>
                   <div><Label>Téléphone</Label><Input value={newGuest.phone} onChange={e => setNewGuest(p => ({ ...p, phone: e.target.value }))} /></div>
                   <div><Label>Nationalité</Label><Input value={newGuest.nationality} onChange={e => setNewGuest(p => ({ ...p, nationality: e.target.value }))} /></div>
-                  <div><Label>N° ID</Label><Input value={newGuest.id_number} onChange={e => setNewGuest(p => ({ ...p, id_number: e.target.value }))} /></div>
+                  <div>
+                    <Label>N° ID</Label>
+                    <div className="flex gap-2">
+                      <Input value={newGuest.id_number} onChange={e => setNewGuest(p => ({ ...p, id_number: e.target.value }))} />
+                      <Button type="button" variant="outline" size="icon" title="Scanner la CNI" onClick={() => setCniScannerOpen(true)}>
+                        <ScanLine className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
                   <div><Label>Type ID</Label>
                     <Select value={newGuest.id_type} onValueChange={v => setNewGuest(p => ({ ...p, id_type: v }))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
@@ -660,6 +774,21 @@ const AccueilClientPage = () => {
           </div>
         </div>
       </div>
+      <CniScanner
+        open={cniScannerOpen}
+        onClose={() => setCniScannerOpen(false)}
+        hotelId={hotel?.id || ''}
+        onConfirm={(data: CniData) => {
+          setNewGuest(prev => ({
+            ...prev,
+            last_name: data.last_name || prev.last_name,
+            first_name: data.first_name || prev.first_name,
+            nationality: data.nationality || prev.nationality,
+            id_number: data.id_number || prev.id_number,
+          }));
+          toast.success('Données CNI appliquées');
+        }}
+      />
     </div>
   );
 };

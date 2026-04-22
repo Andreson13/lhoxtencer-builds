@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { fetchPoliceRegisterRows, getCurrentWeekRange } from '@/services/guestDocumentService';
 import { generatePoliceRegister } from '@/utils/pdfGenerators';
@@ -71,6 +72,7 @@ const PoliceRegisterPage = () => {
   const [startDate, setStartDate] = useState(defaultRange.start);
   const [endDate, setEndDate] = useState(defaultRange.end);
   const [refreshIndex, setRefreshIndex] = useState(0);
+  const [dailyDate, setDailyDate] = useState(toDateKey(new Date()));
 
   const effectiveRange = useMemo(() => {
     if (periodMode === 'custom') {
@@ -101,14 +103,91 @@ const PoliceRegisterPage = () => {
     }
   };
 
+  // Daily query
+  const { data: dailyRows = [], isLoading: dailyLoading } = useQuery({
+    queryKey: ['police-register-daily', hotel?.id, dailyDate],
+    queryFn: () => fetchPoliceRegisterRows(hotel!.id, dailyDate, dailyDate),
+    enabled: !!hotel?.id,
+  });
+
+  // Weekly: current week range
+  const weeklyRange = useMemo(() => getCurrentWeekRange(), []);
+  const [weekStart, setWeekStart] = useState(weeklyRange.start);
+  const [weekEnd, setWeekEnd] = useState(weeklyRange.end);
+  const { data: weeklyRows = [], isLoading: weeklyLoading } = useQuery({
+    queryKey: ['police-register-weekly', hotel?.id, weekStart, weekEnd],
+    queryFn: () => fetchPoliceRegisterRows(hotel!.id, weekStart, weekEnd),
+    enabled: !!hotel?.id,
+  });
+
+  const handleDailyExport = async () => {
+    if (!hotel) return;
+    try {
+      await generatePoliceRegister({
+        hotel,
+        guests: dailyRows,
+        periodStart: dailyDate,
+        periodEnd: dailyDate,
+        generatedBy: profile?.full_name || 'Reception',
+        download: true,
+      });
+    } catch (e: any) { toast.error(e.message); }
+  };
+
+  const handleWeeklyExport = async () => {
+    if (!hotel) return;
+    try {
+      await generatePoliceRegister({
+        hotel,
+        guests: weeklyRows,
+        periodStart: weekStart,
+        periodEnd: weekEnd,
+        generatedBy: profile?.full_name || 'Reception',
+        download: true,
+      });
+    } catch (e: any) { toast.error(e.message); }
+  };
+
   return (
     <div className="page-container space-y-6">
-      <PageHeader title="Registre de Police" subtitle="Document officiel - a remettre aux autorites">
-        <div className="flex gap-2">
+      <PageHeader title="Registre de Police" subtitle="Document officiel — à remettre aux autorités" />
+
+      <Tabs defaultValue="daily">
+        <TabsList>
+          <TabsTrigger value="daily">Journalier</TabsTrigger>
+          <TabsTrigger value="weekly">Hebdomadaire</TabsTrigger>
+          <TabsTrigger value="period">Par période</TabsTrigger>
+        </TabsList>
+
+        {/* Daily Tab */}
+        <TabsContent value="daily" className="mt-4 space-y-4">
+          <Card>
+            <CardContent className="pt-4 flex items-center gap-4">
+              <div><label className="text-sm text-muted-foreground">Date</label><Input type="date" value={dailyDate} onChange={e => setDailyDate(e.target.value)} /></div>
+              <Button onClick={handleDailyExport} disabled={!dailyRows.length} className="mt-5">Télécharger PDF</Button>
+            </CardContent>
+          </Card>
+          <RegisterTable rows={dailyRows} isLoading={dailyLoading} showStatus />
+        </TabsContent>
+
+        {/* Weekly Tab */}
+        <TabsContent value="weekly" className="mt-4 space-y-4">
+          <Card>
+            <CardContent className="pt-4 flex items-center gap-4 flex-wrap">
+              <div><label className="text-sm text-muted-foreground">Semaine du</label><Input type="date" value={weekStart} onChange={e => setWeekStart(e.target.value)} /></div>
+              <div><label className="text-sm text-muted-foreground">au</label><Input type="date" value={weekEnd} onChange={e => setWeekEnd(e.target.value)} /></div>
+              <Button onClick={handleWeeklyExport} disabled={!weeklyRows.length} className="mt-5">Télécharger PDF</Button>
+            </CardContent>
+          </Card>
+          <RegisterTable rows={weeklyRows} isLoading={weeklyLoading} showStatus />
+        </TabsContent>
+
+        {/* Period Tab (existing) */}
+        <TabsContent value="period" className="mt-4 space-y-4">
+        <div className="flex gap-2 justify-end">
           <Button variant="outline" onClick={() => handleExport(true)} disabled={!rows.length}>Imprimer le registre</Button>
-          <Button onClick={() => handleExport(false)} disabled={!rows.length}>Telecharger PDF</Button>
+          <Button onClick={() => handleExport(false)} disabled={!rows.length}>Télécharger PDF</Button>
         </div>
-      </PageHeader>
 
       <Card>
         <CardHeader>
@@ -179,6 +258,7 @@ const PoliceRegisterPage = () => {
                     <TableHead>Date d'Arrivee</TableHead>
                     <TableHead>Date de Depart</TableHead>
                     <TableHead>N° Piece d'Identite</TableHead>
+                    <TableHead>Document CNI</TableHead>
                     <TableHead>Observations</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -196,6 +276,11 @@ const PoliceRegisterPage = () => {
                         <TableCell>{row.check_in_date ? new Date(row.check_in_date).toLocaleDateString('fr-FR') : '-'}</TableCell>
                         <TableCell>{row.check_out_date ? new Date(row.check_out_date).toLocaleDateString('fr-FR') : '-'}</TableCell>
                         <TableCell>{guest.id_number || '-'}</TableCell>
+                        <TableCell>
+                          {guest.id_document_url ? (
+                            <a href={guest.id_document_url} target="_blank" rel="noreferrer" className="text-primary underline">Voir</a>
+                          ) : '-'}
+                        </TableCell>
                         <TableCell>{row.observation || '-'}</TableCell>
                       </TableRow>
                     );
@@ -206,8 +291,76 @@ const PoliceRegisterPage = () => {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
+
+// Shared register table component
+function RegisterTable({ rows, isLoading, showStatus }: { rows: any[]; isLoading: boolean; showStatus?: boolean }) {
+  return (
+    <Card>
+      <CardHeader><CardTitle>Aperçu ({rows.length} fiche(s))</CardTitle></CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+        ) : rows.length === 0 ? (
+          <p className="text-center text-muted-foreground py-8">Aucune fiche pour cette période</p>
+        ) : (
+          <div className="rounded-md border overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>N°</TableHead>
+                  <TableHead>Nom et Prénoms</TableHead>
+                  <TableHead>Date & Lieu de Naissance</TableHead>
+                  <TableHead>Nationalité</TableHead>
+                  <TableHead>Profession</TableHead>
+                  <TableHead>N° Chambre</TableHead>
+                  {showStatus && <TableHead>Statut</TableHead>}
+                  <TableHead>Arrivée</TableHead>
+                  <TableHead>Départ</TableHead>
+                  <TableHead>N° Pièce</TableHead>
+                  <TableHead>Document CNI</TableHead>
+                  <TableHead>Observations</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((row: any, i: number) => {
+                  const guest = row.guest || {};
+                  const now = new Date();
+                  const cin = row.check_in_date ? new Date(row.check_in_date) : null;
+                  const cout = row.check_out_date ? new Date(row.check_out_date) : null;
+                  const status = !cin ? '-' : now < cin ? 'Arrivée' : (!cout || now <= cout) ? 'En séjour' : 'Départ';
+                  return (
+                    <TableRow key={`${row.source}-${row.id}-${i}`}>
+                      <TableCell>{String(i + 1).padStart(3, '0')}</TableCell>
+                      <TableCell className="font-medium">{guest.last_name} {guest.first_name}</TableCell>
+                      <TableCell>{guest.date_of_birth ? new Date(guest.date_of_birth).toLocaleDateString('fr-FR') : '-'}{guest.place_of_birth ? ` — ${guest.place_of_birth}` : ''}</TableCell>
+                      <TableCell>{guest.nationality || '-'}</TableCell>
+                      <TableCell>{guest.profession || '-'}</TableCell>
+                      <TableCell>{row.room_number || '-'}</TableCell>
+                      {showStatus && <TableCell><Badge variant="outline">{status}</Badge></TableCell>}
+                      <TableCell>{cin ? cin.toLocaleDateString('fr-FR') : '-'}</TableCell>
+                      <TableCell>{cout ? cout.toLocaleDateString('fr-FR') : '-'}</TableCell>
+                      <TableCell>{guest.id_number || '-'}</TableCell>
+                      <TableCell>
+                        {guest.id_document_url ? (
+                          <a href={guest.id_document_url} target="_blank" rel="noreferrer" className="text-primary underline">Voir</a>
+                        ) : '-'}
+                      </TableCell>
+                      <TableCell>{row.observation || '-'}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default PoliceRegisterPage;

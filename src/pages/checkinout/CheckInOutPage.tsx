@@ -11,6 +11,8 @@ import { formatFCFA, formatDate, generateInvoiceNumber } from '@/utils/formatter
 import { generateCustomerDossier } from '@/utils/pdfGenerators';
 import { fetchCustomerDossierData } from '@/services/guestDocumentService';
 import { getOrCreateInvoice, addChargeToInvoice, isSiesteInvoiceItem } from '@/services/transactionService';
+import { applyTaxesAndFixedCharges } from '@/services/taxService';
+import { applyTierBenefitsPricing, getActiveTierBenefits } from '@/services/tierService';
 import { enqueueOfflineSubmission } from '@/services/offlineSubmissionQueue';
 import { withAudit } from '@/utils/auditLog';
 import { Button } from '@/components/ui/button';
@@ -182,7 +184,18 @@ const CheckInOutPage = () => {
         }
 
         const nights = reservation.number_of_nights || 1;
-        const total = reservation.total_price || 0;
+        const baseTotal = reservation.total_price || 0;
+
+        const { data: guestTierData } = await supabase
+          .from('guests')
+          .select('tier')
+          .eq('id', guestId)
+          .maybeSingle();
+
+        const guestTier = guestTierData?.tier || 'regular';
+        const tierBenefits = await getActiveTierBenefits(hotel.id, guestTier);
+        const pricing = applyTierBenefitsPricing(baseTotal, nights, tierBenefits);
+        const total = pricing.discountedTotal;
 
         const { data: stay, error: stayErr } = await supabase.from('stays').insert({
           hotel_id: hotel.id,
@@ -195,7 +208,7 @@ const CheckInOutPage = () => {
           number_of_nights: nights,
           number_of_adults: reservation.number_of_adults || 1,
           number_of_children: reservation.number_of_children || 0,
-          price_per_night: total / Math.max(nights, 1),
+          price_per_night: pricing.unitPrice,
           total_price: total,
           status: 'active',
           payment_status: 'pending',
@@ -212,10 +225,19 @@ const CheckInOutPage = () => {
           invoiceId: invoice.id,
           stayId: stay.id,
           guestId,
-          description: `Hébergement — ${nights} nuit(s)`,
+          description: `Hébergement — ${nights} nuit(s)${pricing.discountPercent > 0 ? ` — Avantage fidélité ${pricing.discountPercent}%` : ''}`,
           itemType: 'room',
           quantity: nights,
-          unitPrice: total / Math.max(nights, 1),
+          unitPrice: pricing.unitPrice,
+        });
+
+        // Feature 1: Apply taxes & fixed charges
+        await applyTaxesAndFixedCharges({
+          hotelId: hotel.id,
+          invoiceId: invoice.id,
+          stayId: stay.id,
+          guestId,
+          numberOfNights: nights,
         });
 
         // Update reservation status
@@ -327,7 +349,17 @@ const CheckInOutPage = () => {
         const room = availableRooms?.find(r => r.id === walkinStay.room_id);
         const ppn = walkinStay.price_per_night || room?.price_per_night || 0;
         const nights = walkinStay.check_out_date ? Math.max(1, Math.ceil((new Date(walkinStay.check_out_date).getTime() - new Date(walkinStay.check_in_date).getTime()) / 86400000)) : 1;
-        const total = ppn * nights;
+        const baseTotal = ppn * nights;
+
+        const { data: guestTierData } = await supabase
+          .from('guests')
+          .select('tier')
+          .eq('id', guestId!)
+          .maybeSingle();
+        const guestTier = guestTierData?.tier || 'regular';
+        const tierBenefits = await getActiveTierBenefits(hotel.id, guestTier);
+        const pricing = applyTierBenefitsPricing(baseTotal, nights, tierBenefits);
+        const total = pricing.discountedTotal;
 
         const { data: stay } = await supabase.from('stays').insert({
           hotel_id: hotel.id,
@@ -337,7 +369,7 @@ const CheckInOutPage = () => {
           check_in_date: new Date(walkinStay.check_in_date).toISOString(),
           check_out_date: walkinStay.check_out_date ? new Date(walkinStay.check_out_date).toISOString() : null,
           number_of_nights: nights,
-          price_per_night: ppn,
+          price_per_night: pricing.unitPrice,
           total_price: total,
           status: 'active',
           payment_status: 'pending',
@@ -353,10 +385,19 @@ const CheckInOutPage = () => {
           invoiceId: invoice.id,
           stayId: stay?.id,
           guestId: guestId!,
-          description: `Hébergement — ${nights} nuit(s)`,
+          description: `Hébergement — ${nights} nuit(s)${pricing.discountPercent > 0 ? ` — Avantage fidélité ${pricing.discountPercent}%` : ''}`,
           itemType: 'room',
           quantity: nights,
-          unitPrice: ppn,
+          unitPrice: pricing.unitPrice,
+        });
+
+        // Feature 1: Apply taxes & fixed charges
+        await applyTaxesAndFixedCharges({
+          hotelId: hotel.id,
+          invoiceId: invoice.id,
+          stayId: stay?.id,
+          guestId: guestId!,
+          numberOfNights: nights,
         });
 
         await supabase.from('rooms').update({ status: 'occupied' }).eq('id', walkinStay.room_id);

@@ -11,6 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { Star, Send, UtensilsCrossed, Check, ShoppingCart, Plus, Minus, Bell, User } from 'lucide-react';
 
@@ -27,6 +29,8 @@ const MenuPortalPage = () => {
   const [serviceRequest, setServiceRequest] = useState('');
   const [serviceType, setServiceType] = useState('towels');
   const [serviceSent, setServiceSent] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [cartOpen, setCartOpen] = useState(false);
 
   const { data: hotel } = useQuery({
     queryKey: ['hotel-menu-public', slug],
@@ -201,7 +205,20 @@ const MenuPortalPage = () => {
 
   const groupedItems = categories?.map(cat => ({ ...cat, items: menuItems?.filter(i => i.category_id === cat.id) || [] })).filter(g => g.items.length > 0) || [];
   const uncategorized = menuItems?.filter(i => !i.category_id) || [];
+  const availableTodayItems = (menuItems || []).filter((item: any) => item.is_available_today !== false);
   const cartTotal = cart.reduce((s, c) => s + c.item.price * c.quantity, 0);
+
+  const allCategoryTabs = [
+    { id: 'all', name: 'Tout' },
+    ...(categories || []).map((c: any) => ({ id: c.id, name: c.name })),
+    ...(uncategorized.length > 0 ? [{ id: 'uncategorized', name: 'Autres' }] : []),
+  ];
+
+  const filteredItems = selectedCategory === 'all'
+    ? availableTodayItems
+    : selectedCategory === 'uncategorized'
+      ? availableTodayItems.filter((item: any) => !item.category_id)
+      : availableTodayItems.filter((item: any) => item.category_id === selectedCategory);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 to-background">
@@ -218,7 +235,7 @@ const MenuPortalPage = () => {
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-3xl mx-auto px-4 py-6 space-y-6 pb-28">
         {/* Billing notice */}
         {activeStay && (
           <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-sm text-center">
@@ -228,12 +245,12 @@ const MenuPortalPage = () => {
 
         {/* Order confirmation */}
         {orderSent && (
-          <Card className="border-green-500">
-            <CardContent className="py-6 text-center">
+          <Card className="border-green-500 bg-gradient-to-br from-green-50 to-emerald-50">
+            <CardContent className="py-10 text-center">
               <Check className="h-12 w-12 text-green-500 mx-auto mb-3" />
-              <h2 className="text-xl font-bold">Commande envoyée !</h2>
-              <p className="text-muted-foreground mt-1">Commande <strong>{orderNumber}</strong></p>
-              <p className="text-sm text-muted-foreground mt-2">Votre commande a été envoyée à la cuisine.</p>
+              <h2 className="text-2xl font-bold">Commande envoyée</h2>
+              <p className="text-muted-foreground mt-1">Numéro <strong>{orderNumber}</strong></p>
+              <p className="text-sm text-muted-foreground mt-2">Votre commande est bien partie en cuisine.</p>
               {activeStay && <p className="text-sm text-primary mt-1">Montant ajouté à votre facture chambre {room}</p>}
               <Button variant="outline" className="mt-4" onClick={() => setOrderSent(false)}>Nouvelle commande</Button>
             </CardContent>
@@ -245,63 +262,45 @@ const MenuPortalPage = () => {
           <Card>
             <CardHeader><CardTitle className="flex items-center gap-2"><UtensilsCrossed className="h-5 w-5" />Notre Menu</CardTitle></CardHeader>
             <CardContent className="space-y-6">
-              {groupedItems.map(group => (
-                <div key={group.id}>
-                  <h3 className="font-semibold text-lg border-b pb-2 mb-3">{group.name}</h3>
-                  <div className="space-y-3">
-                    {group.items.map(item => (
-                      <div key={item.id} className="flex justify-between items-center">
-                        <div className="flex-1">
-                          <p className="font-medium">{item.name}</p>
-                          {item.description && <p className="text-sm text-muted-foreground">{item.description}</p>}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-base">{formatFCFA(item.price)}</Badge>
-                          <Button size="sm" variant="outline" onClick={() => addToCart(item)}><Plus className="h-3 w-3" /></Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              {uncategorized.length > 0 && (
-                <div>
-                  <h3 className="font-semibold text-lg border-b pb-2 mb-3">Autres</h3>
-                  {uncategorized.map(item => (
-                    <div key={item.id} className="flex justify-between items-center">
-                      <p className="font-medium">{item.name}</p>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline">{formatFCFA(item.price)}</Badge>
-                        <Button size="sm" variant="outline" onClick={() => addToCart(item)}><Plus className="h-3 w-3" /></Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
+              <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
+                <TabsList className="w-full overflow-x-auto justify-start">
+                  {allCategoryTabs.map(tab => <TabsTrigger key={tab.id} value={tab.id}>{tab.name}</TabsTrigger>)}
+                </TabsList>
+              </Tabs>
 
-        {/* Cart */}
-        {cart.length > 0 && !orderSent && (
-          <Card className="border-primary sticky bottom-4">
-            <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2"><ShoppingCart className="h-5 w-5" />Votre commande</CardTitle></CardHeader>
-            <CardContent className="space-y-2">
-              {cart.map(c => (
-                <div key={c.item.id} className="flex justify-between items-center text-sm">
-                  <span className="flex-1">{c.item.name}</span>
-                  <div className="flex items-center gap-2">
-                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => updateQuantity(c.item.id, -1)}><Minus className="h-3 w-3" /></Button>
-                    <span className="w-6 text-center">{c.quantity}</span>
-                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => updateQuantity(c.item.id, 1)}><Plus className="h-3 w-3" /></Button>
-                    <span className="w-24 text-right">{formatFCFA(c.item.price * c.quantity)}</span>
-                  </div>
-                </div>
-              ))}
-              <div className="border-t pt-2 flex justify-between font-bold"><span>Total</span><span>{formatFCFA(cartTotal)}</span></div>
-              <Button className="w-full" onClick={() => orderMutation.mutate()} disabled={orderMutation.isPending}>
-                <Send className="h-4 w-4 mr-2" />Passer la commande
-              </Button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {filteredItems.map((item: any) => (
+                  <Card key={item.id} className="overflow-hidden border-muted">
+                    {item.image_url ? (
+                      <img src={item.image_url} alt={item.name} className="h-40 w-full object-cover" />
+                    ) : (
+                      <div className="h-40 w-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-slate-400">
+                        <UtensilsCrossed className="h-8 w-8" />
+                      </div>
+                    )}
+                    <CardContent className="pt-4 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-semibold leading-tight">{item.name}</p>
+                          {item.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{item.description}</p>}
+                        </div>
+                        <Badge variant="outline">{formatFCFA(item.price)}</Badge>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1">
+                        {item.preparation_time_minutes ? <Badge variant="secondary">{item.preparation_time_minutes} min</Badge> : null}
+                        {item.calories ? <Badge variant="secondary">{item.calories} kcal</Badge> : null}
+                        {(item.allergens || []).slice(0, 3).map((a: string) => <Badge key={a} variant="outline" className="text-[10px]">{a}</Badge>)}
+                      </div>
+
+                      <Button size="sm" className="w-full" onClick={() => addToCart(item)}>
+                        <Plus className="h-3 w-3 mr-1" /> Ajouter
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              {filteredItems.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">Aucun article disponible dans cette catégorie.</p>}
             </CardContent>
           </Card>
         )}
@@ -361,6 +360,46 @@ const MenuPortalPage = () => {
           </CardContent>
         </Card>
       </div>
+
+      {!orderSent && (
+        <div className="fixed bottom-4 left-0 right-0 z-40 px-4">
+          <div className="max-w-3xl mx-auto flex justify-end">
+            <Button className="rounded-full px-5 shadow-lg" onClick={() => setCartOpen(true)}>
+              <ShoppingCart className="h-4 w-4 mr-2" /> Panier ({cart.length}) {cart.length > 0 ? `• ${formatFCFA(cartTotal)}` : ''}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <Dialog open={cartOpen} onOpenChange={setCartOpen}>
+        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><ShoppingCart className="h-5 w-5" />Votre commande</DialogTitle></DialogHeader>
+          {cart.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">Votre panier est vide.</p>
+          ) : (
+            <div className="space-y-3">
+              {cart.map(c => (
+                <div key={c.item.id} className="flex justify-between items-center text-sm border rounded-lg p-2">
+                  <div className="flex-1 pr-2">
+                    <p className="font-medium leading-tight">{c.item.name}</p>
+                    <p className="text-xs text-muted-foreground">{formatFCFA(c.item.price)} x {c.quantity}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => updateQuantity(c.item.id, -1)}><Minus className="h-3 w-3" /></Button>
+                    <span className="w-6 text-center">{c.quantity}</span>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => updateQuantity(c.item.id, 1)}><Plus className="h-3 w-3" /></Button>
+                  </div>
+                </div>
+              ))}
+              <div className="border-t pt-3 flex justify-between font-bold"><span>Total</span><span>{formatFCFA(cartTotal)}</span></div>
+              <Button className="w-full" onClick={() => orderMutation.mutate()} disabled={orderMutation.isPending}>
+                <Send className="h-4 w-4 mr-2" />Passer la commande
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <footer className="py-6 text-center text-sm text-muted-foreground"><p>© {new Date().getFullYear()} {hotel.name}</p></footer>
     </div>
   );

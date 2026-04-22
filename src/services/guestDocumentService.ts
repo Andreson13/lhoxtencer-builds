@@ -24,15 +24,15 @@ export const normalizeDateRange = (start: string, end: string) => {
 export const fetchPoliceRegisterRows = async (hotelId: string, periodStart: string, periodEnd: string) => {
   const { start, end } = normalizeDateRange(periodStart, periodEnd);
 
+  // Fetch stays with minimal guest fields
   const { data: stays, error: staysError } = await supabase
     .from('stays')
     .select(`
       id, guest_id, stay_type, check_in_date, check_out_date, actual_check_out, status,
-      rooms(room_number),
-      guests(
+      rooms!stays_room_id_fkey(room_number),
+      guests!stays_guest_id_fkey(
         id, last_name, first_name, date_of_birth, place_of_birth,
-        nationality, profession, usual_address, country_of_residence,
-        id_type, id_number, id_issued_on, id_issued_at, gender, phone
+        nationality, id_type, id_number, id_issued_on, id_issued_at
       )
     `)
     .eq('hotel_id', hotelId)
@@ -42,15 +42,15 @@ export const fetchPoliceRegisterRows = async (hotelId: string, periodStart: stri
 
   if (staysError) throw staysError;
 
+  // Fetch siestes with minimal guest fields
   const { data: siestes, error: siestesError } = await supabase
     .from('siestes')
     .select(`
       id, guest_id, arrival_date, arrival_time, departure_time,
-      rooms(room_number),
-      guests(
+      rooms!siestes_room_id_fkey(room_number),
+      guests!siestes_guest_id_fkey(
         id, last_name, first_name, date_of_birth, place_of_birth,
-        nationality, profession, usual_address, country_of_residence,
-        id_type, id_number, id_issued_on, id_issued_at, gender, phone
+        nationality, id_type, id_number, id_issued_on, id_issued_at
       )
     `)
     .eq('hotel_id', hotelId)

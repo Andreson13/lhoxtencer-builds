@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -51,11 +51,11 @@ const MainCourantePage = () => {
   const [manualEntry, setManualEntry] = useState({ room_number: '', nom_client: '', nombre_personnes: 1 });
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentContext, setPaymentContext] = useState<any>(null);
+  const [isReconciling, setIsReconciling] = useState(false);
 
   const { data: entries, isLoading } = useQuery({
     queryKey: ['main-courante', hotel?.id, selectedDate],
     queryFn: async () => {
-      await reconcileMainCouranteForDate(hotel!.id, selectedDate);
       const { data, error } = await supabase.from('main_courante').select('*').eq('hotel_id', hotel!.id).eq('journee', selectedDate).order('updated_at', { ascending: false });
       if (error) throw error;
 
@@ -75,6 +75,50 @@ const MainCourantePage = () => {
     },
     enabled: !!hotel?.id,
   });
+
+  useEffect(() => {
+    if (!hotel?.id) return;
+    let cancelled = false;
+
+    // Only reconcile if the date is today or within the last 7 days
+    const selectedD = new Date(selectedDate);
+    const today = new Date();
+    const daysDiff = Math.floor((today.getTime() - selectedD.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // Skip reconciliation for dates older than 30 days or in the future
+    if (daysDiff < -1 || daysDiff > 30) {
+      setIsReconciling(false);
+      return;
+    }
+
+    const runReconcile = async () => {
+      setIsReconciling(true);
+      try {
+        await reconcileMainCouranteForDate(hotel.id, selectedDate);
+        if (!cancelled) {
+          qc.invalidateQueries({ queryKey: ['main-courante', hotel.id, selectedDate] });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('main_courante reconcile failed', error);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsReconciling(false);
+        }
+      }
+    };
+
+    // Add a small delay to batch reconciliation calls
+    const timer = setTimeout(() => {
+      runReconcile();
+    }, 500);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [hotel?.id, selectedDate, qc]);
 
   const updateFieldMutation = useMutation({
     mutationFn: async ({ id, field, value }: { id: string; field: string; value: number }) => {
@@ -217,6 +261,7 @@ const MainCourantePage = () => {
     <div className="page-container space-y-6">
       <PageHeader title={t('maincourante.title')} subtitle={hotel?.name || ''}>
         <div className="flex items-center gap-2">
+          {isReconciling && <Badge variant="outline">Synchronisation...</Badge>}
           {!isClosed && isToday && (profile?.role === 'admin' || profile?.role === 'manager') && (
             <Button variant="destructive" onClick={() => closeDayMutation.mutate()}><Lock className="h-4 w-4 mr-2" />{t('maincourante.closeDay')}</Button>
           )}

@@ -21,7 +21,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { UtensilsCrossed, Plus, Pencil, Trash2 } from 'lucide-react';
+import { UtensilsCrossed, Plus, Pencil, Trash2, Upload, X } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import { generateOrderNumber } from '@/utils/formatters';
 import { addChargeToInvoice } from '@/services/transactionService';
 import { enqueueOfflineSubmission } from '@/services/offlineSubmissionQueue';
@@ -34,8 +36,11 @@ const menuSchema = z.object({
   price: z.coerce.number().min(0),
   category_id: z.string().optional(),
   description: z.string().optional(),
+  preparation_time_minutes: z.coerce.number().min(0).optional(),
+  calories: z.coerce.number().min(0).optional(),
 });
 
+const ALLERGEN_LIST = ['Gluten', 'Lactose', 'Noix', 'Oeufs', 'Poisson', 'Soja', 'Arachides', 'Crustacés'];
 const RestaurantPage = () => {
   const { t } = useI18n();
   useRoleGuard(['admin', 'manager', 'receptionist', 'restaurant']);
@@ -50,7 +55,15 @@ const RestaurantPage = () => {
   const [orderRoom, setOrderRoom] = useState<string>('');
   const [isWalkin, setIsWalkin] = useState(false);
   const [walkinName, setWalkinName] = useState('');
+
   const [walkinTable, setWalkinTable] = useState('');
+  const [menuIngredients, setMenuIngredients] = useState<string[]>([]);
+  const [menuIngredientInput, setMenuIngredientInput] = useState('');
+  const [menuAllergens, setMenuAllergens] = useState<string[]>([]);
+  const [menuImageUrl, setMenuImageUrl] = useState<string>('');
+  const [menuImageFile, setMenuImageFile] = useState<File | null>(null);
+  const [menuImageUploading, setMenuImageUploading] = useState(false);
+  const [menuIsAvailableToday, setMenuIsAvailableToday] = useState(true);
 
   const isNetworkIssue = (error: any) => {
     const message = String(error?.message || error || '').toLowerCase();
@@ -243,7 +256,30 @@ const RestaurantPage = () => {
 
   const saveMenuMutation = useMutation({
     mutationFn: async (values: any) => {
-      const payload = { ...values, hotel_id: hotel!.id, category_id: values.category_id || null, description: values.description || null };
+      let finalImageUrl = menuImageUrl;
+      if (menuImageFile) {
+        setMenuImageUploading(true);
+        try {
+          const ext = menuImageFile.name.split('.').pop();
+          const path = `restaurant/${hotel!.id}/${Date.now()}.${ext}`;
+          const { error: upErr } = await supabase.storage.from('hotel-assets').upload(path, menuImageFile, { upsert: true });
+          if (upErr) throw upErr;
+          const { data: urlData } = supabase.storage.from('hotel-assets').getPublicUrl(path);
+          finalImageUrl = urlData.publicUrl;
+        } finally { setMenuImageUploading(false); }
+      }
+      const payload = {
+        ...values,
+        hotel_id: hotel!.id,
+        category_id: values.category_id || null,
+        description: values.description || null,
+        image_url: finalImageUrl || null,
+        ingredients: menuIngredients.length ? menuIngredients : null,
+        allergens: menuAllergens.length ? menuAllergens : null,
+        preparation_time_minutes: values.preparation_time_minutes || null,
+        calories: values.calories || null,
+        is_available_today: menuIsAvailableToday,
+      };
       if (editingItem) {
         const { error } = await supabase.from('restaurant_items').update(payload).eq('id', editingItem.id);
         if (error) throw error;
@@ -252,7 +288,18 @@ const RestaurantPage = () => {
         if (error) throw error;
       }
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['menu-items'] }); toast.success(t('restaurant.saved')); setMenuDialogOpen(false); setEditingItem(null); reset(); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['menu-items'] });
+      toast.success(t('restaurant.saved'));
+      setMenuDialogOpen(false);
+      setEditingItem(null);
+      reset();
+      setMenuIngredients([]);
+      setMenuAllergens([]);
+      setMenuImageUrl('');
+      setMenuImageFile(null);
+      setMenuIsAvailableToday(true);
+    },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -367,7 +414,17 @@ const RestaurantPage = () => {
                       <TableCell className="text-right">{formatFCFA(item.price)}</TableCell>
                       <TableCell><Badge variant={item.available ? 'default' : 'secondary'}>{item.available ? t('restaurant.menu.itemAvailable') : t('restaurant.menu.itemUnavailable')}</Badge></TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" onClick={() => { setEditingItem(item); Object.entries(item).forEach(([k, v]) => { if (v != null) setValue(k as any, v); }); setMenuDialogOpen(true); }}><Pencil className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => {
+                          setEditingItem(item);
+                          Object.entries(item).forEach(([k, v]) => { if (v != null) setValue(k as any, v); });
+                          const itemAny = item as any;
+                          setMenuIngredients(Array.isArray(itemAny.ingredients) ? itemAny.ingredients : []);
+                          setMenuAllergens(Array.isArray(itemAny.allergens) ? itemAny.allergens : []);
+                          setMenuImageUrl(itemAny.image_url || '');
+                          setMenuImageFile(null);
+                          setMenuIsAvailableToday(itemAny.is_available_today !== false);
+                          setMenuDialogOpen(true);
+                        }}><Pencil className="h-4 w-4" /></Button>
                         <Button variant="ghost" size="icon" onClick={() => setDeleteItem(item)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                       </TableCell>
                     </TableRow>
@@ -444,8 +501,8 @@ const RestaurantPage = () => {
       </Dialog>
 
       {/* Menu Item Dialog */}
-      <Dialog open={menuDialogOpen} onOpenChange={v => { if (!v) { setMenuDialogOpen(false); setEditingItem(null); reset(); } }}>
-        <DialogContent>
+      <Dialog open={menuDialogOpen} onOpenChange={v => { if (!v) { setMenuDialogOpen(false); setEditingItem(null); reset(); setMenuIngredients([]); setMenuAllergens([]); setMenuImageUrl(''); setMenuImageFile(null); } }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editingItem ? t('restaurant.dialog.menuEditTitle') : t('restaurant.dialog.menuNewTitle')}</DialogTitle><DialogDescription>{t('restaurant.dialog.menuDescription')}</DialogDescription></DialogHeader>
           <form onSubmit={handleSubmit(d => saveMenuMutation.mutate(d))} className="space-y-4">
             <div><Label>{t('restaurant.menu.name')} *</Label><Input {...register('name')} /></div>
@@ -456,10 +513,85 @@ const RestaurantPage = () => {
                 <SelectContent>{categories?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div><Label>{t('restaurant.dialog.description')}</Label><Input {...register('description')} /></div>
+            <div><Label>{t('restaurant.dialog.description')}</Label><Textarea {...register('description')} rows={2} /></div>
+
+            {/* Image upload */}
+            <div>
+              <Label>Image</Label>
+              <div className="mt-1 border-2 border-dashed rounded-lg p-3 flex flex-col items-center gap-2">
+                {menuImageUrl && !menuImageFile && <img src={menuImageUrl} alt="preview" className="h-24 w-full object-cover rounded" />}
+                {menuImageFile && <img src={URL.createObjectURL(menuImageFile)} alt="preview" className="h-24 w-full object-cover rounded" />}
+                <label className="cursor-pointer flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+                  <Upload className="h-4 w-4" />
+                  {menuImageFile ? menuImageFile.name : 'Choisir une image'}
+                  <input type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) { setMenuImageFile(f); setMenuImageUrl(''); } }} />
+                </label>
+                {(menuImageUrl || menuImageFile) && (
+                  <Button type="button" variant="ghost" size="sm" onClick={() => { setMenuImageUrl(''); setMenuImageFile(null); }}><X className="h-3 w-3 mr-1" />Supprimer</Button>
+                )}
+              </div>
+            </div>
+
+            {/* Ingredients tag input */}
+            <div>
+              <Label>Ingrédients</Label>
+              <div className="flex flex-wrap gap-1 mt-1 mb-1">
+                {menuIngredients.map(ing => (
+                  <span key={ing} className="inline-flex items-center gap-1 bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full text-xs">
+                    {ing}
+                    <button type="button" onClick={() => setMenuIngredients(prev => prev.filter(i => i !== ing))}><X className="h-3 w-3" /></button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Ajouter un ingrédient..."
+                  value={menuIngredientInput}
+                  onChange={e => setMenuIngredientInput(e.target.value)}
+                  onKeyDown={e => {
+                    if ((e.key === 'Enter' || e.key === ',') && menuIngredientInput.trim()) {
+                      e.preventDefault();
+                      const val = menuIngredientInput.trim().replace(/,$/, '');
+                      if (val && !menuIngredients.includes(val)) setMenuIngredients(prev => [...prev, val]);
+                      setMenuIngredientInput('');
+                    }
+                  }}
+                />
+                <Button type="button" variant="outline" size="sm" onClick={() => { const val = menuIngredientInput.trim(); if (val && !menuIngredients.includes(val)) { setMenuIngredients(prev => [...prev, val]); setMenuIngredientInput(''); } }}>+</Button>
+              </div>
+            </div>
+
+            {/* Allergens */}
+            <div>
+              <Label>Allergènes</Label>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                {ALLERGEN_LIST.map(al => (
+                  <div key={al} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`al-${al}`}
+                      checked={menuAllergens.includes(al)}
+                      onCheckedChange={checked => setMenuAllergens(prev => checked ? [...prev, al] : prev.filter(a => a !== al))}
+                    />
+                    <label htmlFor={`al-${al}`} className="text-sm cursor-pointer">{al}</label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div><Label>Temps de préparation (min)</Label><Input type="number" min={0} {...register('preparation_time_minutes')} placeholder="15" /></div>
+              <div><Label>Calories (kcal)</Label><Input type="number" min={0} {...register('calories')} placeholder="350" /></div>
+            </div>
+
+            {/* Available today toggle */}
+            <div className="flex items-center gap-3">
+              <Switch checked={menuIsAvailableToday} onCheckedChange={setMenuIsAvailableToday} id="avail-today" />
+              <Label htmlFor="avail-today">Disponible aujourd'hui</Label>
+            </div>
+
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => { setMenuDialogOpen(false); setEditingItem(null); reset(); }}>{t('common.cancel')}</Button>
-              <Button type="submit">{t('common.save')}</Button>
+              <Button type="button" variant="outline" onClick={() => { setMenuDialogOpen(false); setEditingItem(null); reset(); setMenuIngredients([]); setMenuAllergens([]); setMenuImageUrl(''); setMenuImageFile(null); }}>{t('common.cancel')}</Button>
+              <Button type="submit" disabled={menuImageUploading}>{menuImageUploading ? 'Envoi...' : t('common.save')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

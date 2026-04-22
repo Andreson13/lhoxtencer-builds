@@ -5,7 +5,7 @@ import {
   Coffee, BookOpen, UtensilsCrossed, ChefHat, Package,
   Receipt, Wallet, Sparkles, BarChart3,
   MessageSquare, QrCode, Settings, ScrollText, Building2,
-  Globe, Layers, CreditCard, UserPlus, Shield
+  Globe, Layers, CreditCard, UserPlus, Shield, Download, Gift
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
@@ -43,6 +43,7 @@ const navGroups = [
     items: [
       { key: 'nav.cashexpenses', path: '/cash-expenses', icon: Wallet, roles: ['admin','manager','receptionist','accountant'] },
       { key: 'nav.billing', path: '/billing', icon: Receipt, roles: ['admin','manager','receptionist','accountant'] },
+      { key: 'nav.forfaits', path: '/forfaits', icon: Gift, roles: ['admin','manager','receptionist'] },
     ],
   },
   {
@@ -53,6 +54,7 @@ const navGroups = [
       { key: 'nav.qrcodes', path: '/qr-codes', icon: QrCode, roles: ['admin','manager'] },
       { key: 'nav.audit', path: '/audit', icon: ScrollText, roles: ['admin','manager'] },
       { key: 'nav.policeRegister', path: '/police-register', icon: Shield, roles: ['admin','manager','receptionist'] },
+      { key: 'nav.export', path: '/export', icon: Download, roles: ['admin','manager'] },
     ],
   },
   {

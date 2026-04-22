@@ -26,6 +26,8 @@ const translations: Record<string, Record<Lang, string>> = {
   'nav.settings': { fr: 'Paramètres', en: 'Settings' },
   'nav.audit': { fr: 'Journal d\'audit', en: 'Audit Log' },
   'nav.policeRegister': { fr: 'Registre de Police', en: 'Police Register' },
+  'nav.export': { fr: 'Exporter les données', en: 'Export Data' },
+  'nav.forfaits': { fr: 'Forfaits', en: 'Packages' },
   'nav.categories': { fr: 'Catégories', en: 'Categories' },
   // Common
   'common.add': { fr: 'Ajouter', en: 'Add' },

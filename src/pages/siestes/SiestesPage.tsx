@@ -74,7 +74,7 @@ const SiestesPage = () => {
   const { data: rooms } = useQuery({
     queryKey: ['rooms-available', hotel?.id],
     queryFn: async () => {
-      const { data } = await supabase.from('rooms').select('id, room_number').eq('hotel_id', hotel!.id).eq('status', 'available');
+      const { data } = await supabase.from('rooms').select('id, room_number, category_id, room_categories(price_sieste)').eq('hotel_id', hotel!.id).eq('status', 'available');
       return data || [];
     },
     enabled: !!hotel?.id,
@@ -354,7 +354,11 @@ const SiestesPage = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>Chambre</Label>
-                  <Select onValueChange={v => setSiesteForm(f => ({ ...f, room_id: v }))}>
+                  <Select onValueChange={v => {
+                    const selectedRoom = rooms?.find(r => r.id === v);
+                    const siestePrice = selectedRoom?.room_categories?.price_sieste || 0;
+                    setSiesteForm(f => ({ ...f, room_id: v, amount_paid: siestePrice || 0 }));
+                  }}>
                     <SelectTrigger><SelectValue placeholder="Chambre" /></SelectTrigger>
                     <SelectContent>{rooms?.map(r => <SelectItem key={r.id} value={r.id}>{r.room_number}</SelectItem>)}</SelectContent>
                   </Select>

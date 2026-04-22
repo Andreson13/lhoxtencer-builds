@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { generateInvoiceNumber } from '@/utils/formatters';
 import { logAudit } from '@/utils/auditLog';
+import { addLoyaltyPoints } from './tierService';
 
 export const getCompatibleInvoiceItemType = (itemType: string) => {
   if (itemType === 'sieste') return 'service';
@@ -225,6 +226,20 @@ export async function recordPayment(params: {
 
   runInBackground(reconcileMainCouranteForDate(params.hotelId, date), 'reconcileMainCouranteForDate after recordPayment failed');
 
+  // Feature 10: Add loyalty points based on payment amount
+  runInBackground(
+    (async () => {
+      const { data: guestData } = await supabase.from('guests').select('tier').eq('id', params.guestId).maybeSingle();
+      await addLoyaltyPoints({
+        guestId: params.guestId,
+        hotelId: params.hotelId,
+        amountPaid: params.amount,
+        tier: guestData?.tier || 'regular',
+      });
+    })(),
+    'addLoyaltyPoints after recordPayment failed'
+  );
+
   return payment;
 }
 
@@ -381,6 +396,7 @@ export async function reconcileMainCouranteForDate(hotelId: string, date: string
     if (it.item_type === 'room') b.hebergement += value;
     else if (it.item_type === 'restaurant') b.restaurant += value;
     else if (it.item_type === 'bar' || it.item_type === 'minibar') b.bar += value;
+    else if (it.item_type === 'tax') b.divers += value;
     else b.divers += value;
   }
 

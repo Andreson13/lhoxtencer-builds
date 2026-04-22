@@ -5,11 +5,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useI18n } from '@/contexts/I18nContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
+import { usePermission } from '@/hooks/usePermission';
 import { useCashSession } from '@/hooks/useCashSession';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatFCFA, formatDateTime, formatDate } from '@/utils/formatters';
+import { recordCashMovement } from '@/services/transactionService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -42,6 +44,7 @@ const CashExpensesPage = () => {
   const { profile } = useAuth();
   const { hotel } = useHotel();
   const qc = useQueryClient();
+  const canApproveExpenses = usePermission('expenses.approve');
   const { currentSession } = useCashSession();
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [manualCloseOpen, setManualCloseOpen] = useState(false);
@@ -125,10 +128,46 @@ const CashExpensesPage = () => {
 
   const approveExpense = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const expense = expenses?.find((e: any) => e.id === id);
       const { error } = await supabase.from('expenses').update({ approval_status: status, approved_by: profile?.id, approved_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;
+
+      if (
+        status === 'approved' &&
+        expense &&
+        expense.approval_status !== 'approved' &&
+        (expense.payment_method || 'cash') === 'cash' &&
+        hotel?.id &&
+        profile?.id
+      ) {
+        const { data: existingOutflow } = await supabase
+          .from('cash_movements')
+          .select('id')
+          .eq('hotel_id', hotel.id)
+          .eq('source', 'expense')
+          .eq('reference_id', id)
+          .maybeSingle();
+
+        if (!existingOutflow) {
+          await recordCashMovement({
+            hotelId: hotel.id,
+            type: 'out',
+            source: 'expense',
+            description: `Dépense approuvée: ${expense.title || 'Sortie caisse'}`,
+            amount: Number(expense.amount || 0),
+            paymentMethod: 'cash',
+            referenceId: id,
+            userId: profile.id,
+          });
+        }
+      }
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); toast.success('Statut mis à jour'); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expenses'] });
+      qc.invalidateQueries({ queryKey: ['cash-movements'] });
+      qc.invalidateQueries({ queryKey: ['cash-session-auto'] });
+      toast.success('Statut mis à jour');
+    },
   });
 
   return (
@@ -203,7 +242,7 @@ const CashExpensesPage = () => {
                       <TableCell>{exp.payment_method}</TableCell>
                       <TableCell><StatusBadge status={exp.approval_status || 'pending_approval'} /></TableCell>
                       <TableCell className="text-right space-x-1">
-                        {exp.approval_status === 'pending_approval' && (profile?.role === 'admin' || profile?.role === 'manager') && (
+                        {exp.approval_status === 'pending_approval' && canApproveExpenses && (
                           <>
                             <Button size="sm" variant="outline" onClick={() => approveExpense.mutate({ id: exp.id, status: 'approved' })}>Approuver</Button>
                             <Button size="sm" variant="destructive" onClick={() => approveExpense.mutate({ id: exp.id, status: 'rejected' })}>Rejeter</Button>

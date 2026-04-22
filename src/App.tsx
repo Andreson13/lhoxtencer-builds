@@ -32,6 +32,8 @@ import QRCodesPage from "@/pages/qrcodes/QRCodesPage";
 import SettingsPage from "@/pages/settings/SettingsPage";
 import AuditLogPage from "@/pages/audit/AuditLogPage";
 import PoliceRegisterPage from "@/pages/gestion/PoliceRegisterPage";
+import ExportPage from "@/pages/gestion/ExportPage";
+import ForfaitsPage from "@/pages/finance/ForfaitsPage";
 import SuperAdminHotelsPage from "@/pages/admin/SuperAdminHotelsPage";
 import AccessDeniedPage from "@/pages/AccessDeniedPage";
 import NotFound from "@/pages/NotFound";
@@ -105,6 +107,8 @@ const App = () => (
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/audit" element={<AuditLogPage />} />
                   <Route path="/police-register" element={<PoliceRegisterPage />} />
+                  <Route path="/export" element={<ExportPage />} />
+                  <Route path="/forfaits" element={<ForfaitsPage />} />
                   <Route path="/superadmin" element={<SuperAdminHotelsPage />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />
