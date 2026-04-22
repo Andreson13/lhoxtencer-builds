@@ -267,9 +267,15 @@ const CheckInOutPage = () => {
       }
     },
     onSuccess: (result) => {
+      // Invalidate all queries that depend on stay status across the app
       qc.invalidateQueries({ queryKey: ['reservations-checkin'] });
       qc.invalidateQueries({ queryKey: ['active-stays-checkout'] });
+      qc.invalidateQueries({ queryKey: ['stays-all'] });
+      qc.invalidateQueries({ queryKey: ['active-stays-count'] });
+      qc.invalidateQueries({ queryKey: ['guests'] });
       qc.invalidateQueries({ queryKey: ['rooms'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['pending-payments'] });
       if (result?.duplicate) {
         toast.info('Cette reservation est deja enregistree en check-in.');
       } else if (result?.queued) {
@@ -432,8 +438,14 @@ const CheckInOutPage = () => {
       }
     },
     onSuccess: (result) => {
+      // Invalidate all queries that depend on stay status across the app
       qc.invalidateQueries({ queryKey: ['active-stays-checkout'] });
+      qc.invalidateQueries({ queryKey: ['stays-all'] });
+      qc.invalidateQueries({ queryKey: ['active-stays-count'] });
+      qc.invalidateQueries({ queryKey: ['guests'] });
       qc.invalidateQueries({ queryKey: ['rooms'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['pending-payments'] });
       if (result?.duplicate) {
         toast.info('Ce client est deja enregistre dans cette chambre.');
       } else if (result?.queued) {
@@ -555,8 +567,14 @@ const CheckInOutPage = () => {
       }
     },
     onSuccess: (result) => {
+      // Invalidate all queries that depend on stay status across the app
       qc.invalidateQueries({ queryKey: ['active-stays-checkout'] });
+      qc.invalidateQueries({ queryKey: ['stays-all'] });
+      qc.invalidateQueries({ queryKey: ['active-stays-count'] });
+      qc.invalidateQueries({ queryKey: ['guests'] });
       qc.invalidateQueries({ queryKey: ['rooms'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['pending-payments'] });
       if (result?.noop) {
         toast.info('Ce sejour est deja cloture.');
       } else if (result?.queued) {

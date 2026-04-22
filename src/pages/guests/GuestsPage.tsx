@@ -575,9 +575,14 @@ const GuestsPage = () => {
       }
     },
     onSuccess: (result) => {
+      // Invalidate all queries that depend on stay status across the app
       qc.invalidateQueries({ queryKey: ['stays-all'] });
       qc.invalidateQueries({ queryKey: ['guest-stays'] });
+      qc.invalidateQueries({ queryKey: ['active-stays-count'] });
+      qc.invalidateQueries({ queryKey: ['guests'] });
       qc.invalidateQueries({ queryKey: ['rooms'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['pending-payments'] });
       qc.invalidateQueries({ queryKey: ['invoices'] });
       toast.success(result?.queued ? 'Sejour mis en file locale. Synchronisation en attente du reseau.' : t('guests.stayCreated'));
       setStayDialogOpen(false);

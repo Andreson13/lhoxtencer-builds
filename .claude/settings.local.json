@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd /d \"C:\\\\Users\\\\Andreson\\\\PROJECTS\\\\hotel-harmony-781ad4c5\")",
+      "Bash(npm run *)"
+    ]
+  }
+}

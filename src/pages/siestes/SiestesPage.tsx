@@ -192,8 +192,12 @@ const SiestesPage = () => {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['siestes'] });
-      qc.invalidateQueries({ queryKey: ['rooms'] });
+      qc.invalidateQueries({ queryKey: ['stays-all'] });
+      qc.invalidateQueries({ queryKey: ['active-stays-count'] });
       qc.invalidateQueries({ queryKey: ['guests'] });
+      qc.invalidateQueries({ queryKey: ['rooms'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['pending-payments'] });
       toast.success('Sieste enregistrée');
       resetDialog();
     },
@@ -405,6 +409,11 @@ const SiestesPage = () => {
           onSuccess={() => {
             qc.invalidateQueries({ queryKey: ['siestes'] });
             qc.invalidateQueries({ queryKey: ['stays'] });
+            qc.invalidateQueries({ queryKey: ['stays-all'] });
+            qc.invalidateQueries({ queryKey: ['active-stays-count'] });
+            qc.invalidateQueries({ queryKey: ['guests'] });
+            qc.invalidateQueries({ queryKey: ['dashboard'] });
+            qc.invalidateQueries({ queryKey: ['pending-payments'] });
             qc.invalidateQueries({ queryKey: ['invoices'] });
           }}
         />

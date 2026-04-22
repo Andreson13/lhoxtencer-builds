@@ -75,21 +75,52 @@ const AccueilClientPage = () => {
     return `${y}-${m}-${day}`;
   };
 
-  // Queries
+  // ✅ IMPROVED GUEST SEARCH QUERY - Case-insensitive, flexible matching
   const { data: existingGuests } = useQuery({
     queryKey: ['guest-search-accueil', hotel?.id, guestSearch],
     queryFn: async () => {
       if (guestSearch.length < 1) return [];
-      const searchTerm = guestSearch.trim();
       
-      // First try exact prefix match on full name
-      const { data } = await supabase.from('guests').select('id, last_name, first_name, phone, id_number, nationality, tier, loyalty_points')
+      const searchTerm = guestSearch.trim().toLowerCase();
+      const searchWords = searchTerm.split(/\s+/).filter(Boolean);
+      
+      // Fetch all guests for the hotel and filter client-side for flexible matching
+      const { data } = await supabase
+        .from('guests')
+        .select('id, last_name, first_name, phone, id_number, nationality, tier, loyalty_points')
         .eq('hotel_id', hotel!.id)
-        // Search with fuzzy/partial matching
-        .or(`last_name.ilike.${searchTerm}%,first_name.ilike.${searchTerm}%,last_name.ilike.%${searchTerm}%,first_name.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%,id_number.ilike.%${searchTerm}%`)
         .order('last_name, first_name')
-        .limit(20);
-      return data || [];
+        .limit(100);
+      
+      if (!data) return [];
+      
+      // Client-side filtering with flexible, case-insensitive matching
+      const results = data.filter((guest: any) => {
+        const fullName = `${guest.last_name || ''} ${guest.first_name || ''}`.toLowerCase();
+        const phone = (guest.phone || '').toLowerCase();
+        const idNumber = (guest.id_number || '').toLowerCase();
+        
+        // Check if ANY search word matches ANY field (flexible matching)
+        return searchWords.some(word => 
+          fullName.includes(word) ||
+          phone.includes(word) ||
+          idNumber.includes(word)
+        );
+      });
+      
+      // Sort by relevance: exact match → prefix match → alphabetical
+      return results.sort((a: any, b: any) => {
+        const aFullName = `${a.last_name || ''} ${a.first_name || ''}`.toLowerCase();
+        const bFullName = `${b.last_name || ''} ${b.first_name || ''}`.toLowerCase();
+        
+        if (aFullName === searchTerm) return -1;
+        if (bFullName === searchTerm) return 1;
+        
+        if (aFullName.startsWith(searchTerm)) return -1;
+        if (bFullName.startsWith(searchTerm)) return 1;
+        
+        return aFullName.localeCompare(bFullName, 'fr');
+      });
     },
     enabled: !!hotel?.id && guestSearch.length >= 1,
   });
@@ -374,7 +405,11 @@ const AccueilClientPage = () => {
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['rooms'] });
       qc.invalidateQueries({ queryKey: ['stays'] });
+      qc.invalidateQueries({ queryKey: ['stays-all'] });
+      qc.invalidateQueries({ queryKey: ['active-stays-count'] });
       qc.invalidateQueries({ queryKey: ['guests'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['pending-payments'] });
       qc.invalidateQueries({ queryKey: ['invoices'] });
       qc.invalidateQueries({ queryKey: ['siestes'] });
       setSuccess(result);

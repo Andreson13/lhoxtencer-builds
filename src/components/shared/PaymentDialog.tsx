@@ -56,10 +56,13 @@ export const PaymentDialog = ({
       });
     },
     onSuccess: () => {
+      // Only invalidate queries that directly display payment/invoice data
+      // Avoid invalidating heavy queries like dashboard, main-courante that cause long overlay
       qc.invalidateQueries({ queryKey: ['invoices'] });
       qc.invalidateQueries({ queryKey: ['stays'] });
+      qc.invalidateQueries({ queryKey: ['stays-all'] });
+      qc.invalidateQueries({ queryKey: ['guest-stays'] });
       qc.invalidateQueries({ queryKey: ['cash-movements'] });
-      qc.invalidateQueries({ queryKey: ['main-courante'] });
       toast.success(`Paiement enregistré — ${formatFCFA(amount)} reçus`);
       onSuccess?.();
       onOpenChange(false);
