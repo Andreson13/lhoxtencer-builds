@@ -257,7 +257,31 @@ const BookingPortalPage = () => {
 
   return (
     <div className="booking-portal min-h-screen">
-      <section className="portal-hero px-4 md:px-8 py-10 md:py-14">
+      {/* Sticky Navigation Header */}
+      <header className="portal-header sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-black/5 shadow-sm">
+        <div className="max-w-6xl mx-auto px-4 md:px-8 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-8 flex-1">
+            <h2 className="text-lg font-semibold text-foreground">{hotel.name}</h2>
+            <nav className="hidden md:flex gap-6 text-sm text-muted-foreground">
+              <a href="#rooms" className="hover:text-foreground transition-colors">{t('portal.rooms.title')}</a>
+              <a href="#services" className="hover:text-foreground transition-colors">{t('portal.services.title')}</a>
+              <a href="#about" className="hover:text-foreground transition-colors">{t('portal.about.title')}</a>
+              <a href="#contact" className="hover:text-foreground transition-colors">{t('portal.contact.title')}</a>
+            </nav>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => {
+              const form = document.getElementById('booking-form');
+              form?.scrollIntoView({ behavior: 'smooth' });
+            }}
+          >
+            {t('portal.form.submit')} <ArrowRight className="h-3 w-3 ml-1" />
+          </Button>
+        </div>
+      </header>
+
+      <section className="portal-hero px-4 md:px-8 py-10 md:py-14" id="top">
         <div className="max-w-6xl mx-auto grid lg:grid-cols-12 gap-6 items-stretch">
           <div className="lg:col-span-8 portal-hero-panel">
             {coverPhoto ? (
@@ -337,27 +361,28 @@ const BookingPortalPage = () => {
       </section>
 
       <div className="max-w-6xl mx-auto px-4 md:px-8 pb-12">
+        {/* Guest-Friendly Facts Section */}
         <section className="portal-stats-strip mb-8">
           <div className="portal-stat">
-            <p className="portal-stat-label">{t('portal.stats.available')}</p>
-            <p className="portal-stat-value">{reservationMetrics.totalAvailableNow}</p>
+            <p className="portal-stat-label">{t('portal.rooms.title')}</p>
+            <p className="portal-stat-value">{categories?.length || 0}</p>
           </div>
           <div className="portal-stat">
-            <p className="portal-stat-label">{t('portal.stats.confirmed')}</p>
-            <p className="portal-stat-value">{reservationMetrics.confirmationRate}%</p>
+            <p className="portal-stat-label">Check-in</p>
+            <p className="portal-stat-value">14:00</p>
           </div>
           <div className="portal-stat">
-            <p className="portal-stat-label">{t('portal.stats.pending')}</p>
-            <p className="portal-stat-value">{reservationMetrics.pending}</p>
+            <p className="portal-stat-label">WiFi</p>
+            <p className="portal-stat-value">✓</p>
           </div>
           <div className="portal-stat">
-            <p className="portal-stat-label">{t('portal.stats.volume')}</p>
-            <p className="portal-stat-value">{reservationMetrics.monthVolume}</p>
+            <p className="portal-stat-label">Confirmation</p>
+            <p className="portal-stat-value">24h</p>
           </div>
         </section>
 
         {galleryPhotos.length > 1 && (
-          <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
+          <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-12">
             {galleryPhotos.map((p: any) => (
               <div key={p.id} className="portal-gallery-tile">
                 <img src={p.url} alt={p.caption || hotel.name} className="w-full h-full object-cover" />
@@ -366,10 +391,64 @@ const BookingPortalPage = () => {
           </section>
         )}
 
+        {/* About Section */}
+        {hotel.description && (
+          <section id="about" className="mb-12">
+            <h2 className="portal-section-title mb-6 text-3xl md:text-4xl">{t('portal.about.title')}</h2>
+            <Card className="portal-section-card border-0 shadow-sm">
+              <CardContent className="pt-6">
+                <div className="grid lg:grid-cols-2 gap-8">
+                  <div className="portal-about-text">
+                    <p className="text-base leading-relaxed text-foreground/80 whitespace-pre-wrap">{hotel.description}</p>
+                  </div>
+                  <div className="space-y-4">
+                    {hotel.city && (
+                      <div className="flex items-start gap-3">
+                        <MapPin className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Localisation</p>
+                          <p className="font-medium">{hotel.city}{hotel.country ? `, ${hotel.country}` : ''}</p>
+                        </div>
+                      </div>
+                    )}
+                    {hotel.address && (
+                      <div className="flex items-start gap-3">
+                        <Building2 className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Adresse</p>
+                          <p className="font-medium">{hotel.address}</p>
+                        </div>
+                      </div>
+                    )}
+                    {hotel.phone && (
+                      <a href={`tel:${hotel.phone}`} className="flex items-start gap-3 hover:text-primary transition-colors">
+                        <Phone className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Téléphone</p>
+                          <p className="font-medium">{hotel.phone}</p>
+                        </div>
+                      </a>
+                    )}
+                    {hotel.email && (
+                      <a href={`mailto:${hotel.email}`} className="flex items-start gap-3 hover:text-primary transition-colors">
+                        <Mail className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Email</p>
+                          <p className="font-medium">{hotel.email}</p>
+                        </div>
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+        )}
+
         <div className="grid lg:grid-cols-12 gap-8">
           <section className="lg:col-span-7 space-y-8">
             {services && services.length > 0 && (
-              <Card className="portal-section-card border-0 shadow-sm">
+              <Card className="portal-section-card border-0 shadow-sm" id="services">
                 <CardHeader>
                   <CardTitle className="portal-section-title">{t('portal.services.title')}</CardTitle>
                 </CardHeader>
@@ -389,7 +468,7 @@ const BookingPortalPage = () => {
               </Card>
             )}
 
-            <section>
+            <section id="rooms">
               <div className="flex items-end justify-between mb-4">
                 <h2 className="portal-section-title">{t('portal.rooms.title')}</h2>
                 <p className="text-sm text-muted-foreground">{t('portal.rooms.subtitle')}</p>
@@ -455,7 +534,7 @@ const BookingPortalPage = () => {
           </section>
 
           <aside className="lg:col-span-5">
-            <Card className="portal-booking-card sticky top-4 border-0 shadow-xl">
+            <Card className="portal-booking-card sticky top-20 border-0 shadow-xl" id="booking-form">
               <CardHeader>
                 <CardTitle className="portal-section-title flex items-center gap-2">
                   <Calendar className="h-5 w-5" />
@@ -464,9 +543,9 @@ const BookingPortalPage = () => {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div><Label>{t('portal.form.fullName')}</Label><Input value={form.guest_name} onChange={e => setForm(f => ({ ...f, guest_name: e.target.value }))} /></div>
-                  <div><Label>{t('portal.form.phone')}</Label><Input value={form.guest_phone} onChange={e => setForm(f => ({ ...f, guest_phone: e.target.value }))} /></div>
-                  <div className="md:col-span-2"><Label>{t('common.email')}</Label><Input type="email" value={form.guest_email} onChange={e => setForm(f => ({ ...f, guest_email: e.target.value }))} /></div>
+                  <div><Label>{t('portal.form.fullName')}</Label><Input placeholder={t('common.firstName') + ' ' + t('common.lastName')} value={form.guest_name} onChange={e => setForm(f => ({ ...f, guest_name: e.target.value }))} /></div>
+                  <div><Label>{t('portal.form.phone')}</Label><Input placeholder="+1 (555) 000-0000" value={form.guest_phone} onChange={e => setForm(f => ({ ...f, guest_phone: e.target.value }))} /></div>
+                  <div className="md:col-span-2"><Label>{t('common.email')}</Label><Input type="email" placeholder="name@example.com" value={form.guest_email} onChange={e => setForm(f => ({ ...f, guest_email: e.target.value }))} /></div>
                   <div><Label>{t('portal.form.arrival')}</Label><Input type="date" value={form.check_in_date} onChange={e => setForm(f => ({ ...f, check_in_date: e.target.value }))} min={new Date().toISOString().split('T')[0]} /><p className="text-xs text-muted-foreground mt-1">{t('portal.form.checkInNote')}</p></div>
                   <div><Label>{t('portal.form.departure')}</Label><Input type="date" value={form.check_out_date} onChange={e => setForm(f => ({ ...f, check_out_date: e.target.value }))} min={form.check_in_date || new Date().toISOString().split('T')[0]} /></div>
                   <div><Label>{t('portal.form.adults')}</Label><Input type="number" value={form.number_of_adults} onChange={e => setForm(f => ({ ...f, number_of_adults: Number(e.target.value) }))} min={1} /></div>
@@ -474,11 +553,35 @@ const BookingPortalPage = () => {
                 </div>
 
                 <div>
-                  <Label className="mb-2 block">{t('portal.form.paymentPreference')}</Label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
-                    <label className="portal-pay-option"><Checkbox checked={form.payment_cash} onCheckedChange={v => setForm(f => ({ ...f, payment_cash: !!v }))} /><span>{t('portal.form.payment.arrival')}</span></label>
-                    <label className="portal-pay-option"><Checkbox checked={form.payment_momo} onCheckedChange={v => setForm(f => ({ ...f, payment_momo: !!v }))} /><span>{t('portal.form.payment.momo')}</span></label>
-                    <label className="portal-pay-option"><Checkbox checked={form.payment_om} onCheckedChange={v => setForm(f => ({ ...f, payment_om: !!v }))} /><span>{t('portal.form.payment.orangeMoney')}</span></label>
+                  <Label className="mb-3 block">{t('portal.form.paymentPreference')}</Label>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant={form.payment_cash ? 'default' : 'outline'}
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setForm(f => ({ ...f, payment_cash: !f.payment_cash, payment_momo: false, payment_om: false }))}
+                    >
+                      {t('portal.form.payment.arrival')}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={form.payment_momo ? 'default' : 'outline'}
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setForm(f => ({ ...f, payment_momo: !f.payment_momo, payment_cash: false, payment_om: false }))}
+                    >
+                      {t('portal.form.payment.momo')}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={form.payment_om ? 'default' : 'outline'}
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setForm(f => ({ ...f, payment_om: !f.payment_om, payment_cash: false, payment_momo: false }))}
+                    >
+                      {t('portal.form.payment.orangeMoney')}
+                    </Button>
                   </div>
                 </div>
 
@@ -518,8 +621,81 @@ const BookingPortalPage = () => {
         </div>
       </div>
 
-      <footer className="portal-footer">
-        <p>© {new Date().getFullYear()} {hotel.name}. {t('portal.footer')}</p>
+      {/* Contact Section */}
+      <section id="contact" className="portal-contact-section px-4 md:px-8 py-12">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="portal-section-title text-3xl md:text-4xl mb-8">{t('portal.contact.title')}</h2>
+          <div className="grid lg:grid-cols-2 gap-8">
+            <div className="space-y-4">
+              {hotel.address && (
+                <div className="flex items-start gap-3">
+                  <MapPin className="h-6 w-6 text-primary mt-1 shrink-0" />
+                  <div>
+                    <p className="font-semibold text-sm text-muted-foreground mb-1">Adresse</p>
+                    <p className="text-base">{hotel.address}</p>
+                  </div>
+                </div>
+              )}
+              {hotel.phone && (
+                <a href={`tel:${hotel.phone}`} className="flex items-start gap-3 hover:text-primary transition-colors">
+                  <Phone className="h-6 w-6 text-primary mt-1 shrink-0" />
+                  <div>
+                    <p className="font-semibold text-sm text-muted-foreground mb-1">Téléphone</p>
+                    <p className="text-base font-medium">{hotel.phone}</p>
+                  </div>
+                </a>
+              )}
+              {hotel.email && (
+                <a href={`mailto:${hotel.email}`} className="flex items-start gap-3 hover:text-primary transition-colors">
+                  <Mail className="h-6 w-6 text-primary mt-1 shrink-0" />
+                  <div>
+                    <p className="font-semibold text-sm text-muted-foreground mb-1">Email</p>
+                    <p className="text-base font-medium">{hotel.email}</p>
+                  </div>
+                </a>
+              )}
+            </div>
+            <div className="h-80 rounded-xl overflow-hidden shadow-md">
+              <iframe
+                width="100%"
+                height="100%"
+                frameBorder="0"
+                style={{ border: 0 }}
+                src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyDxUQ1pxb3fSBXrwKz6tVZwjCLW8HSBQD4&q=${encodeURIComponent(hotel.city || hotel.name)}`}
+                allowFullScreen=""
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer className="portal-footer bg-gradient-to-b from-white/50 to-slate-50/50 border-t border-black/5">
+        <div className="max-w-6xl mx-auto px-4 md:px-8 py-8">
+          <div className="grid md:grid-cols-2 gap-8 mb-6">
+            <div>
+              <h3 className="font-semibold mb-2">{hotel.name}</h3>
+              {hotel.address && <p className="text-sm text-muted-foreground">{hotel.address}</p>}
+              {hotel.city && <p className="text-sm text-muted-foreground">{hotel.city}{hotel.country ? `, ${hotel.country}` : ''}</p>}
+            </div>
+            <div className="space-y-2">
+              {hotel.phone && (
+                <a href={`tel:${hotel.phone}`} className="text-sm hover:text-primary transition-colors flex items-center gap-2">
+                  <Phone className="h-4 w-4" /> {hotel.phone}
+                </a>
+              )}
+              {hotel.email && (
+                <a href={`mailto:${hotel.email}`} className="text-sm hover:text-primary transition-colors flex items-center gap-2">
+                  <Mail className="h-4 w-4" /> {hotel.email}
+                </a>
+              )}
+            </div>
+          </div>
+          <div className="pt-4 border-t border-black/5 text-center text-xs text-muted-foreground">
+            <p>© {new Date().getFullYear()} {hotel.name}. {t('portal.footer')}</p>
+          </div>
+        </div>
       </footer>
     </div>
   );

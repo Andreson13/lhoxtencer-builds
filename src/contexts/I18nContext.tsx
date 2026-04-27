@@ -16,6 +16,7 @@ const translations: Record<string, Record<Lang, string>> = {
   'nav.restaurant': { fr: 'Restaurant', en: 'Restaurant' },
   'nav.kitchen': { fr: 'Cuisine', en: 'Kitchen' },
   'nav.inventory': { fr: 'Stock', en: 'Inventory' },
+  'nav.drinks': { fr: 'Boissons & Minibar', en: 'Drinks & Minibar' },
   'nav.billing': { fr: 'Facturation', en: 'Billing' },
   'nav.debts': { fr: 'Créances', en: 'Debts' },
   'nav.cashexpenses': { fr: 'Caisse & Dépenses', en: 'Cash & Expenses' },

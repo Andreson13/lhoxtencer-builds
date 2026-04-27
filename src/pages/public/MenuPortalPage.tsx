@@ -95,6 +95,15 @@ const MenuPortalPage = () => {
     enabled: !!hotel?.id,
   });
 
+  const { data: drinks } = useQuery({
+    queryKey: ['drinks-menu-public', hotel?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('inventory_items' as any).select('*').eq('hotel_id', hotel!.id).eq('is_minibar', true).gt('current_stock', 0).order('name');
+      return data || [];
+    },
+    enabled: !!hotel?.id,
+  });
+
   const guestName = activeStay?.guests ? `${(activeStay.guests as any).first_name}` : null;
   const guestFullName = activeStay?.guests ? `${(activeStay.guests as any).last_name} ${(activeStay.guests as any).first_name}` : null;
 
@@ -213,10 +222,13 @@ const MenuPortalPage = () => {
   const allCategoryTabs = [
     { id: 'all', name: t('menu.categories.all') },
     ...(categories || []).map((c: any) => ({ id: c.id, name: c.name })),
+    ...(drinks && drinks.length > 0 ? [{ id: 'drinks', name: 'Boissons' }] : []),
     ...(uncategorized.length > 0 ? [{ id: 'uncategorized', name: t('menu.categories.other') }] : []),
   ];
 
-  const filteredItems = selectedCategory === 'all'
+  const filteredItems = selectedCategory === 'drinks'
+    ? (drinks || []).map(d => ({ ...d, price: d.selling_price, id: d.id, name: d.name }))
+    : selectedCategory === 'all'
     ? availableTodayItems
     : selectedCategory === 'uncategorized'
       ? availableTodayItems.filter((item: any) => !item.category_id)

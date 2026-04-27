@@ -5,7 +5,7 @@ import {
   Coffee, BookOpen, UtensilsCrossed, ChefHat, Package,
   Receipt, Wallet, Sparkles, BarChart3,
   MessageSquare, QrCode, Settings, ScrollText, Building2,
-  Globe, Layers, CreditCard, UserPlus, Shield, Download, Gift
+  Globe, Layers, CreditCard, UserPlus, Shield, Download, Gift, Wine
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
@@ -35,6 +35,7 @@ const navGroups = [
       { key: 'nav.restaurant', path: '/restaurant', icon: UtensilsCrossed, roles: ['admin','manager','receptionist','restaurant'] },
       { key: 'nav.kitchen', path: '/kitchen', icon: ChefHat, roles: ['admin','manager','kitchen'] },
       { key: 'nav.inventory', path: '/inventory', icon: Package, roles: ['admin','manager','receptionist'] },
+      { key: 'nav.drinks', path: '/drinks', icon: Wine, roles: ['admin','manager','receptionist','restaurant'] },
       { key: 'nav.housekeeping', path: '/housekeeping', icon: Sparkles, roles: ['admin','manager','housekeeping'] },
     ],
   },

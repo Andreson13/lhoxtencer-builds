@@ -23,6 +23,7 @@ import MainCourantePage from "@/pages/maincourante/MainCourantePage";
 import RestaurantPage from "@/pages/restaurant/RestaurantPage";
 import KitchenDisplayPage from "@/pages/restaurant/KitchenDisplayPage";
 import InventoryPage from "@/pages/inventory/InventoryPage";
+import DrinksPage from "@/pages/drinks/DrinksPage";
 import BillingPage from "@/pages/billing/BillingPage";
 import CashExpensesPage from "@/pages/cashexpenses/CashExpensesPage";
 import HousekeepingPage from "@/pages/housekeeping/HousekeepingPage";
@@ -98,6 +99,7 @@ const App = () => (
                   <Route path="/restaurant" element={<RestaurantPage />} />
                   <Route path="/kitchen" element={<KitchenDisplayPage />} />
                   <Route path="/inventory" element={<InventoryPage />} />
+                  <Route path="/drinks" element={<DrinksPage />} />
                   <Route path="/billing" element={<BillingPage />} />
                   <Route path="/cash-expenses" element={<CashExpensesPage />} />
                   <Route path="/housekeeping" element={<HousekeepingPage />} />

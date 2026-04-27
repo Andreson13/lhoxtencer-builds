@@ -246,9 +246,22 @@
   padding: 0.9rem;
 }
 
+.portal-header {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.portal-about-text {
+  font-family: 'Fraunces', serif;
+}
+
+.portal-contact-section {
+  background: linear-gradient(180deg, transparent, rgba(59, 130, 246, 0.03));
+}
+
 .portal-footer {
-  margin-top: 2.5rem;
-  padding: 1.2rem;
+  background: #ffffff;
+  border-top: 1px solid hsl(var(--border));
+  padding: 2rem 0;
   text-align: center;
   font-size: 0.82rem;
   color: hsl(var(--muted-foreground));
