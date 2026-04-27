@@ -75,6 +75,8 @@ const App = () => (
                 <Route path="/onboarding" element={<OnboardingPage />} />
                 <Route path="/invite/join" element={<InviteJoinPage />} />
                 <Route path="/access-denied" element={<AccessDeniedPage />} />
+                <Route path="/portal/:slug" element={<BookingPortalPage />} />
+                <Route path="/portal/hotel/:hotelId" element={<BookingPortalPage />} />
                 <Route path="/booking/:slug" element={<BookingPortalPage />} />
                 <Route path="/booking/hotel/:hotelId" element={<BookingPortalPage />} />
                 <Route path="/menu/:slug" element={<MenuPortalPage />} />
