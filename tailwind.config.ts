@@ -38,6 +38,25 @@ export default {
           ring: "hsl(var(--sidebar-ring))",
           muted: "hsl(var(--sidebar-muted))",
         },
+        // Luxury portal design system
+        navy: {
+          DEFAULT: "rgb(15 23 42 / <alpha-value>)",
+          foreground: "rgb(248 250 252 / <alpha-value>)",
+        },
+        gold: {
+          DEFAULT: "rgb(201 162 39 / <alpha-value>)",
+          foreground: "rgb(15 23 42 / <alpha-value>)",
+          soft: "rgb(254 249 236 / <alpha-value>)",
+        },
+        cream: "rgb(253 250 245 / <alpha-value>)",
+      },
+      fontFamily: {
+        display: ['"Playfair Display"', "Georgia", "serif"],
+      },
+      boxShadow: {
+        luxe: "0 20px 50px -10px rgba(15, 23, 42, 0.2)",
+        card: "0 2px 10px rgba(15, 23, 42, 0.08)",
+        gold: "0 8px 28px -4px rgba(201, 162, 39, 0.45)",
       },
       borderRadius: {
         lg: "var(--radius)",

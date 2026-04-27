@@ -9,7 +9,14 @@
       "Bash(netstat -tuln)",
       "Bash(curl -s http://localhost:8084)",
       "Bash(cat)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(npx tsc *)",
+      "Bash(curl -s \"http://localhost:8089/portal/test-hotel\")",
+      "Bash(npx ts-node -e ' *)",
+      "Bash(npx vite *)"
     ]
   }
 }

@@ -17,6 +17,8 @@ build/
 dev-dist/
 release/
 
+src2/
+
 # Electron binaries & installers
 *.exe
 *.dmg

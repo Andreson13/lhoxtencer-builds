@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import {
@@ -31,32 +32,19 @@ import {
   Star,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
 } from 'lucide-react';
 import './BookingPortalPage.css';
-
-type Room = {
-  id: string;
-  name: string;
-  description: string;
-  price_per_night: number;
-  images: string[];
-  capacity: number;
-  features: string[];
-  category_id: string;
-};
 
 const featureIcons: Record<string, any> = { WiFi: Wifi, TV: Tv, AC: Wind };
 
 const BookingPortalPage = () => {
-  const { t, lang } = useI18n();
+  const { t } = useI18n();
   const { slug, hotelId } = useParams<{ slug?: string; hotelId?: string }>();
   const hotelKey = slug || hotelId;
   const [submitted, setSubmitted] = useState(false);
   const [resNumber, setResNumber] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [heroIndex, setHeroIndex] = useState(0);
-  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [form, setForm] = useState({
     guest_name: '', guest_phone: '', guest_email: '',
     check_in_date: '', check_out_date: '',
@@ -268,195 +256,131 @@ const BookingPortalPage = () => {
   );
 
   return (
-    <div className="booking-portal min-h-screen bg-white">
-      {/* Modern Header */}
-      <header className="sticky top-0 z-40 border-b border-black/5 bg-white/80 backdrop-blur-xl shadow-sm">
-        <div className="mx-auto max-w-6xl px-4 py-4 md:px-8 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-            <Building2 className="h-5 w-5 text-primary" />
-            {hotel.name}
-          </h2>
-          <nav className="hidden md:flex gap-6 text-sm text-muted-foreground">
-            <a href="#rooms" className="hover:text-foreground transition-colors">{t('portal.rooms.title')}</a>
-            <a href="#services" className="hover:text-foreground transition-colors">{t('portal.services.title')}</a>
-            <a href="#about" className="hover:text-foreground transition-colors">{t('portal.about.title')}</a>
-          </nav>
-          <Button
-            size="sm"
-            onClick={() => document.getElementById('booking-form')?.scrollIntoView({ behavior: 'smooth' })}
-          >
-            {t('portal.form.submit')} <ArrowRight className="h-3 w-3 ml-1" />
-          </Button>
-        </div>
-      </header>
+    <div className="booking-portal min-h-screen">
+      <section className="portal-hero px-4 md:px-8 py-10 md:py-14">
+        <div className="max-w-6xl mx-auto grid lg:grid-cols-12 gap-6 items-stretch">
+          <div className="lg:col-span-8 portal-hero-panel">
+            {coverPhoto ? (
+              <img src={coverPhoto} alt={hotel.name} className="portal-hero-image" />
+            ) : (
+              <div className="portal-hero-fallback">
+                <Building2 className="h-10 w-10" />
+                <p>{t('portal.hero.kicker')}</p>
+              </div>
+            )}
 
-      {/* Hero Section with Modern Design */}
-      <section className="relative overflow-hidden px-4 md:px-8 py-12 md:py-16">
-        <div className="mx-auto max-w-6xl">
-          <div className="grid lg:grid-cols-12 gap-6 items-stretch">
-            <div className="lg:col-span-8">
-              <div className="relative h-80 md:h-96 overflow-hidden rounded-lg bg-muted shadow-lg group">
-                {coverPhoto ? (
-                  <img src={coverPhoto} alt={hotel.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5">
-                    <Building2 className="h-12 w-12 text-muted-foreground/40" />
-                    <p className="mt-2 text-muted-foreground/60">{t('portal.hero.kicker')}</p>
-                  </div>
-                )}
+            <div className="portal-hero-overlay" />
 
-                {portalPhotos.length > 1 && (
-                  <>
-                    <button
-                      type="button"
-                      className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white opacity-0 transition-opacity hover:bg-black/60 group-hover:opacity-100"
-                      onClick={() => setHeroIndex((prev) => (prev - 1 + portalPhotos.length) % portalPhotos.length)}
-                    >
-                      <ChevronLeft className="h-5 w-5" />
-                    </button>
-                    <button
-                      type="button"
-                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white opacity-0 transition-opacity hover:bg-black/60 group-hover:opacity-100"
-                      onClick={() => setHeroIndex((prev) => (prev + 1) % portalPhotos.length)}
-                    >
-                      <ChevronRight className="h-5 w-5" />
-                    </button>
-                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2">
-                      {portalPhotos.slice(0, 6).map((p: any, idx: number) => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          className={`h-2 rounded-full transition-all ${idx === heroIndex ? 'w-6 bg-white' : 'w-2 bg-white/50'}`}
-                          onClick={() => setHeroIndex(idx)}
-                        />
-                      ))}
-                    </div>
-                  </>
-                )}
+            {portalPhotos.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  className="portal-hero-nav left"
+                  aria-label="Photo précédente"
+                  onClick={() => setHeroIndex((prev) => (prev - 1 + portalPhotos.length) % portalPhotos.length)}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  className="portal-hero-nav right"
+                  aria-label="Photo suivante"
+                  onClick={() => setHeroIndex((prev) => (prev + 1) % portalPhotos.length)}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </>
+            )}
+
+            <div className="portal-hero-content">
+              <p className="portal-kicker">{t('portal.hero.kicker')}</p>
+              <h1 className="portal-title text-4xl md:text-5xl">{hotel.name}</h1>
+              <div className="flex flex-wrap gap-3 text-sm opacity-95 mt-3">
+                <span className="portal-chip"><MapPin className="h-4 w-4" />{hotel.city || ''} {hotel.country || ''}</span>
+                {hotel.phone && <span className="portal-chip"><Phone className="h-4 w-4" />{hotel.phone}</span>}
+                {hotel.email && <span className="portal-chip"><Mail className="h-4 w-4" />{hotel.email}</span>}
               </div>
 
-              <div className="mt-6 space-y-2">
-                <h1 className="text-3xl md:text-4xl font-bold text-foreground">{hotel.name}</h1>
-                <div className="flex flex-wrap gap-3">
-                  {hotel.city && <Badge variant="outline" className="gap-1"><MapPin className="h-3 w-3" />{hotel.city}{hotel.country ? `, ${hotel.country}` : ''}</Badge>}
-                  {hotel.phone && <Badge variant="outline" className="gap-1"><Phone className="h-3 w-3" />{hotel.phone}</Badge>}
-                  {hotel.email && <Badge variant="outline" className="gap-1"><Mail className="h-3 w-3" />{hotel.email}</Badge>}
+              {portalPhotos.length > 1 && (
+                <div className="portal-hero-dots mt-4">
+                  {portalPhotos.slice(0, 7).map((p: any, idx: number) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className={`portal-dot ${idx === heroIndex ? 'active' : ''}`}
+                      onClick={() => setHeroIndex(idx)}
+                      aria-label={`Aller à la photo ${idx + 1}`}
+                    />
+                  ))}
                 </div>
-              </div>
+              )}
             </div>
+          </div>
 
-            <div className="lg:col-span-4 space-y-4">
-              <Card className="border-0 shadow-lg">
-                <CardContent className="pt-6">
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-3">
-                      <ShieldCheck className="h-5 w-5 text-emerald-500 mt-0.5 shrink-0" />
-                      <span className="text-sm">{t('portal.trust.direct')}</span>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <Sunrise className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
-                      <span className="text-sm">{t('portal.trust.confirm')}</span>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <Sparkles className="h-5 w-5 text-indigo-500 mt-0.5 shrink-0" />
-                      <span className="text-sm">{t('portal.trust.support')}</span>
-                    </div>
-                  </div>
-                  <div className="mt-4 pt-4 border-t flex items-center gap-1">
-                    {[...Array(5)].map((_, i) => (
-                      <Star key={i} className="h-4 w-4 fill-amber-400 text-amber-400" />
-                    ))}
-                    <span className="ml-2 text-xs text-muted-foreground">{t('portal.trust.rating')}</span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-0 shadow-md bg-primary/5">
-                <CardContent className="pt-6 space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('portal.rooms.title')}</p>
-                  <p className="text-2xl font-bold text-foreground">{categories?.length || 0}</p>
-                </CardContent>
-              </Card>
+          <div className="lg:col-span-4 portal-trust-card">
+            <p className="portal-kicker">{t('portal.trust.title')}</p>
+            <div className="space-y-3 mt-3">
+              <div className="flex items-center gap-3"><ShieldCheck className="h-5 w-5 text-emerald-500" /><span>{t('portal.trust.direct')}</span></div>
+              <div className="flex items-center gap-3"><Sunrise className="h-5 w-5 text-amber-500" /><span>{t('portal.trust.confirm')}</span></div>
+              <div className="flex items-center gap-3"><Sparkles className="h-5 w-5 text-indigo-500" /><span>{t('portal.trust.support')}</span></div>
+            </div>
+            <div className="portal-rating mt-6">
+              <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+              <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+              <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+              <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+              <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+              <span>{t('portal.trust.rating')}</span>
             </div>
           </div>
         </div>
       </section>
 
-      <div className="mx-auto max-w-6xl px-4 md:px-8 py-12">
+      <div className="max-w-6xl mx-auto px-4 md:px-8 pb-12">
+        <section className="portal-stats-strip mb-8">
+          <div className="portal-stat">
+            <p className="portal-stat-label">{t('portal.stats.available')}</p>
+            <p className="portal-stat-value">{reservationMetrics.totalAvailableNow}</p>
+          </div>
+          <div className="portal-stat">
+            <p className="portal-stat-label">{t('portal.stats.confirmed')}</p>
+            <p className="portal-stat-value">{reservationMetrics.confirmationRate}%</p>
+          </div>
+          <div className="portal-stat">
+            <p className="portal-stat-label">{t('portal.stats.pending')}</p>
+            <p className="portal-stat-value">{reservationMetrics.pending}</p>
+          </div>
+          <div className="portal-stat">
+            <p className="portal-stat-label">{t('portal.stats.volume')}</p>
+            <p className="portal-stat-value">{reservationMetrics.monthVolume}</p>
+          </div>
+        </section>
+
         {galleryPhotos.length > 1 && (
-          <section className="mb-12 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+          <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
             {galleryPhotos.map((p: any) => (
-              <div key={p.id} className="relative h-40 overflow-hidden rounded-lg shadow-sm hover:shadow-md transition-shadow">
-                <img src={p.url} alt={p.caption || hotel.name} className="w-full h-full object-cover hover:scale-110 transition-transform duration-300" />
+              <div key={p.id} className="portal-gallery-tile">
+                <img src={p.url} alt={p.caption || hotel.name} className="w-full h-full object-cover" />
               </div>
             ))}
-          </section>
-        )}
-
-        {hotel.description && (
-          <section id="about" className="mb-12">
-            <h2 className="mb-6 text-3xl md:text-4xl font-bold">{t('portal.about.title')}</h2>
-            <div className="grid lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-2">
-                <p className="text-base leading-relaxed text-foreground/80 whitespace-pre-wrap">{hotel.description}</p>
-              </div>
-              <div className="space-y-4">
-                {hotel.city && (
-                  <div className="flex items-start gap-3">
-                    <MapPin className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-                    <div className="text-sm">
-                      <p className="text-muted-foreground">Localisation</p>
-                      <p className="font-medium">{hotel.city}{hotel.country ? `, ${hotel.country}` : ''}</p>
-                    </div>
-                  </div>
-                )}
-                {hotel.address && (
-                  <div className="flex items-start gap-3">
-                    <Building2 className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-                    <div className="text-sm">
-                      <p className="text-muted-foreground">Adresse</p>
-                      <p className="font-medium">{hotel.address}</p>
-                    </div>
-                  </div>
-                )}
-                {hotel.phone && (
-                  <a href={`tel:${hotel.phone}`} className="flex items-start gap-3 hover:text-primary transition-colors">
-                    <Phone className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-                    <div className="text-sm">
-                      <p className="text-muted-foreground">Téléphone</p>
-                      <p className="font-medium">{hotel.phone}</p>
-                    </div>
-                  </a>
-                )}
-                {hotel.email && (
-                  <a href={`mailto:${hotel.email}`} className="flex items-start gap-3 hover:text-primary transition-colors">
-                    <Mail className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-                    <div className="text-sm">
-                      <p className="text-muted-foreground">Email</p>
-                      <p className="font-medium">{hotel.email}</p>
-                    </div>
-                  </a>
-                )}
-              </div>
-            </div>
           </section>
         )}
 
         <div className="grid lg:grid-cols-12 gap-8">
           <section className="lg:col-span-7 space-y-8">
             {services && services.length > 0 && (
-              <Card className="border-0 shadow-sm" id="services">
+              <Card className="portal-section-card border-0 shadow-sm">
                 <CardHeader>
-                  <CardTitle>{t('portal.services.title')}</CardTitle>
+                  <CardTitle className="portal-section-title">{t('portal.services.title')}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     {services.map((s: any) => {
                       const Icon = mapServiceIcon(s.name || 'service');
                       return (
-                        <div key={s.id} className="flex items-center gap-2 rounded-lg border border-border bg-card/50 px-3 py-2 text-sm hover:bg-card transition-colors">
-                          <Icon className="h-4 w-4 text-primary shrink-0" />
-                          <span className="line-clamp-1">{s.name}</span>
+                        <div key={s.id} className="portal-service-pill">
+                          <Icon className="h-4 w-4 text-primary" />
+                          <span>{s.name}</span>
                         </div>
                       );
                     })}
@@ -465,76 +389,62 @@ const BookingPortalPage = () => {
               </Card>
             )}
 
-            <section id="rooms">
-              <div className="mb-6 flex items-end justify-between">
-                <div>
-                  <h2 className="text-3xl font-bold">{t('portal.rooms.title')}</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">{t('portal.rooms.subtitle')}</p>
-                </div>
+            <section>
+              <div className="flex items-end justify-between mb-4">
+                <h2 className="portal-section-title">{t('portal.rooms.title')}</h2>
+                <p className="text-sm text-muted-foreground">{t('portal.rooms.subtitle')}</p>
               </div>
 
-              <div className="space-y-3">
-                {categories?.map((cat: any) => {
+              <div className="space-y-4">
+                {categories?.map((cat: any, idx: number) => {
                   const avail = roomCounts?.[cat.id] || 0;
                   const catPhoto = categoryPhotoById[cat.id] || coverPhoto;
-                  const isExpanded = expandedCategory === cat.id;
-
                   return (
                     <Card
                       key={cat.id}
-                      className={`cursor-pointer transition-all border-0 shadow-sm hover:shadow-md ${selectedCategoryId === cat.id ? 'ring-2 ring-primary' : ''}`}
-                      onClick={() => setExpandedCategory(isExpanded ? null : cat.id)}
+                      className={`portal-room-card ${selectedCategoryId === cat.id ? 'selected' : ''}`}
+                      onClick={() => setSelectedCategoryId(cat.id)}
                     >
-                      <CardContent className="p-0">
-                        <div className="flex gap-4 p-4">
-                          {catPhoto && (
-                            <div className="h-32 w-32 shrink-0 overflow-hidden rounded-lg bg-muted">
-                              <img src={catPhoto} alt={cat.name} className="h-full w-full object-cover" />
-                            </div>
-                          )}
+                      <div className="portal-room-media">
+                        {catPhoto ? (
+                          <img src={catPhoto} alt={cat.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="portal-room-fallback" style={{ background: cat.color || '#3767d7' }} />
+                        )}
+                      </div>
 
-                          <div className="flex flex-1 flex-col justify-between">
-                            <div>
-                              <div className="flex items-start justify-between gap-4">
-                                <div>
-                                  <h3 className="text-lg font-semibold">{cat.name}</h3>
-                                  {cat.description && <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{cat.description}</p>}
-                                </div>
-                                <Button
-                                  size="sm"
-                                  variant={selectedCategoryId === cat.id ? 'default' : 'outline'}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedCategoryId(selectedCategoryId === cat.id ? null : cat.id);
-                                  }}
-                                >
-                                  {selectedCategoryId === cat.id ? <Check className="h-4 w-4 mr-1" /> : null}
-                                  {selectedCategoryId === cat.id ? t('portal.rooms.selected') : t('portal.rooms.choose')}
-                                </Button>
-                              </div>
-
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {(cat.features as string[])?.slice(0, 4).map((f: string) => {
-                                  const Icon = featureIcons[f] || Sparkles;
-                                  return (
-                                    <span key={f} className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">
-                                      <Icon className="h-3 w-3" /> {f}
-                                    </span>
-                                  );
-                                })}
-                              </div>
-                            </div>
-
-                            <div className="mt-4 flex items-center justify-between border-t pt-4">
-                              <div>
-                                <p className="text-2xl font-bold text-primary">{formatFCFA(cat.price_per_night)}</p>
-                                <p className="text-xs text-muted-foreground">{t('portal.rooms.perNight')}</p>
-                              </div>
-                              <Badge variant={avail > 0 ? 'outline' : 'destructive'}>
-                                {avail > 0 ? `${avail} ${t('portal.rooms.available')}` : t('portal.rooms.full')}
-                              </Badge>
-                            </div>
+                      <CardContent className="pt-5">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <h3 className="text-xl font-semibold">{cat.name}</h3>
+                            {cat.description && <p className="text-sm text-muted-foreground mt-1">{cat.description}</p>}
                           </div>
+                          <div className="text-right">
+                            <p className="text-2xl font-bold text-primary">{formatFCFA(cat.price_per_night)}</p>
+                            <p className="text-xs text-muted-foreground">{t('portal.rooms.perNight')}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 mt-4">
+                          {(cat.features as string[])?.slice(0, 6).map((f: string) => {
+                            const Icon = featureIcons[f] || Sparkles;
+                            return (
+                              <span key={f} className="portal-feature-chip">
+                                <Icon className="h-3 w-3" /> {f}
+                              </span>
+                            );
+                          })}
+                        </div>
+
+                        <div className="mt-4 pt-3 border-t flex items-center justify-between">
+                          <Badge variant={avail > 0 ? 'outline' : 'destructive'}>
+                            {avail > 0 ? `${avail} ${t('portal.rooms.available')}` : t('portal.rooms.full')}
+                          </Badge>
+                          {selectedCategoryId === cat.id ? (
+                            <span className="text-primary text-sm font-medium flex items-center gap-1">{t('portal.rooms.selected')} <Check className="h-4 w-4" /></span>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">{t('portal.rooms.choose')}</span>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -545,108 +455,52 @@ const BookingPortalPage = () => {
           </section>
 
           <aside className="lg:col-span-5">
-            <Card className="sticky top-20 border-0 shadow-xl" id="booking-form">
+            <Card className="portal-booking-card sticky top-4 border-0 shadow-xl">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="portal-section-title flex items-center gap-2">
                   <Calendar className="h-5 w-5" />
                   {t('portal.form.title')}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-5">
-                <div className="space-y-3">
-                  <div>
-                    <Label className="text-sm">{t('portal.form.fullName')}</Label>
-                    <Input placeholder={t('common.firstName') + ' ' + t('common.lastName')} value={form.guest_name} onChange={e => setForm(f => ({ ...f, guest_name: e.target.value }))} className="mt-1" />
-                  </div>
-                  <div>
-                    <Label className="text-sm">{t('portal.form.phone')}</Label>
-                    <Input placeholder="+1 (555) 000-0000" value={form.guest_phone} onChange={e => setForm(f => ({ ...f, guest_phone: e.target.value }))} className="mt-1" />
-                  </div>
-                  <div>
-                    <Label className="text-sm">{t('common.email')}</Label>
-                    <Input type="email" placeholder="name@example.com" value={form.guest_email} onChange={e => setForm(f => ({ ...f, guest_email: e.target.value }))} className="mt-1" />
-                  </div>
-                </div>
-
-                <div className="space-y-3 border-t pt-5">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label className="text-sm">{t('portal.form.arrival')}</Label>
-                      <Input type="date" value={form.check_in_date} onChange={e => setForm(f => ({ ...f, check_in_date: e.target.value }))} min={new Date().toISOString().split('T')[0]} className="mt-1" />
-                      <p className="text-xs text-muted-foreground mt-1">{t('portal.form.checkInNote')}</p>
-                    </div>
-                    <div>
-                      <Label className="text-sm">{t('portal.form.departure')}</Label>
-                      <Input type="date" value={form.check_out_date} onChange={e => setForm(f => ({ ...f, check_out_date: e.target.value }))} min={form.check_in_date || new Date().toISOString().split('T')[0]} className="mt-1" />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label className="text-sm">{t('portal.form.adults')}</Label>
-                      <Input type="number" value={form.number_of_adults} onChange={e => setForm(f => ({ ...f, number_of_adults: Number(e.target.value) }))} min={1} className="mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-sm">{t('portal.form.children')}</Label>
-                      <Input type="number" value={form.number_of_children} onChange={e => setForm(f => ({ ...f, number_of_children: Number(e.target.value) }))} min={0} className="mt-1" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-3 border-t pt-5">
-                  <Label className="text-sm">{t('portal.form.paymentPreference')}</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { key: 'payment_cash', label: t('portal.form.payment.arrival') },
-                      { key: 'payment_momo', label: t('portal.form.payment.momo') },
-                      { key: 'payment_om', label: t('portal.form.payment.orangeMoney') },
-                    ].map(({ key, label }) => (
-                      <Button
-                        key={key}
-                        type="button"
-                        variant={form[key as keyof typeof form] ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => {
-                          const update = { payment_cash: false, payment_momo: false, payment_om: false };
-                          update[key as keyof typeof update] = true;
-                          setForm(f => ({ ...f, ...update }));
-                        }}
-                        className="text-xs"
-                      >
-                        {label}
-                      </Button>
-                    ))}
-                  </div>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div><Label>{t('portal.form.fullName')}</Label><Input value={form.guest_name} onChange={e => setForm(f => ({ ...f, guest_name: e.target.value }))} /></div>
+                  <div><Label>{t('portal.form.phone')}</Label><Input value={form.guest_phone} onChange={e => setForm(f => ({ ...f, guest_phone: e.target.value }))} /></div>
+                  <div className="md:col-span-2"><Label>{t('common.email')}</Label><Input type="email" value={form.guest_email} onChange={e => setForm(f => ({ ...f, guest_email: e.target.value }))} /></div>
+                  <div><Label>{t('portal.form.arrival')}</Label><Input type="date" value={form.check_in_date} onChange={e => setForm(f => ({ ...f, check_in_date: e.target.value }))} min={new Date().toISOString().split('T')[0]} /><p className="text-xs text-muted-foreground mt-1">{t('portal.form.checkInNote')}</p></div>
+                  <div><Label>{t('portal.form.departure')}</Label><Input type="date" value={form.check_out_date} onChange={e => setForm(f => ({ ...f, check_out_date: e.target.value }))} min={form.check_in_date || new Date().toISOString().split('T')[0]} /></div>
+                  <div><Label>{t('portal.form.adults')}</Label><Input type="number" value={form.number_of_adults} onChange={e => setForm(f => ({ ...f, number_of_adults: Number(e.target.value) }))} min={1} /></div>
+                  <div><Label>{t('portal.form.children')}</Label><Input type="number" value={form.number_of_children} onChange={e => setForm(f => ({ ...f, number_of_children: Number(e.target.value) }))} min={0} /></div>
                 </div>
 
                 <div>
-                  <Label className="text-sm">{t('portal.form.specialRequests')}</Label>
-                  <Textarea value={form.special_requests} onChange={e => setForm(f => ({ ...f, special_requests: e.target.value }))} className="mt-1 resize-none" rows={3} />
+                  <Label className="mb-2 block">{t('portal.form.paymentPreference')}</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+                    <label className="portal-pay-option"><Checkbox checked={form.payment_cash} onCheckedChange={v => setForm(f => ({ ...f, payment_cash: !!v }))} /><span>{t('portal.form.payment.arrival')}</span></label>
+                    <label className="portal-pay-option"><Checkbox checked={form.payment_momo} onCheckedChange={v => setForm(f => ({ ...f, payment_momo: !!v }))} /><span>{t('portal.form.payment.momo')}</span></label>
+                    <label className="portal-pay-option"><Checkbox checked={form.payment_om} onCheckedChange={v => setForm(f => ({ ...f, payment_om: !!v }))} /><span>{t('portal.form.payment.orangeMoney')}</span></label>
+                  </div>
                 </div>
 
-                <div className="space-y-3 rounded-lg bg-primary/5 border border-primary/10 p-4">
+                <div><Label>{t('portal.form.specialRequests')}</Label><Textarea value={form.special_requests} onChange={e => setForm(f => ({ ...f, special_requests: e.target.value }))} /></div>
+
+                <div className="portal-total-box">
                   {selectedCategory ? (
                     <>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">{selectedCategory.name}</span>
-                        <span className="font-medium">{formatFCFA(selectedCategory.price_per_night)}/night</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">{Math.max(1, nights)} night(s)</span>
-                        <span className="font-medium">{formatFCFA(selectedCategory.price_per_night * Math.max(1, nights))}</span>
-                      </div>
+                      <p className="text-sm text-muted-foreground">{selectedCategory.name}</p>
+                      <p className="text-sm text-muted-foreground">{Math.max(1, nights)} nuit(s) x {formatFCFA(selectedCategory.price_per_night)}</p>
                     </>
                   ) : (
                     <p className="text-sm text-muted-foreground">{t('portal.form.selectCategory')}</p>
                   )}
-                  <div className="border-t pt-3 flex items-end justify-between">
-                    <span className="text-sm font-semibold">{t('portal.form.estimation')}</span>
-                    <span className="text-2xl font-bold text-primary">{formatFCFA(total)}</span>
+                  <div className="flex items-end justify-between mt-2">
+                    <span className="text-muted-foreground">{t('portal.form.estimation')}</span>
+                    <span className="text-3xl font-bold text-primary">{formatFCFA(total)}</span>
                   </div>
                 </div>
 
                 <Button
-                  className="w-full h-11 text-base"
+                  className="w-full h-12 text-base"
                   onClick={() => submitMutation.mutate()}
                   disabled={!form.guest_name || !form.check_in_date || !form.check_out_date || !selectedCategoryId || submitMutation.isPending}
                 >
@@ -654,9 +508,9 @@ const BookingPortalPage = () => {
                   {!submitMutation.isPending && <ArrowRight className="h-4 w-4 ml-2" />}
                 </Button>
 
-                <div className="space-y-1 border-t pt-4 text-center">
-                  <p className="text-xs text-muted-foreground">{t('portal.form.note')}</p>
-                  <p className="text-xs font-medium text-emerald-600">{t('portal.form.policy')}</p>
+                <div className="text-xs text-muted-foreground text-center space-y-1">
+                  <p>{t('portal.form.note')}</p>
+                  <p className="text-emerald-600 font-medium">{t('portal.form.policy')}</p>
                 </div>
               </CardContent>
             </Card>
@@ -664,81 +518,8 @@ const BookingPortalPage = () => {
         </div>
       </div>
 
-      {/* Contact Section */}
-      <section className="border-t bg-secondary/30 px-4 md:px-8 py-12">
-        <div className="mx-auto max-w-6xl">
-          <h2 className="mb-8 text-3xl font-bold md:text-4xl">{t('portal.contact.title')}</h2>
-          <div className="grid gap-8 lg:grid-cols-2">
-            <div className="space-y-4">
-              {hotel.address && (
-                <div className="flex items-start gap-3">
-                  <MapPin className="mt-1 h-6 w-6 text-primary shrink-0" />
-                  <div>
-                    <p className="mb-1 text-sm font-semibold text-muted-foreground">Adresse</p>
-                    <p className="text-base">{hotel.address}</p>
-                  </div>
-                </div>
-              )}
-              {hotel.phone && (
-                <a href={`tel:${hotel.phone}`} className="flex items-start gap-3 hover:text-primary transition-colors">
-                  <Phone className="mt-1 h-6 w-6 text-primary shrink-0" />
-                  <div>
-                    <p className="mb-1 text-sm font-semibold text-muted-foreground">Téléphone</p>
-                    <p className="text-base font-medium">{hotel.phone}</p>
-                  </div>
-                </a>
-              )}
-              {hotel.email && (
-                <a href={`mailto:${hotel.email}`} className="flex items-start gap-3 hover:text-primary transition-colors">
-                  <Mail className="mt-1 h-6 w-6 text-primary shrink-0" />
-                  <div>
-                    <p className="mb-1 text-sm font-semibold text-muted-foreground">Email</p>
-                    <p className="text-base font-medium">{hotel.email}</p>
-                  </div>
-                </a>
-              )}
-            </div>
-            <div className="overflow-hidden rounded-xl shadow-lg h-80">
-              <iframe
-                width="100%"
-                height="100%"
-                frameBorder="0"
-                style={{ border: 0 }}
-                src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyDxUQ1pxb3fSBXrwKz6tVZwjCLW8HSBQD4&q=${encodeURIComponent(hotel.city || hotel.name)}`}
-                allowFullScreen=""
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <footer className="border-t bg-gradient-to-b from-white to-slate-50/50">
-        <div className="mx-auto max-w-6xl px-4 py-8 md:px-8">
-          <div className="mb-6 grid gap-8 md:grid-cols-2">
-            <div>
-              <h3 className="mb-2 font-semibold">{hotel.name}</h3>
-              {hotel.address && <p className="text-sm text-muted-foreground">{hotel.address}</p>}
-              {hotel.city && <p className="text-sm text-muted-foreground">{hotel.city}{hotel.country ? `, ${hotel.country}` : ''}</p>}
-            </div>
-            <div className="space-y-2">
-              {hotel.phone && (
-                <a href={`tel:${hotel.phone}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors">
-                  <Phone className="h-4 w-4" /> {hotel.phone}
-                </a>
-              )}
-              {hotel.email && (
-                <a href={`mailto:${hotel.email}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors">
-                  <Mail className="h-4 w-4" /> {hotel.email}
-                </a>
-              )}
-            </div>
-          </div>
-          <div className="border-t pt-4 text-center text-xs text-muted-foreground">
-            <p>© {new Date().getFullYear()} {hotel.name}. {t('portal.footer')}</p>
-          </div>
-        </div>
+      <footer className="portal-footer">
+        <p>© {new Date().getFullYear()} {hotel.name}. {t('portal.footer')}</p>
       </footer>
     </div>
   );
