@@ -3,10 +3,11 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { useI18n } from '@/contexts/I18nContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useStayAccrualSync } from '@/hooks/useStayAccrualSync';
-import { processOfflineSubmissionQueue } from '@/services/offlineSubmissionQueue';
+import { processOfflineSubmissionQueue, getOfflineSubmissionQueueSize } from '@/services/offlineSubmissionQueue';
 import { toast } from 'sonner';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { Badge } from '@/components/ui/badge';
 
 export const AppLayout = () => {
   const { t } = useI18n();
@@ -14,6 +15,7 @@ export const AppLayout = () => {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [isOnline, setIsOnline] = useState(() => window.navigator.onLine);
+  const [queueSize, setQueueSize] = useState(() => getOfflineSubmissionQueueSize());
 
   useStayAccrualSync(hotel?.id);
 
@@ -21,8 +23,10 @@ export const AppLayout = () => {
     const markOnline = () => {
       setIsOnline(true);
       processOfflineSubmissionQueue().then((result) => {
+        setQueueSize(0);
         if (result.processed > 0) {
-          toast.success(`${result.processed} enregistrement(s) synchronise(s)`);
+          const msg = t('common.syncSuccess');
+          toast.success(msg.replace('{count}', String(result.processed)));
         }
       }).catch(() => undefined);
     };
@@ -65,8 +69,11 @@ export const AppLayout = () => {
       >
         <Header onToggleSidebar={() => setCollapsed(!collapsed)} />
         {!isOnline && (
-          <div className="offline-banner">
-            {t('common.offlineBanner')}
+          <div className="offline-banner flex items-center justify-between px-4 py-2">
+            <span>{t('common.offlineBanner')}</span>
+            {queueSize > 0 && (
+              <Badge variant="destructive">{queueSize} {t('common.pending')}</Badge>
+            )}
           </div>
         )}
         <main className="flex-1 overflow-auto bg-background">

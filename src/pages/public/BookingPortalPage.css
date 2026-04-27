@@ -23,7 +23,7 @@
 
 .portal-hero-panel {
   position: relative;
-  min-height: 360px;
+  min-height: 600px;
   border-radius: 24px;
   overflow: hidden;
   box-shadow: 0 24px 60px rgba(20, 30, 55, 0.18);
@@ -131,10 +131,16 @@
 }
 
 .portal-gallery-tile {
-  height: 88px;
+  height: 200px;
   border-radius: 14px;
   overflow: hidden;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+  transition: transform 200ms ease;
+}
+
+.portal-gallery-tile:hover {
+  transform: scale(1.03);
 }
 
 .portal-stats-strip {
@@ -196,7 +202,7 @@
 }
 
 .portal-room-media {
-  height: 150px;
+  height: 240px;
   background: #eef2ff;
   overflow: hidden;
 }
@@ -250,7 +256,13 @@
 
 @media (max-width: 1024px) {
   .portal-hero-panel {
-    min-height: 300px;
+    min-height: 450px;
+  }
+}
+
+@media (max-width: 768px) {
+  .portal-hero-panel {
+    min-height: 350px;
   }
 }
 

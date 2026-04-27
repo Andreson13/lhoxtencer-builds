@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useI18n } from '@/contexts/I18nContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
+import { useDebounce } from '@/hooks/useDebounce';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -40,9 +41,12 @@ const ReservationsPage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [deleteItem, setDeleteItem] = useState<any>(null);
+  const [reservationsPage, setReservationsPage] = useState(0);
+  const PAGE_SIZE = 50;
 
-  // Guest search
+  // Guest search with debouncing
   const [guestSearch, setGuestSearch] = useState('');
+  const debouncedGuestSearch = useDebounce(guestSearch, 300);
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
   const [selectedGuestData, setSelectedGuestData] = useState<any>(null);
   const [createGuestRecord, setCreateGuestRecord] = useState(false);
@@ -61,9 +65,14 @@ const ReservationsPage = () => {
   const nights = form.check_in_date && form.check_out_date ? Math.max(1, Math.ceil((new Date(form.check_out_date).getTime() - new Date(form.check_in_date).getTime()) / 86400000)) : 0;
 
   const { data: reservations, isLoading } = useQuery({
-    queryKey: ['reservations', hotel?.id],
+    queryKey: ['reservations', hotel?.id, reservationsPage],
     queryFn: async () => {
-      const { data } = await supabase.from('reservations').select('*, rooms(room_number)').eq('hotel_id', hotel!.id).order('check_in_date', { ascending: false });
+      const { data } = await supabase
+        .from('reservations')
+        .select('*, rooms(room_number)', { count: 'exact' })
+        .eq('hotel_id', hotel!.id)
+        .order('check_in_date', { ascending: false })
+        .range(reservationsPage * PAGE_SIZE, (reservationsPage + 1) * PAGE_SIZE - 1);
       return data || [];
     },
     enabled: !!hotel?.id,
@@ -90,16 +99,16 @@ const ReservationsPage = () => {
   });
 
   const { data: existingGuests } = useQuery({
-    queryKey: ['guests-res-search', hotel?.id, guestSearch],
+    queryKey: ['guests-res-search', hotel?.id, debouncedGuestSearch],
     queryFn: async () => {
-      if (guestSearch.length < 2) return [];
+      if (debouncedGuestSearch.length < 2) return [];
       const { data } = await supabase.from('guests').select('id, last_name, first_name, phone, email, id_number')
         .eq('hotel_id', hotel!.id)
-        .or(`last_name.ilike.%${guestSearch}%,first_name.ilike.%${guestSearch}%,phone.ilike.%${guestSearch}%`)
-        .limit(10);
+        .or(`last_name.ilike.%${debouncedGuestSearch}%,first_name.ilike.%${debouncedGuestSearch}%,phone.ilike.%${debouncedGuestSearch}%`)
+        .limit(15);
       return data || [];
     },
-    enabled: !!hotel?.id && guestSearch.length >= 2,
+    enabled: !!hotel?.id && debouncedGuestSearch.length >= 2,
   });
 
   const selectedCategory = categories?.find(c => c.id === form.category_id);
@@ -467,6 +476,20 @@ const ReservationsPage = () => {
           )}
         </TabsContent>
       </Tabs>
+
+      {reservations && reservations.length >= PAGE_SIZE && (
+        <div className="flex gap-2 justify-center pt-4">
+          <Button variant="outline" disabled={reservationsPage === 0} onClick={() => setReservationsPage(p => p - 1)}>
+            Précédent
+          </Button>
+          <span className="flex items-center px-4 text-sm text-muted-foreground">
+            Page {reservationsPage + 1}
+          </span>
+          <Button variant="outline" disabled={reservations.length < PAGE_SIZE} onClick={() => setReservationsPage(p => p + 1)}>
+            Suivant
+          </Button>
+        </div>
+      )}
 
       {/* New Reservation Dialog */}
       <Dialog open={dialogOpen} onOpenChange={v => { if (!v) closeDialog(); }}>

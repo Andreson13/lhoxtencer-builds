@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { useI18n } from '@/contexts/I18nContext';
 import { supabase } from '@/integrations/supabase/client';
 import { addChargeToInvoice } from '@/services/transactionService';
 import { formatFCFA } from '@/utils/formatters';
@@ -17,6 +18,7 @@ import { toast } from 'sonner';
 import { Star, Send, UtensilsCrossed, Check, ShoppingCart, Plus, Minus, Bell, User } from 'lucide-react';
 
 const MenuPortalPage = () => {
+  const { t } = useI18n();
   const params = useParams<{ slug?: string; room?: string; hotelSlug?: string; roomNumber?: string; hotelId?: string }>();
   const slug = params.slug || params.hotelSlug || params.hotelId;
   const room = params.room || params.roomNumber;
@@ -201,7 +203,7 @@ const MenuPortalPage = () => {
     setCart(prev => prev.map(c => c.item.id === itemId ? { ...c, quantity: Math.max(0, c.quantity + delta) } : c).filter(c => c.quantity > 0));
   };
 
-  if (!hotel) return <div className="min-h-screen flex items-center justify-center"><p>Chargement...</p></div>;
+  if (!hotel) return <div className="min-h-screen flex items-center justify-center"><p>{t('menu.loading')}</p></div>;
 
   const groupedItems = categories?.map(cat => ({ ...cat, items: menuItems?.filter(i => i.category_id === cat.id) || [] })).filter(g => g.items.length > 0) || [];
   const uncategorized = menuItems?.filter(i => !i.category_id) || [];
@@ -209,9 +211,9 @@ const MenuPortalPage = () => {
   const cartTotal = cart.reduce((s, c) => s + c.item.price * c.quantity, 0);
 
   const allCategoryTabs = [
-    { id: 'all', name: 'Tout' },
+    { id: 'all', name: t('menu.categories.all') },
     ...(categories || []).map((c: any) => ({ id: c.id, name: c.name })),
-    ...(uncategorized.length > 0 ? [{ id: 'uncategorized', name: 'Autres' }] : []),
+    ...(uncategorized.length > 0 ? [{ id: 'uncategorized', name: t('menu.categories.other') }] : []),
   ];
 
   const filteredItems = selectedCategory === 'all'
@@ -226,10 +228,10 @@ const MenuPortalPage = () => {
         <div className="max-w-2xl mx-auto text-center">
           {hotel.logo_url && <img src={hotel.logo_url} alt="" className="h-12 mx-auto mb-2 rounded" />}
           <h1 className="text-2xl font-bold">{hotel.name}</h1>
-          {room && <p className="mt-1 text-primary-foreground/80">Chambre {room}</p>}
+          {room && <p className="mt-1 text-primary-foreground/80">{t('menu.room')} {room}</p>}
           {guestName && (
             <p className="mt-2 text-primary-foreground/90 flex items-center justify-center gap-1">
-              <User className="h-4 w-4" /> Bonjour {guestName} !
+              <User className="h-4 w-4" /> {t('menu.greeting')} {guestName} !
             </p>
           )}
         </div>
@@ -239,7 +241,7 @@ const MenuPortalPage = () => {
         {/* Billing notice */}
         {activeStay && (
           <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-sm text-center">
-            Cette commande sera ajoutée à votre facture de chambre {room}
+            {t('menu.billingNotice')} {room}
           </div>
         )}
 
@@ -248,11 +250,11 @@ const MenuPortalPage = () => {
           <Card className="border-green-500 bg-gradient-to-br from-green-50 to-emerald-50">
             <CardContent className="py-10 text-center">
               <Check className="h-12 w-12 text-green-500 mx-auto mb-3" />
-              <h2 className="text-2xl font-bold">Commande envoyée</h2>
-              <p className="text-muted-foreground mt-1">Numéro <strong>{orderNumber}</strong></p>
-              <p className="text-sm text-muted-foreground mt-2">Votre commande est bien partie en cuisine.</p>
-              {activeStay && <p className="text-sm text-primary mt-1">Montant ajouté à votre facture chambre {room}</p>}
-              <Button variant="outline" className="mt-4" onClick={() => setOrderSent(false)}>Nouvelle commande</Button>
+              <h2 className="text-2xl font-bold">{t('menu.submitted.title')}</h2>
+              <p className="text-muted-foreground mt-1">{t('menu.submitted.reference')} <strong>{orderNumber}</strong></p>
+              <p className="text-sm text-muted-foreground mt-2">{t('menu.submitted.message')}</p>
+              {activeStay && <p className="text-sm text-primary mt-1">{t('menu.submitted.billed')} {room}</p>}
+              <Button variant="outline" className="mt-4" onClick={() => setOrderSent(false)}>{t('menu.submitted.new')}</Button>
             </CardContent>
           </Card>
         )}
@@ -260,7 +262,7 @@ const MenuPortalPage = () => {
         {/* Menu */}
         {!orderSent && (
           <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><UtensilsCrossed className="h-5 w-5" />Notre Menu</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2"><UtensilsCrossed className="h-5 w-5" />{t('menu.title')}</CardTitle></CardHeader>
             <CardContent className="space-y-6">
               <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
                 <TabsList className="w-full overflow-x-auto justify-start">
@@ -294,13 +296,13 @@ const MenuPortalPage = () => {
                       </div>
 
                       <Button size="sm" className="w-full" onClick={() => addToCart(item)}>
-                        <Plus className="h-3 w-3 mr-1" /> Ajouter
+                        <Plus className="h-3 w-3 mr-1" /> {t('menu.addToCart')}
                       </Button>
                     </CardContent>
                   </Card>
                 ))}
               </div>
-              {filteredItems.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">Aucun article disponible dans cette catégorie.</p>}
+              {filteredItems.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">{t('menu.empty')}</p>}
             </CardContent>
           </Card>
         )}
@@ -308,24 +310,24 @@ const MenuPortalPage = () => {
         {/* Service Request */}
         {room && (
           <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><Bell className="h-5 w-5" />Demander un service</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2"><Bell className="h-5 w-5" />{t('menu.service.title')}</CardTitle></CardHeader>
             <CardContent>
               {serviceSent ? (
-                <div className="text-center py-4"><Check className="h-8 w-8 text-green-500 mx-auto mb-2" /><p className="font-semibold">Demande envoyée !</p></div>
+                <div className="text-center py-4"><Check className="h-8 w-8 text-green-500 mx-auto mb-2" /><p className="font-semibold">{t('menu.service.sent')}</p></div>
               ) : (
                 <div className="space-y-3">
                   <Select value={serviceType} onValueChange={setServiceType}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="towels">Serviettes supplémentaires</SelectItem>
-                      <SelectItem value="cleaning">Nettoyage de chambre</SelectItem>
-                      <SelectItem value="minibar">Réapprovisionnement minibar</SelectItem>
-                      <SelectItem value="maintenance">Problème technique</SelectItem>
-                      <SelectItem value="other">Autre</SelectItem>
+                      <SelectItem value="towels">{t('menu.service.towels')}</SelectItem>
+                      <SelectItem value="cleaning">{t('menu.service.cleaning')}</SelectItem>
+                      <SelectItem value="minibar">{t('menu.service.minibar')}</SelectItem>
+                      <SelectItem value="maintenance">{t('menu.service.maintenance')}</SelectItem>
+                      <SelectItem value="other">{t('menu.service.other')}</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Textarea placeholder="Détails (optionnel)..." value={serviceRequest} onChange={e => setServiceRequest(e.target.value)} />
-                  <Button onClick={() => serviceRequestMutation.mutate()} disabled={serviceRequestMutation.isPending}><Send className="h-4 w-4 mr-2" />Envoyer</Button>
+                  <Textarea placeholder={t('menu.service.details')} value={serviceRequest} onChange={e => setServiceRequest(e.target.value)} />
+                  <Button onClick={() => serviceRequestMutation.mutate()} disabled={serviceRequestMutation.isPending}><Send className="h-4 w-4 mr-2" />{t('menu.service.send')}</Button>
                 </div>
               )}
             </CardContent>
@@ -335,7 +337,7 @@ const MenuPortalPage = () => {
         {/* Services */}
         {services && services.length > 0 && (
           <Card>
-            <CardHeader><CardTitle>Services disponibles</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{t('menu.service.available')}</CardTitle></CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-3">
                 {services.map(s => <div key={s.id} className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-primary" />{s.name}</div>)}
@@ -346,15 +348,15 @@ const MenuPortalPage = () => {
 
         {/* Feedback */}
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><Star className="h-5 w-5" />Votre avis</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2"><Star className="h-5 w-5" />{t('menu.feedback.title')}</CardTitle></CardHeader>
           <CardContent>
             {feedbackSent ? (
-              <div className="text-center py-4"><Check className="h-8 w-8 text-green-500 mx-auto mb-2" /><p className="font-semibold">Merci pour votre avis !</p></div>
+              <div className="text-center py-4"><Check className="h-8 w-8 text-green-500 mx-auto mb-2" /><p className="font-semibold">{t('menu.feedback.thanks')}</p></div>
             ) : (
               <div className="space-y-4">
                 <div className="flex gap-2">{[1, 2, 3, 4, 5].map(n => <button key={n} onClick={() => setFeedbackRating(n)}><Star className={`h-8 w-8 ${n <= feedbackRating ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground'}`} /></button>)}</div>
-                <Textarea placeholder="Votre commentaire (optionnel)..." value={feedbackComment} onChange={e => setFeedbackComment(e.target.value)} />
-                <Button onClick={() => feedbackMutation.mutate()} disabled={feedbackRating === 0 || feedbackMutation.isPending}><Send className="h-4 w-4 mr-2" />Envoyer</Button>
+                <Textarea placeholder={t('menu.feedback.comment')} value={feedbackComment} onChange={e => setFeedbackComment(e.target.value)} />
+                <Button onClick={() => feedbackMutation.mutate()} disabled={feedbackRating === 0 || feedbackMutation.isPending}><Send className="h-4 w-4 mr-2" />{t('menu.feedback.send')}</Button>
               </div>
             )}
           </CardContent>
@@ -365,7 +367,7 @@ const MenuPortalPage = () => {
         <div className="fixed bottom-4 left-0 right-0 z-40 px-4">
           <div className="max-w-3xl mx-auto flex justify-end">
             <Button className="rounded-full px-5 shadow-lg" onClick={() => setCartOpen(true)}>
-              <ShoppingCart className="h-4 w-4 mr-2" /> Panier ({cart.length}) {cart.length > 0 ? `• ${formatFCFA(cartTotal)}` : ''}
+              <ShoppingCart className="h-4 w-4 mr-2" /> {t('menu.cart.title')} ({cart.length}) {cart.length > 0 ? `• ${formatFCFA(cartTotal)}` : ''}
             </Button>
           </div>
         </div>
@@ -373,9 +375,9 @@ const MenuPortalPage = () => {
 
       <Dialog open={cartOpen} onOpenChange={setCartOpen}>
         <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><ShoppingCart className="h-5 w-5" />Votre commande</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><ShoppingCart className="h-5 w-5" />{t('menu.cart.order')}</DialogTitle></DialogHeader>
           {cart.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">Votre panier est vide.</p>
+            <p className="text-sm text-muted-foreground py-8 text-center">{t('menu.cart.empty')}</p>
           ) : (
             <div className="space-y-3">
               {cart.map(c => (
@@ -391,9 +393,9 @@ const MenuPortalPage = () => {
                   </div>
                 </div>
               ))}
-              <div className="border-t pt-3 flex justify-between font-bold"><span>Total</span><span>{formatFCFA(cartTotal)}</span></div>
+              <div className="border-t pt-3 flex justify-between font-bold"><span>{t('menu.cart.total')}</span><span>{formatFCFA(cartTotal)}</span></div>
               <Button className="w-full" onClick={() => orderMutation.mutate()} disabled={orderMutation.isPending}>
-                <Send className="h-4 w-4 mr-2" />Passer la commande
+                <Send className="h-4 w-4 mr-2" />{t('menu.cart.submit')}
               </Button>
             </div>
           )}

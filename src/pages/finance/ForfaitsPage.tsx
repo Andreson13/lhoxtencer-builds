@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useI18n } from '@/contexts/I18nContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
@@ -19,6 +20,7 @@ import { Plus, Gift, Users, Pencil, Trash2 } from 'lucide-react';
 import { formatFCFA } from '@/utils/formatters';
 
 const ForfaitsPage = () => {
+  const { t } = useI18n();
   useRoleGuard(['admin', 'manager', 'receptionist']);
   const { hotel } = useHotel();
   const { profile } = useAuth();
@@ -81,7 +83,7 @@ const ForfaitsPage = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['loyalty-packages'] });
       setPkgDialogOpen(false);
-      toast.success(editingPkg ? 'Forfait mis à jour' : 'Forfait créé');
+      toast.success(editingPkg ? t('forfaits.updated') : t('forfaits.created'));
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -91,7 +93,7 @@ const ForfaitsPage = () => {
       const { error } = await supabase.from('loyalty_packages' as any).delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['loyalty-packages'] }); toast.success('Forfait supprimé'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['loyalty-packages'] }); toast.success(t('forfaits.deleted')); },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -111,7 +113,7 @@ const ForfaitsPage = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['guest-packages'] });
       setAssignDialogOpen(false);
-      toast.success('Forfait assigné au client');
+      toast.success(t('forfaits.assigned'));
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -136,19 +138,19 @@ const ForfaitsPage = () => {
 
   return (
     <div className="page-container space-y-6">
-      <PageHeader title="Forfaits & Abonnements" subtitle="Gérez les forfaits de fidélité et les abonnements clients">
+      <PageHeader title={t('forfaits.title')} subtitle={t('forfaits.subtitle')}>
         <Button onClick={() => setAssignDialogOpen(true)} variant="outline">
-          <Users className="h-4 w-4 mr-2" />Assigner un forfait
+          <Users className="h-4 w-4 mr-2" />{t('forfaits.assign')}
         </Button>
         <Button onClick={openAddPkg}>
-          <Plus className="h-4 w-4 mr-2" />Nouveau forfait
+          <Plus className="h-4 w-4 mr-2" />{t('forfaits.new')}
         </Button>
       </PageHeader>
 
       <Tabs defaultValue="packages">
         <TabsList>
-          <TabsTrigger value="packages"><Gift className="h-4 w-4 mr-2" />Forfaits disponibles</TabsTrigger>
-          <TabsTrigger value="subscriptions"><Users className="h-4 w-4 mr-2" />Abonnements clients</TabsTrigger>
+          <TabsTrigger value="packages"><Gift className="h-4 w-4 mr-2" />{t('forfaits.tabs.packages')}</TabsTrigger>
+          <TabsTrigger value="subscriptions"><Users className="h-4 w-4 mr-2" />{t('forfaits.tabs.subscriptions')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="packages" className="mt-4">
@@ -182,7 +184,7 @@ const ForfaitsPage = () => {
             ))}
             {(packages || []).length === 0 && (
               <div className="col-span-3 text-center py-12 text-muted-foreground">
-                Aucun forfait créé. Cliquez sur "Nouveau forfait" pour commencer.
+                {t('forfaits.empty')}
               </div>
             )}
           </div>
@@ -194,11 +196,11 @@ const ForfaitsPage = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Client</TableHead>
-                    <TableHead>Forfait</TableHead>
-                    <TableHead>Date début</TableHead>
-                    <TableHead>Date fin</TableHead>
-                    <TableHead>Statut</TableHead>
+                    <TableHead>{t('forfaits.table.guest')}</TableHead>
+                    <TableHead>{t('forfaits.table.package')}</TableHead>
+                    <TableHead>{t('forfaits.table.startDate')}</TableHead>
+                    <TableHead>{t('forfaits.table.endDate')}</TableHead>
+                    <TableHead>{t('forfaits.table.status')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -214,7 +216,7 @@ const ForfaitsPage = () => {
                     </TableRow>
                   ))}
                   {(guestPackages || []).length === 0 && (
-                    <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Aucun abonnement actif</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">{t('forfaits.noSubscriptions')}</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -226,24 +228,24 @@ const ForfaitsPage = () => {
       {/* Package dialog */}
       <Dialog open={pkgDialogOpen} onOpenChange={setPkgDialogOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{editingPkg ? 'Modifier le forfait' : 'Nouveau forfait'}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editingPkg ? t('forfaits.dialog.edit') : t('forfaits.dialog.new')}</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>Nom *</Label><Input value={pkgForm.name} onChange={e => setPkgForm(p => ({ ...p, name: e.target.value }))} /></div>
-            <div><Label>Description</Label><Input value={pkgForm.description} onChange={e => setPkgForm(p => ({ ...p, description: e.target.value }))} /></div>
+            <div><Label>{t('forfaits.dialog.name')} *</Label><Input value={pkgForm.name} onChange={e => setPkgForm(p => ({ ...p, name: e.target.value }))} /></div>
+            <div><Label>{t('forfaits.dialog.description')}</Label><Input value={pkgForm.description} onChange={e => setPkgForm(p => ({ ...p, description: e.target.value }))} /></div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Prix (FCFA) *</Label><Input type="number" value={pkgForm.price} onChange={e => setPkgForm(p => ({ ...p, price: e.target.value }))} /></div>
-              <div><Label>Validité (jours)</Label><Input type="number" value={pkgForm.validity_days} onChange={e => setPkgForm(p => ({ ...p, validity_days: e.target.value }))} /></div>
+              <div><Label>{t('forfaits.dialog.price')} *</Label><Input type="number" value={pkgForm.price} onChange={e => setPkgForm(p => ({ ...p, price: e.target.value }))} /></div>
+              <div><Label>{t('forfaits.dialog.validity')}</Label><Input type="number" value={pkgForm.validity_days} onChange={e => setPkgForm(p => ({ ...p, validity_days: e.target.value }))} /></div>
             </div>
-            <div><Label>Avantages (un par ligne)</Label>
+            <div><Label>{t('forfaits.dialog.features')}</Label>
               <textarea className="w-full border rounded-md p-2 text-sm min-h-[80px]" value={pkgForm.features}
                 onChange={e => setPkgForm(p => ({ ...p, features: e.target.value }))}
-                placeholder="Petit-déjeuner inclus&#10;Transfert aéroport&#10;Wi-Fi gratuit" />
+                placeholder={t('forfaits.dialog.featuresPlaceholder')} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPkgDialogOpen(false)}>Annuler</Button>
+            <Button variant="outline" onClick={() => setPkgDialogOpen(false)}>{t('common.cancel')}</Button>
             <Button onClick={() => savePkgMutation.mutate()} disabled={!pkgForm.name || !pkgForm.price || savePkgMutation.isPending}>
-              {editingPkg ? 'Enregistrer' : 'Créer'}
+              {editingPkg ? t('forfaits.dialog.save') : t('forfaits.dialog.create')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -252,12 +254,12 @@ const ForfaitsPage = () => {
       {/* Assign dialog */}
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Assigner un forfait à un client</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{t('forfaits.dialog.assignTitle')}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label>Client</Label>
+              <Label>{t('forfaits.dialog.guest')}</Label>
               <Select value={assignForm.guest_id} onValueChange={v => setAssignForm(p => ({ ...p, guest_id: v }))}>
-                <SelectTrigger><SelectValue placeholder="Sélectionner un client" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t('forfaits.dialog.selectGuest')} /></SelectTrigger>
                 <SelectContent>
                   {(guests || []).map((g: any) => (
                     <SelectItem key={g.id} value={g.id}>{g.last_name} {g.first_name} {g.phone ? `— ${g.phone}` : ''}</SelectItem>
@@ -266,9 +268,9 @@ const ForfaitsPage = () => {
               </Select>
             </div>
             <div>
-              <Label>Forfait</Label>
+              <Label>{t('forfaits.dialog.package')}</Label>
               <Select value={assignForm.package_id} onValueChange={v => setAssignForm(p => ({ ...p, package_id: v }))}>
-                <SelectTrigger><SelectValue placeholder="Sélectionner un forfait" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t('forfaits.dialog.selectPackage')} /></SelectTrigger>
                 <SelectContent>
                   {(packages || []).map((pkg: any) => (
                     <SelectItem key={pkg.id} value={pkg.id}>{pkg.name} — {formatFCFA(pkg.price)}</SelectItem>
@@ -277,14 +279,14 @@ const ForfaitsPage = () => {
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Date début</Label><Input type="date" value={assignForm.start_date} onChange={e => setAssignForm(p => ({ ...p, start_date: e.target.value }))} /></div>
-              <div><Label>Date fin (optionnel)</Label><Input type="date" value={assignForm.end_date} onChange={e => setAssignForm(p => ({ ...p, end_date: e.target.value }))} /></div>
+              <div><Label>{t('forfaits.dialog.startDate')}</Label><Input type="date" value={assignForm.start_date} onChange={e => setAssignForm(p => ({ ...p, start_date: e.target.value }))} /></div>
+              <div><Label>{t('forfaits.dialog.endDate')}</Label><Input type="date" value={assignForm.end_date} onChange={e => setAssignForm(p => ({ ...p, end_date: e.target.value }))} /></div>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Annuler</Button>
+            <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>{t('common.cancel')}</Button>
             <Button onClick={() => assignMutation.mutate()} disabled={!assignForm.guest_id || !assignForm.package_id || assignMutation.isPending}>
-              Assigner
+              {t('forfaits.dialog.assign')}
             </Button>
           </DialogFooter>
         </DialogContent>

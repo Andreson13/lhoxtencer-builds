@@ -514,23 +514,20 @@ export async function generateCustomerDossier(params: {
   ];
 
   personalFields.forEach(([label, value], i) => {
-    if (i % 2 === 0) {
-      doc.setFillColor(248, 250, 252);
-    } else {
-      doc.setFillColor(255, 255, 255);
-    }
+    const bgColor = i % 2 === 0 ? [248, 250, 252] : [255, 255, 255];
+    doc.setFillColor(bgColor[0], bgColor[1], bgColor[2]);
     doc.rect(14, y - 3, pageWidth - 28, 6, 'F');
-    
-    doc.setFontSize(7.5);
+
+    doc.setFontSize(7);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(51, 65, 85);
-    doc.text(label, 16, y + 0.5);
-    
+    doc.text(String(label), 16, y + 0.5, { maxWidth: 60 });
+
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(0, 0, 0);
-    doc.text(String(value), 90, y + 0.5);
-    
-    doc.setDrawColor(220, 220, 220);
+    doc.text(String(value), 78, y + 0.5, { maxWidth: 104 });
+
+    doc.setDrawColor(200, 200, 200);
     doc.setLineWidth(0.1);
     doc.line(14, y + 3, pageWidth - 14, y + 3);
     y += 6;

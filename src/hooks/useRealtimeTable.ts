@@ -20,5 +20,5 @@ export const useRealtimeTable = (tableName: string, queryKey: string[]) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [tableName, queryClient, queryKey]);
+  }, [tableName, queryClient, JSON.stringify(queryKey)]);
 };

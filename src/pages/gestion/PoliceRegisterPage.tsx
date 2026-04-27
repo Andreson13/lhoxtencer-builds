@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useI18n } from '@/contexts/I18nContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { useHotel } from '@/contexts/HotelContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -54,18 +55,19 @@ const getPeriodRange = (mode: PeriodMode) => {
   return getCurrentWeekRange();
 };
 
-const labelByMode: Record<PeriodMode, string> = {
-  'this-week': 'Cette semaine',
-  'last-week': 'Semaine derniere',
-  'this-month': 'Ce mois',
-  'last-month': 'Mois dernier',
-  custom: 'Personnalisee',
-};
-
 const PoliceRegisterPage = () => {
+  const { t } = useI18n();
   useRoleGuard(['admin', 'manager', 'receptionist']);
   const { hotel } = useHotel();
   const { profile } = useAuth();
+
+  const labelByMode: Record<PeriodMode, string> = {
+    'this-week': t('policeRegister.period.thisWeek'),
+    'last-week': t('policeRegister.period.lastWeek'),
+    'this-month': t('policeRegister.period.thisMonth'),
+    'last-month': t('policeRegister.period.lastMonth'),
+    custom: t('policeRegister.period.custom'),
+  };
 
   const defaultRange = getCurrentWeekRange();
   const [periodMode, setPeriodMode] = useState<PeriodMode>('this-week');
@@ -99,7 +101,7 @@ const PoliceRegisterPage = () => {
         download: !printMode,
       });
     } catch (error: any) {
-      toast.error(error.message || 'Impossible de generer le registre');
+      toast.error(error.message || t('policeRegister.error'));
     }
   };
 
@@ -150,48 +152,48 @@ const PoliceRegisterPage = () => {
 
   return (
     <div className="page-container space-y-6">
-      <PageHeader title="Registre de Police" subtitle="Document officiel — à remettre aux autorités" />
+      <PageHeader title={t('policeRegister.title')} subtitle={t('policeRegister.subtitle')} />
 
       <Tabs defaultValue="daily">
         <TabsList>
-          <TabsTrigger value="daily">Journalier</TabsTrigger>
-          <TabsTrigger value="weekly">Hebdomadaire</TabsTrigger>
-          <TabsTrigger value="period">Par période</TabsTrigger>
+          <TabsTrigger value="daily">{t('policeRegister.tabs.daily')}</TabsTrigger>
+          <TabsTrigger value="weekly">{t('policeRegister.tabs.weekly')}</TabsTrigger>
+          <TabsTrigger value="period">{t('policeRegister.tabs.period')}</TabsTrigger>
         </TabsList>
 
         {/* Daily Tab */}
         <TabsContent value="daily" className="mt-4 space-y-4">
           <Card>
             <CardContent className="pt-4 flex items-center gap-4">
-              <div><label className="text-sm text-muted-foreground">Date</label><Input type="date" value={dailyDate} onChange={e => setDailyDate(e.target.value)} /></div>
-              <Button onClick={handleDailyExport} disabled={!dailyRows.length} className="mt-5">Télécharger PDF</Button>
+              <div><label className="text-sm text-muted-foreground">{t('policeRegister.date')}</label><Input type="date" value={dailyDate} onChange={e => setDailyDate(e.target.value)} /></div>
+              <Button onClick={handleDailyExport} disabled={!dailyRows.length} className="mt-5">{t('policeRegister.download')}</Button>
             </CardContent>
           </Card>
-          <RegisterTable rows={dailyRows} isLoading={dailyLoading} showStatus />
+          <RegisterTable rows={dailyRows} isLoading={dailyLoading} showStatus t={t} />
         </TabsContent>
 
         {/* Weekly Tab */}
         <TabsContent value="weekly" className="mt-4 space-y-4">
           <Card>
             <CardContent className="pt-4 flex items-center gap-4 flex-wrap">
-              <div><label className="text-sm text-muted-foreground">Semaine du</label><Input type="date" value={weekStart} onChange={e => setWeekStart(e.target.value)} /></div>
-              <div><label className="text-sm text-muted-foreground">au</label><Input type="date" value={weekEnd} onChange={e => setWeekEnd(e.target.value)} /></div>
-              <Button onClick={handleWeeklyExport} disabled={!weeklyRows.length} className="mt-5">Télécharger PDF</Button>
+              <div><label className="text-sm text-muted-foreground">{t('policeRegister.period.from')}</label><Input type="date" value={weekStart} onChange={e => setWeekStart(e.target.value)} /></div>
+              <div><label className="text-sm text-muted-foreground">{t('policeRegister.period.to')}</label><Input type="date" value={weekEnd} onChange={e => setWeekEnd(e.target.value)} /></div>
+              <Button onClick={handleWeeklyExport} disabled={!weeklyRows.length} className="mt-5">{t('policeRegister.download')}</Button>
             </CardContent>
           </Card>
-          <RegisterTable rows={weeklyRows} isLoading={weeklyLoading} showStatus />
+          <RegisterTable rows={weeklyRows} isLoading={weeklyLoading} showStatus t={t} />
         </TabsContent>
 
         {/* Period Tab (existing) */}
         <TabsContent value="period" className="mt-4 space-y-4">
         <div className="flex gap-2 justify-end">
-          <Button variant="outline" onClick={() => handleExport(true)} disabled={!rows.length}>Imprimer le registre</Button>
-          <Button onClick={() => handleExport(false)} disabled={!rows.length}>Télécharger PDF</Button>
+          <Button variant="outline" onClick={() => handleExport(true)} disabled={!rows.length}>{t('policeRegister.print')}</Button>
+          <Button onClick={() => handleExport(false)} disabled={!rows.length}>{t('policeRegister.download')}</Button>
         </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Filtres</CardTitle>
+          <CardTitle>{t('policeRegister.filters')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2">
@@ -216,26 +218,26 @@ const PoliceRegisterPage = () => {
           {periodMode === 'custom' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="text-sm text-muted-foreground">Date de debut</label>
+                <label className="text-sm text-muted-foreground">{t('policeRegister.period.startDate')}</label>
                 <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
               </div>
               <div>
-                <label className="text-sm text-muted-foreground">Date de fin</label>
+                <label className="text-sm text-muted-foreground">{t('policeRegister.period.endDate')}</label>
                 <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
               </div>
             </div>
           )}
 
           <div className="flex items-center justify-between">
-            <Badge variant="outline">Periode: {effectiveRange.start} au {effectiveRange.end}</Badge>
-            <Button variant="secondary" onClick={() => setRefreshIndex((prev) => prev + 1)}>Actualiser</Button>
+            <Badge variant="outline">{t('policeRegister.period.label')}: {effectiveRange.start} {t('policeRegister.period.to')} {effectiveRange.end}</Badge>
+            <Button variant="secondary" onClick={() => setRefreshIndex((prev) => prev + 1)}>{t('policeRegister.refresh')}</Button>
           </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Apercu avant export ({rows.length} fiche(s))</CardTitle>
+          <CardTitle>{t('policeRegister.preview')} ({rows.length} {t('policeRegister.records')})</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -249,17 +251,17 @@ const PoliceRegisterPage = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>N°</TableHead>
-                    <TableHead>Nom et Prenoms</TableHead>
-                    <TableHead>Date et Lieu de Naissance</TableHead>
-                    <TableHead>Nationalite</TableHead>
-                    <TableHead>Qualite/Profession</TableHead>
-                    <TableHead>N° Chambre</TableHead>
-                    <TableHead>Date d'Arrivee</TableHead>
-                    <TableHead>Date de Depart</TableHead>
-                    <TableHead>N° Piece d'Identite</TableHead>
-                    <TableHead>Document CNI</TableHead>
-                    <TableHead>Observations</TableHead>
+                    <TableHead>{t('policeRegister.table.number')}</TableHead>
+                    <TableHead>{t('policeRegister.table.name')}</TableHead>
+                    <TableHead>{t('policeRegister.table.birthDate')}</TableHead>
+                    <TableHead>{t('policeRegister.table.nationality')}</TableHead>
+                    <TableHead>{t('policeRegister.table.profession')}</TableHead>
+                    <TableHead>{t('policeRegister.table.room')}</TableHead>
+                    <TableHead>{t('policeRegister.table.checkIn')}</TableHead>
+                    <TableHead>{t('policeRegister.table.checkOut')}</TableHead>
+                    <TableHead>{t('policeRegister.table.idNumber')}</TableHead>
+                    <TableHead>{t('policeRegister.table.idDocument')}</TableHead>
+                    <TableHead>{t('policeRegister.table.observations')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -278,7 +280,7 @@ const PoliceRegisterPage = () => {
                         <TableCell>{guest.id_number || '-'}</TableCell>
                         <TableCell>
                           {guest.id_document_url ? (
-                            <a href={guest.id_document_url} target="_blank" rel="noreferrer" className="text-primary underline">Voir</a>
+                            <a href={guest.id_document_url} target="_blank" rel="noreferrer" className="text-primary underline">{t('policeRegister.view')}</a>
                           ) : '-'}
                         </TableCell>
                         <TableCell>{row.observation || '-'}</TableCell>
@@ -298,32 +300,33 @@ const PoliceRegisterPage = () => {
 };
 
 // Shared register table component
-function RegisterTable({ rows, isLoading, showStatus }: { rows: any[]; isLoading: boolean; showStatus?: boolean }) {
+function RegisterTable({ rows, isLoading, showStatus, t }: { rows: any[]; isLoading: boolean; showStatus?: boolean; t?: (key: string) => string }) {
+  const tFn = t || ((key: string) => key);
   return (
     <Card>
-      <CardHeader><CardTitle>Aperçu ({rows.length} fiche(s))</CardTitle></CardHeader>
+      <CardHeader><CardTitle>{tFn('policeRegister.preview')} ({rows.length} {tFn('policeRegister.records')})</CardTitle></CardHeader>
       <CardContent>
         {isLoading ? (
           <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
         ) : rows.length === 0 ? (
-          <p className="text-center text-muted-foreground py-8">Aucune fiche pour cette période</p>
+          <p className="text-center text-muted-foreground py-8">{tFn('policeRegister.noData')}</p>
         ) : (
           <div className="rounded-md border overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>N°</TableHead>
-                  <TableHead>Nom et Prénoms</TableHead>
-                  <TableHead>Date & Lieu de Naissance</TableHead>
-                  <TableHead>Nationalité</TableHead>
-                  <TableHead>Profession</TableHead>
-                  <TableHead>N° Chambre</TableHead>
-                  {showStatus && <TableHead>Statut</TableHead>}
-                  <TableHead>Arrivée</TableHead>
-                  <TableHead>Départ</TableHead>
-                  <TableHead>N° Pièce</TableHead>
-                  <TableHead>Document CNI</TableHead>
-                  <TableHead>Observations</TableHead>
+                  <TableHead>{tFn('policeRegister.table.number')}</TableHead>
+                  <TableHead>{tFn('policeRegister.table.name')}</TableHead>
+                  <TableHead>{tFn('policeRegister.table.birthDate')}</TableHead>
+                  <TableHead>{tFn('policeRegister.table.nationality')}</TableHead>
+                  <TableHead>{tFn('policeRegister.table.profession')}</TableHead>
+                  <TableHead>{tFn('policeRegister.table.room')}</TableHead>
+                  {showStatus && <TableHead>{tFn('policeRegister.table.status')}</TableHead>}
+                  <TableHead>{tFn('policeRegister.table.checkIn')}</TableHead>
+                  <TableHead>{tFn('policeRegister.table.checkOut')}</TableHead>
+                  <TableHead>{tFn('policeRegister.table.idNumber')}</TableHead>
+                  <TableHead>{tFn('policeRegister.table.idDocument')}</TableHead>
+                  <TableHead>{tFn('policeRegister.table.observations')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -332,7 +335,7 @@ function RegisterTable({ rows, isLoading, showStatus }: { rows: any[]; isLoading
                   const now = new Date();
                   const cin = row.check_in_date ? new Date(row.check_in_date) : null;
                   const cout = row.check_out_date ? new Date(row.check_out_date) : null;
-                  const status = !cin ? '-' : now < cin ? 'Arrivée' : (!cout || now <= cout) ? 'En séjour' : 'Départ';
+                  const status = !cin ? '-' : now < cin ? tFn('policeRegister.status.arrival') : (!cout || now <= cout) ? tFn('policeRegister.status.stayingIn') : tFn('policeRegister.status.departure');
                   return (
                     <TableRow key={`${row.source}-${row.id}-${i}`}>
                       <TableCell>{String(i + 1).padStart(3, '0')}</TableCell>
@@ -347,7 +350,7 @@ function RegisterTable({ rows, isLoading, showStatus }: { rows: any[]; isLoading
                       <TableCell>{guest.id_number || '-'}</TableCell>
                       <TableCell>
                         {guest.id_document_url ? (
-                          <a href={guest.id_document_url} target="_blank" rel="noreferrer" className="text-primary underline">Voir</a>
+                          <a href={guest.id_document_url} target="_blank" rel="noreferrer" className="text-primary underline">{tFn('policeRegister.view')}</a>
                         ) : '-'}
                       </TableCell>
                       <TableCell>{row.observation || '-'}</TableCell>

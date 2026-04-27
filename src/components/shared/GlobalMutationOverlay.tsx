@@ -9,13 +9,10 @@ export const GlobalMutationOverlay = () => {
   }
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center bg-background/35 backdrop-blur-[1px]">
-      <div className="flex items-center gap-3 rounded-lg border bg-background px-4 py-3 shadow-lg">
-        <Loader2 className="h-5 w-5 animate-spin text-primary" />
-        <div>
-          <p className="text-sm font-medium">Traitement en cours</p>
-          <p className="text-xs text-muted-foreground">Veuillez patienter...</p>
-        </div>
+    <div className="pointer-events-none fixed bottom-6 right-6 z-[100]">
+      <div className="flex items-center gap-2 rounded-lg bg-primary/10 border border-primary/20 px-3 py-2 shadow-sm">
+        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+        <p className="text-xs font-medium text-primary">Traitement...</p>
       </div>
     </div>
   );

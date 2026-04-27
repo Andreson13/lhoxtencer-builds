@@ -1,6 +1,7 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useI18n } from '@/contexts/I18nContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { useRealtimeTable } from '@/hooks/useRealtimeTable';
@@ -14,17 +15,18 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { Sparkles, Play, CheckCircle, Eye } from 'lucide-react';
 
-const statusCols = [
-  { key: 'pending', label: 'À nettoyer', color: 'bg-destructive/10' },
-  { key: 'in_progress', label: 'En cours', color: 'bg-blue-50' },
-  { key: 'inspection', label: 'Inspection', color: 'bg-yellow-50' },
-  { key: 'clean', label: 'Propre', color: 'bg-green-50' },
-];
-
 const HousekeepingPage = () => {
+  const { t } = useI18n();
   useRoleGuard(['admin', 'manager', 'housekeeping']);
   const { hotel } = useHotel();
   const qc = useQueryClient();
+
+  const statusCols = [
+    { key: 'pending', label: t('housekeeping.column.cleaning'), color: 'bg-destructive/10' },
+    { key: 'in_progress', label: t('housekeeping.column.inProgress'), color: 'bg-blue-50' },
+    { key: 'inspection', label: t('housekeeping.column.inspection'), color: 'bg-yellow-50' },
+    { key: 'clean', label: t('housekeeping.column.clean'), color: 'bg-green-50' },
+  ];
 
   useRealtimeTable('housekeeping_tasks', ['housekeeping', hotel?.id || '']);
 
@@ -70,7 +72,7 @@ const HousekeepingPage = () => {
       const { error } = await supabase.from('housekeeping_tasks').update(updates).eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['housekeeping'] }); toast.success('Tâche mise à jour'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['housekeeping'] }); toast.success(t('housekeeping.updated')); },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -85,7 +87,7 @@ const HousekeepingPage = () => {
 
   return (
     <div className="page-container space-y-6">
-      <PageHeader title="Housekeeping" subtitle={`${dedupedTasks.length || 0} tâche(s)`} />
+      <PageHeader title={t('housekeeping.title')} subtitle={`${dedupedTasks.length || 0} ${t('housekeeping.subtitle')}`} />
 
       <div className="grid grid-cols-4 gap-4">
         {statusCols.map(col => {
@@ -107,14 +109,14 @@ const HousekeepingPage = () => {
                         {(task as any).profiles?.full_name && <p className="text-xs text-muted-foreground">👤 {(task as any).profiles.full_name}</p>}
                         {task.status === 'pending' && staff && staff.length > 0 && (
                           <Select onValueChange={v => updateTask.mutate({ id: task.id, updates: { assigned_to: v } })}>
-                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Assigner" /></SelectTrigger>
+                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder={t('housekeeping.assign')} /></SelectTrigger>
                             <SelectContent>{staff.map(s => <SelectItem key={s.id} value={s.id}>{s.full_name}</SelectItem>)}</SelectContent>
                           </Select>
                         )}
                         <div className="flex gap-1">
-                          {task.status === 'pending' && <Button size="sm" className="flex-1" onClick={() => moveToStatus(task.id, 'in_progress')}><Play className="h-3 w-3 mr-1" />Commencer</Button>}
-                          {task.status === 'in_progress' && <Button size="sm" className="flex-1" onClick={() => moveToStatus(task.id, 'inspection')}><Eye className="h-3 w-3 mr-1" />Inspection</Button>}
-                          {task.status === 'inspection' && <Button size="sm" className="flex-1" onClick={() => moveToStatus(task.id, 'clean')}><CheckCircle className="h-3 w-3 mr-1" />Propre</Button>}
+                          {task.status === 'pending' && <Button size="sm" className="flex-1" onClick={() => moveToStatus(task.id, 'in_progress')}><Play className="h-3 w-3 mr-1" />{t('housekeeping.column.inProgress')}</Button>}
+                          {task.status === 'in_progress' && <Button size="sm" className="flex-1" onClick={() => moveToStatus(task.id, 'inspection')}><Eye className="h-3 w-3 mr-1" />{t('housekeeping.column.inspection')}</Button>}
+                          {task.status === 'inspection' && <Button size="sm" className="flex-1" onClick={() => moveToStatus(task.id, 'clean')}><CheckCircle className="h-3 w-3 mr-1" />{t('housekeeping.column.clean')}</Button>}
                         </div>
                       </CardContent>
                     </Card>

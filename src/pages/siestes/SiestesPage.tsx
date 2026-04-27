@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useI18n } from '@/contexts/I18nContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
@@ -23,6 +24,7 @@ import { toast } from 'sonner';
 import { Coffee, Plus, Clock, AlertTriangle, Search } from 'lucide-react';
 
 const SiestesPage = () => {
+  const { t } = useI18n();
   useRoleGuard(['admin', 'manager', 'receptionist']);
   const { profile } = useAuth();
   const { hotel } = useHotel();
@@ -100,7 +102,7 @@ const SiestesPage = () => {
 
       // Create guest if new
       if (!guestId) {
-        if (!newGuest.last_name || !newGuest.first_name) throw new Error('Nom et prénom requis');
+        if (!newGuest.last_name || !newGuest.first_name) throw new Error(t('siestes.dialog.requiredFields'));
         const { data: g, error: gErr } = await supabase.from('guests').insert({
           hotel_id: hotel.id,
           last_name: newGuest.last_name,
@@ -198,7 +200,7 @@ const SiestesPage = () => {
       qc.invalidateQueries({ queryKey: ['rooms'] });
       qc.invalidateQueries({ queryKey: ['dashboard'] });
       qc.invalidateQueries({ queryKey: ['pending-payments'] });
-      toast.success('Sieste enregistrée');
+      toast.success(t('siestes.created'));
       resetDialog();
     },
     onError: (e: any) => toast.error(e.message),
@@ -227,36 +229,36 @@ const SiestesPage = () => {
 
   return (
     <div className="page-container space-y-6">
-      <PageHeader title="Siestes" subtitle={`Journée du ${new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`}>
+      <PageHeader title={t('siestes.title')} subtitle={`${t('siestes.today')} ${new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`}>
         <Button onClick={() => { resetDialog(); setDialogOpen(true); setSiesteForm(f => ({ ...f, arrival_time: new Date().toTimeString().slice(0, 5) })); }}>
-          <Plus className="h-4 w-4 mr-2" />Nouvelle sieste
+          <Plus className="h-4 w-4 mr-2" />{t('siestes.new')}
         </Button>
       </PageHeader>
 
       <div className="grid grid-cols-3 gap-4">
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Siestes aujourd'hui</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{todaySiestes.length}</p></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Revenus du jour</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{formatFCFA(totalRevenue)}</p></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground flex items-center gap-1">{withOvertime.length > 0 && <AlertTriangle className="h-4 w-4 text-destructive" />}En cours</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{inProgress.length}</p>{withOvertime.length > 0 && <p className="text-sm text-destructive">{withOvertime.length} en dépassement</p>}</CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{t('siestes.today')}</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{todaySiestes.length}</p></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{t('siestes.revenue')}</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{formatFCFA(totalRevenue)}</p></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground flex items-center gap-1">{withOvertime.length > 0 && <AlertTriangle className="h-4 w-4 text-destructive" />}{t('siestes.inProgress')}</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{inProgress.length}</p>{withOvertime.length > 0 && <p className="text-sm text-destructive">{withOvertime.length} {t('siestes.overtime')}</p>}</CardContent></Card>
       </div>
 
       {isLoading ? (
         <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
       ) : todaySiestes.length === 0 ? (
-        <EmptyState icon={Coffee} title="Aucune sieste aujourd'hui" description="Enregistrez une nouvelle sieste" actionLabel="Nouvelle sieste" onAction={() => { resetDialog(); setDialogOpen(true); }} />
+        <EmptyState icon={Coffee} title={t('siestes.empty.title')} description={t('siestes.empty.description')} actionLabel={t('siestes.new')} onAction={() => { resetDialog(); setDialogOpen(true); }} />
       ) : (
         <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>N°</TableHead>
-                <TableHead>Nom</TableHead>
-                <TableHead>Chambre</TableHead>
-                <TableHead>Arrivée</TableHead>
-                <TableHead>Durée</TableHead>
-                <TableHead>Temps restant</TableHead>
-                <TableHead className="text-right">Montant</TableHead>
-                <TableHead>Paiement</TableHead>
-                <TableHead className="text-right">Action</TableHead>
+                <TableHead>{t('siestes.table.number')}</TableHead>
+                <TableHead>{t('siestes.table.name')}</TableHead>
+                <TableHead>{t('siestes.table.room')}</TableHead>
+                <TableHead>{t('siestes.table.arrival')}</TableHead>
+                <TableHead>{t('siestes.table.duration')}</TableHead>
+                <TableHead>{t('siestes.table.remaining')}</TableHead>
+                <TableHead className="text-right">{t('siestes.table.amount')}</TableHead>
+                <TableHead>{t('siestes.table.payment')}</TableHead>
+                <TableHead className="text-right">{t('siestes.table.action')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -271,18 +273,18 @@ const SiestesPage = () => {
                     <TableCell>{s.duration_hours || 3}h</TableCell>
                     <TableCell>
                       {s.departure_time ? (
-                        <Badge variant="secondary">Terminé</Badge>
+                        <Badge variant="secondary">{t('siestes.table.done')}</Badge>
                       ) : overtime > 0 ? (
-                        <Badge variant="destructive" className="flex items-center gap-1"><Clock className="h-3 w-3" />+{overtime}h dépassement</Badge>
+                        <Badge variant="destructive" className="flex items-center gap-1"><Clock className="h-3 w-3" />+{overtime}h {t('siestes.overtime')}</Badge>
                       ) : (
-                        <Badge variant="outline" className="flex items-center gap-1"><Clock className="h-3 w-3" />En cours</Badge>
+                        <Badge variant="outline" className="flex items-center gap-1"><Clock className="h-3 w-3" />{t('siestes.inProgress')}</Badge>
                       )}
                     </TableCell>
                     <TableCell className="text-right">{formatFCFA(s.amount_paid)}</TableCell>
                     <TableCell>
                       {(s as any).invoices?.balance_due > 0
-                        ? <Badge variant="destructive">En attente</Badge>
-                        : <Badge className="bg-green-600">Payé</Badge>}
+                        ? <Badge variant="destructive">{t('siestes.table.pending')}</Badge>
+                        : <Badge className="bg-green-600">{t('siestes.table.paid')}</Badge>}
                     </TableCell>
                     <TableCell className="text-right">
                       {((s as any).invoices?.balance_due || 0) > 0 && s.invoice_id && siesteStaysByInvoice[s.invoice_id]?.id && (s.guest_id || siesteStaysByInvoice[s.invoice_id]?.guest_id) && (
@@ -298,7 +300,7 @@ const SiestesPage = () => {
                             guestName: s.full_name,
                           });
                           setPaymentDialogOpen(true);
-                        }}>Marquer comme payé</Button>
+                        }}>{t('siestes.table.markPaid')}</Button>
                       )}
                     </TableCell>
                   </TableRow>
@@ -313,17 +315,17 @@ const SiestesPage = () => {
       <Dialog open={dialogOpen} onOpenChange={v => { if (!v) resetDialog(); }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Nouvelle sieste</DialogTitle>
-            <DialogDescription>Identifiez le client puis renseignez la sieste</DialogDescription>
+            <DialogTitle>{t('siestes.new')}</DialogTitle>
+            <DialogDescription>{t('siestes.dialog.description')}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             {/* Guest identification */}
             <div className="border rounded-lg p-4 space-y-3">
-              <h3 className="font-semibold text-sm">1. Identification du client</h3>
+              <h3 className="font-semibold text-sm">1. {t('siestes.dialog.identification')}</h3>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Rechercher un client existant..." className="pl-10"
+                <Input placeholder={t('siestes.dialog.searchGuest')} className="pl-10"
                   value={guestSearch} onChange={e => { setGuestSearch(e.target.value); setSelectedGuestId(null); }} />
               </div>
               {existingGuests && existingGuests.length > 0 && !selectedGuestId && (
@@ -336,17 +338,17 @@ const SiestesPage = () => {
                   ))}
                 </div>
               )}
-              {selectedGuestId && <Badge variant="default">Client existant sélectionné</Badge>}
+              {selectedGuestId && <Badge variant="default">{t('siestes.dialog.existingSelected')}</Badge>}
               {!selectedGuestId && (
                 <div className="border-t pt-3 space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Ou nouveau client :</p>
+                  <p className="text-xs font-medium text-muted-foreground">{t('siestes.dialog.newGuest')}</p>
                   <div className="grid grid-cols-2 gap-3">
-                    <div><Label>Nom *</Label><Input value={newGuest.last_name} onChange={e => setNewGuest(p => ({ ...p, last_name: e.target.value }))} /></div>
-                    <div><Label>Prénom *</Label><Input value={newGuest.first_name} onChange={e => setNewGuest(p => ({ ...p, first_name: e.target.value }))} /></div>
-                    <div><Label>Téléphone</Label><Input value={newGuest.phone} onChange={e => setNewGuest(p => ({ ...p, phone: e.target.value }))} /></div>
-                    <div><Label>Nationalité</Label><Input value={newGuest.nationality} onChange={e => setNewGuest(p => ({ ...p, nationality: e.target.value }))} /></div>
-                    <div><Label>N° ID</Label><Input value={newGuest.id_number} onChange={e => setNewGuest(p => ({ ...p, id_number: e.target.value }))} /></div>
-                    <div><Label>Date de naissance</Label><Input type="date" value={newGuest.date_of_birth} onChange={e => setNewGuest(p => ({ ...p, date_of_birth: e.target.value }))} /></div>
+                    <div><Label>{t('common.lastName')} *</Label><Input value={newGuest.last_name} onChange={e => setNewGuest(p => ({ ...p, last_name: e.target.value }))} /></div>
+                    <div><Label>{t('common.firstName')} *</Label><Input value={newGuest.first_name} onChange={e => setNewGuest(p => ({ ...p, first_name: e.target.value }))} /></div>
+                    <div><Label>{t('common.phone')}</Label><Input value={newGuest.phone} onChange={e => setNewGuest(p => ({ ...p, phone: e.target.value }))} /></div>
+                    <div><Label>{t('common.nationality')}</Label><Input value={newGuest.nationality} onChange={e => setNewGuest(p => ({ ...p, nationality: e.target.value }))} /></div>
+                    <div><Label>{t('common.idNumber')}</Label><Input value={newGuest.id_number} onChange={e => setNewGuest(p => ({ ...p, id_number: e.target.value }))} /></div>
+                    <div><Label>{t('common.dateOfBirth')}</Label><Input type="date" value={newGuest.date_of_birth} onChange={e => setNewGuest(p => ({ ...p, date_of_birth: e.target.value }))} /></div>
                   </div>
                 </div>
               )}
@@ -354,28 +356,28 @@ const SiestesPage = () => {
 
             {/* Sieste details */}
             <div className="border rounded-lg p-4 space-y-3">
-              <h3 className="font-semibold text-sm">2. Détails de la sieste</h3>
+              <h3 className="font-semibold text-sm">2. {t('siestes.dialog.details')}</h3>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>Chambre</Label>
+                  <Label>{t('siestes.table.room')}</Label>
                   <Select onValueChange={v => {
                     const selectedRoom = rooms?.find(r => r.id === v);
                     const siestePrice = selectedRoom?.room_categories?.price_sieste || 0;
                     setSiesteForm(f => ({ ...f, room_id: v, amount_paid: siestePrice || 0 }));
                   }}>
-                    <SelectTrigger><SelectValue placeholder="Chambre" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={t('siestes.table.room')} /></SelectTrigger>
                     <SelectContent>{rooms?.map(r => <SelectItem key={r.id} value={r.id}>{r.room_number}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div><Label>Heure d'arrivée</Label><Input type="time" value={siesteForm.arrival_time} onChange={e => setSiesteForm(f => ({ ...f, arrival_time: e.target.value }))} /></div>
-                <div><Label>Durée (heures)</Label><Input type="number" value={siesteForm.duration_hours} onChange={e => setSiesteForm(f => ({ ...f, duration_hours: Number(e.target.value) }))} /></div>
-                <div><Label>Montant (FCFA)</Label><Input type="number" value={siesteForm.amount_paid} onChange={e => setSiesteForm(f => ({ ...f, amount_paid: Number(e.target.value) }))} /></div>
+                <div><Label>{t('siestes.dialog.arrivalTime')}</Label><Input type="time" value={siesteForm.arrival_time} onChange={e => setSiesteForm(f => ({ ...f, arrival_time: e.target.value }))} /></div>
+                <div><Label>{t('siestes.dialog.duration')}</Label><Input type="number" value={siesteForm.duration_hours} onChange={e => setSiesteForm(f => ({ ...f, duration_hours: Number(e.target.value) }))} /></div>
+                <div><Label>{t('siestes.dialog.amount')}</Label><Input type="number" value={siesteForm.amount_paid} onChange={e => setSiesteForm(f => ({ ...f, amount_paid: Number(e.target.value) }))} /></div>
                 <div>
-                  <Label>Mode de paiement</Label>
+                  <Label>{t('siestes.dialog.paymentMethod')}</Label>
                   <Select value={siesteForm.payment_method} onValueChange={v => setSiesteForm(f => ({ ...f, payment_method: v }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="cash">{t('siestes.dialog.cash')}</SelectItem>
                       <SelectItem value="mtn_momo">MTN MoMo</SelectItem>
                       <SelectItem value="orange_money">Orange Money</SelectItem>
                     </SelectContent>
@@ -386,10 +388,10 @@ const SiestesPage = () => {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={resetDialog}>Annuler</Button>
+            <Button variant="outline" onClick={resetDialog}>{t('common.cancel')}</Button>
             <Button onClick={() => saveMutation.mutate()}
               disabled={saveMutation.isPending || (!selectedGuestId && (!newGuest.last_name || !newGuest.first_name))}>
-              Enregistrer
+              {t('siestes.dialog.register')}
             </Button>
           </DialogFooter>
         </DialogContent>

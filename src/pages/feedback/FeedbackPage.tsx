@@ -1,6 +1,7 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useI18n } from '@/contexts/I18nContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -12,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { MessageSquare, Star } from 'lucide-react';
 
 const FeedbackPage = () => {
+  const { t } = useI18n();
   useRoleGuard(['admin', 'manager']);
   const { hotel } = useHotel();
 
@@ -28,10 +30,10 @@ const FeedbackPage = () => {
 
   return (
     <div className="page-container space-y-6">
-      <PageHeader title="Avis clients" subtitle={`${feedback?.length || 0} avis • Moyenne: ${avgRating}/5`} />
+      <PageHeader title={t('feedback.title')} subtitle={`${feedback?.length || 0} ${t('common.avis')} • Moyenne: ${avgRating}/5`} />
 
       {isLoading ? <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}</div> : !feedback?.length ? (
-        <EmptyState icon={MessageSquare} title="Aucun avis" description="Les avis clients apparaîtront ici" />
+        <EmptyState icon={MessageSquare} title={t('feedback.empty.title')} description={t('feedback.empty.description')} />
       ) : (
         <div className="space-y-4">
           {feedback.map(f => (
@@ -39,8 +41,8 @@ const FeedbackPage = () => {
               <CardContent className="py-4">
                 <div className="flex justify-between items-start">
                   <div>
-                    <p className="font-semibold">{(f as any).guests ? `${(f as any).guests.last_name} ${(f as any).guests.first_name}` : 'Anonyme'}</p>
-                    {f.room_number && <p className="text-sm text-muted-foreground">Chambre {f.room_number}</p>}
+                    <p className="font-semibold">{(f as any).guests ? `${(f as any).guests.last_name} ${(f as any).guests.first_name}` : t('feedback.anonymous')}</p>
+                    {f.room_number && <p className="text-sm text-muted-foreground">{t('feedback.room')} {f.room_number}</p>}
                   </div>
                   <div className="flex items-center gap-1">
                     {Array.from({ length: 5 }).map((_, i) => (

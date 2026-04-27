@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(cd /d \"C:\\\\Users\\\\Andreson\\\\PROJECTS\\\\hotel-harmony-781ad4c5\")",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "WebSearch",
+      "Bash(bun run *)",
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(netstat -tuln)",
+      "Bash(curl -s http://localhost:8084)",
+      "Bash(cat)",
+      "Read(//tmp/**)"
     ]
   }
 }

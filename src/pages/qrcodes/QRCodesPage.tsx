@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useI18n } from '@/contexts/I18nContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -11,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import jsPDF from 'jspdf';
 
 const QRCodesPage = () => {
+  const { t } = useI18n();
   useRoleGuard(['admin', 'manager']);
   const { hotel } = useHotel();
 
@@ -66,8 +68,8 @@ const QRCodesPage = () => {
       // Just add the URL text for now (QR requires DOM rendering)
       pdf.setFontSize(12);
       pdf.setFont('helvetica', 'normal');
-      pdf.text('Scannez le QR code dans votre chambre', pageW / 2, 200, { align: 'center' });
-      pdf.text('pour commander et accéder aux services', pageW / 2, 210, { align: 'center' });
+      pdf.text(t('qrcodes.pdf.scanText'), pageW / 2, 200, { align: 'center' });
+      pdf.text(t('qrcodes.pdf.scanSubtext'), pageW / 2, 210, { align: 'center' });
 
       pdf.setFontSize(8);
       pdf.text(menuUrl, pageW / 2, 250, { align: 'center' });
@@ -78,16 +80,16 @@ const QRCodesPage = () => {
 
   return (
     <div className="page-container space-y-6">
-      <PageHeader title="QR Codes" subtitle="Générez des QR codes pour chaque chambre et le portail de réservation">
+      <PageHeader title={t('qrcodes.title')} subtitle={t('qrcodes.subtitle')}>
         <Button variant="outline" onClick={printAllQRCodes} disabled={!rooms?.length}>
-          <Printer className="h-4 w-4 mr-2" />Imprimer tous
+          <Printer className="h-4 w-4 mr-2" />{t('qrcodes.printAll')}
         </Button>
       </PageHeader>
 
       {/* Booking portal QR */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Globe className="h-5 w-5" />Portail de réservation</CardTitle>
+          <CardTitle className="flex items-center gap-2"><Globe className="h-5 w-5" />{t('qrcodes.bookingPortal')}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col items-center space-y-4">
           <QRCodeSVG value={bookingUrl} size={200} />
@@ -100,7 +102,7 @@ const QRCodesPage = () => {
       </Card>
 
       {/* Per-room QR codes */}
-      <h2 className="text-lg font-semibold">QR Codes par chambre (menu & services)</h2>
+      <h2 className="text-lg font-semibold">{t('qrcodes.byRoom')}</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {rooms?.map(room => {
           const menuUrl = `${baseUrl}/menu/hotel/${hotel?.id}/${room.room_number}`;
@@ -108,14 +110,14 @@ const QRCodesPage = () => {
             <Card key={room.id}>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <BedDouble className="h-4 w-4" />Chambre {room.room_number}
+                  <BedDouble className="h-4 w-4" />{t('qrcodes.room')} {room.room_number}
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col items-center space-y-3">
                 <QRCodeSVG value={menuUrl} size={140} />
                 <div className="flex gap-2">
                   <a href={menuUrl} target="_blank" rel="noopener noreferrer">
-                    <Button variant="outline" size="sm"><Eye className="h-3 w-3 mr-1" />Tester</Button>
+                    <Button variant="outline" size="sm"><Eye className="h-3 w-3 mr-1" />{t('qrcodes.test')}</Button>
                   </a>
                 </div>
                 <p className="text-[10px] text-muted-foreground truncate max-w-full">{menuUrl}</p>

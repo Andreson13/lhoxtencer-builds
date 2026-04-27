@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useI18n } from '@/contexts/I18nContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -13,6 +14,7 @@ import { Download, FileSpreadsheet, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 
 const ExportPage = () => {
+  const { t } = useI18n();
   useRoleGuard(['admin', 'manager']);
   const { hotel } = useHotel();
   const [dateFrom, setDateFrom] = useState(() => {
@@ -29,17 +31,17 @@ const ExportPage = () => {
     dateField?: string;
     select?: string;
   }> = [
-    { key: 'guests', label: 'Clients', description: 'Fiche client complète avec coordonnées et niveau fidélité', table: 'guests', select: 'id,last_name,first_name,phone,email,nationality,id_number,id_type,tier,loyalty_points,created_at' },
-    { key: 'stays', label: 'Séjours', description: 'Tous les séjours (check-in/check-out, chambres, tarifs)', table: 'stays', dateField: 'check_in_date' },
-    { key: 'reservations', label: 'Réservations', description: 'Réservations avec statut et dates', table: 'reservations', dateField: 'created_at' },
-    { key: 'siestes', label: 'Siestes', description: 'Séjours de repos de journée', table: 'siestes', dateField: 'start_time' },
-    { key: 'invoices', label: 'Factures', description: 'Toutes les factures avec totaux et statuts', table: 'invoices', dateField: 'created_at' },
-    { key: 'payments', label: 'Paiements', description: 'Historique de tous les paiements reçus', table: 'payments', dateField: 'created_at' },
-    { key: 'expenses', label: 'Dépenses', description: 'Frais et dépenses de l\'hôtel', table: 'expenses', dateField: 'expense_date' },
-    { key: 'restaurant_orders', label: 'Commandes restaurant', description: 'Commandes passées au restaurant', table: 'restaurant_orders', dateField: 'created_at' },
-    { key: 'main_courante', label: 'Main courante', description: 'Journal comptable journalier', table: 'main_courante', dateField: 'journee' },
-    { key: 'feedback', label: 'Avis clients', description: 'Commentaires et notes des clients', table: 'guest_feedback', dateField: 'created_at' },
-    { key: 'audit_logs', label: 'Journaux d\'audit', description: 'Historique des actions du personnel', table: 'audit_logs', dateField: 'created_at' },
+    { key: 'guests', label: t('export.datasets.guests.label'), description: t('export.datasets.guests.description'), table: 'guests', select: 'id,last_name,first_name,phone,email,nationality,id_number,id_type,tier,loyalty_points,created_at' },
+    { key: 'stays', label: t('export.datasets.stays.label'), description: t('export.datasets.stays.description'), table: 'stays', dateField: 'check_in_date' },
+    { key: 'reservations', label: t('export.datasets.reservations.label'), description: t('export.datasets.reservations.description'), table: 'reservations', dateField: 'created_at' },
+    { key: 'siestes', label: t('export.datasets.siestes.label'), description: t('export.datasets.siestes.description'), table: 'siestes', dateField: 'start_time' },
+    { key: 'invoices', label: t('export.datasets.invoices.label'), description: t('export.datasets.invoices.description'), table: 'invoices', dateField: 'created_at' },
+    { key: 'payments', label: t('export.datasets.payments.label'), description: t('export.datasets.payments.description'), table: 'payments', dateField: 'created_at' },
+    { key: 'expenses', label: t('export.datasets.expenses.label'), description: t('export.datasets.expenses.description'), table: 'expenses', dateField: 'expense_date' },
+    { key: 'restaurant_orders', label: t('export.datasets.restaurantOrders.label'), description: t('export.datasets.restaurantOrders.description'), table: 'restaurant_orders', dateField: 'created_at' },
+    { key: 'main_courante', label: t('export.datasets.mainCourante.label'), description: t('export.datasets.mainCourante.description'), table: 'main_courante', dateField: 'journee' },
+    { key: 'feedback', label: t('export.datasets.feedback.label'), description: t('export.datasets.feedback.description'), table: 'guest_feedback', dateField: 'created_at' },
+    { key: 'audit_logs', label: t('export.datasets.auditLogs.label'), description: t('export.datasets.auditLogs.description'), table: 'audit_logs', dateField: 'created_at' },
   ];
 
   const { data: counts } = useQuery({
@@ -67,11 +69,11 @@ const ExportPage = () => {
       }
       const { data, error } = await query;
       if (error) throw error;
-      if (!data?.length) { toast.info('Aucune donnée pour cette période'); return; }
+      if (!data?.length) { toast.info(t('export.noData')); return; }
       const filename = `${ds.key}-${dateFrom}-${dateTo}`;
       if (format === 'excel') exportToExcel(data, filename, ds.label);
       else exportToCSV(data, filename);
-      toast.success(`Export ${format.toUpperCase()} prêt — ${data.length} enregistrements`);
+      toast.success(`${t('export.excel')} — ${data.length} ${t('export.records')}`);
     } catch (e: any) {
       toast.error(e.message);
     }
@@ -94,23 +96,23 @@ const ExportPage = () => {
 
       await exportAllToExcel(sheets, `hotel-data-complet-${dateFrom}-${dateTo}`);
       const totalRows = sheets.reduce((sum, sheet) => sum + (sheet.data?.length || 0), 0);
-      toast.success(`Export global prêt — ${totalRows} enregistrements`);
+      toast.success(`${t('export.exportAll')} — ${totalRows} ${t('export.records')}`)
     } catch (e: any) {
-      toast.error(e.message || 'Erreur export global');
+      toast.error(e.message || t('export.error'));
     }
   };
 
   return (
     <div className="page-container space-y-6">
-      <PageHeader title="Exporter les données" subtitle="Téléchargez vos données en format Excel ou CSV" />
+      <PageHeader title={t('export.title')} subtitle={t('export.subtitle')} />
 
       <Card>
-        <CardHeader><CardTitle>Période d'export</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t('export.period')}</CardTitle></CardHeader>
         <CardContent className="flex gap-4 items-end">
-          <div><Label>Du</Label><Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} /></div>
-          <div><Label>Au</Label><Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} /></div>
+          <div><Label>{t('export.from')}</Label><Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} /></div>
+          <div><Label>{t('export.to')}</Label><Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} /></div>
           <Button onClick={handleExportAll}>
-            <Download className="h-4 w-4 mr-2" />Tout exporter (Excel)
+            <Download className="h-4 w-4 mr-2" />{t('export.exportAll')}
           </Button>
         </CardContent>
       </Card>

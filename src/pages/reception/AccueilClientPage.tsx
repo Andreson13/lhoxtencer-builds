@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
+import { useDebounce } from '@/hooks/useDebounce';
 import { formatFCFA, generateInvoiceNumber } from '@/utils/formatters';
 import { getOrCreateInvoice, addChargeToInvoice, recordPayment } from '@/services/transactionService';
 import { applyTaxesAndFixedCharges } from '@/services/taxService';
@@ -33,6 +34,7 @@ const AccueilClientPage = () => {
 
   // State
   const [guestSearch, setGuestSearch] = useState('');
+  const debouncedGuestSearch = useDebounce(guestSearch, 300);
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
   const [selectedGuestData, setSelectedGuestData] = useState<any>(null);
   const [newGuest, setNewGuest] = useState({ last_name: '', first_name: '', phone: '', nationality: 'Camerounaise', id_number: '', id_type: 'CNI' });
@@ -58,6 +60,7 @@ const AccueilClientPage = () => {
   const detailsSectionRef = useRef<HTMLDivElement | null>(null);
   const paymentSectionRef = useRef<HTMLDivElement | null>(null);
   const finalizeSectionRef = useRef<HTMLDivElement | null>(null);
+  const [roomsLoadMore, setRoomsLoadMore] = useState(false);
   const guestReadyRef = useRef(false);
   const serviceReadyRef = useRef(false);
   const categoryReadyRef = useRef(false);
@@ -75,13 +78,13 @@ const AccueilClientPage = () => {
     return `${y}-${m}-${day}`;
   };
 
-  // ✅ IMPROVED GUEST SEARCH QUERY - Case-insensitive, flexible matching
+  // ✅ IMPROVED GUEST SEARCH QUERY - Case-insensitive, flexible matching with debouncing
   const { data: existingGuests } = useQuery({
-    queryKey: ['guest-search-accueil', hotel?.id, guestSearch],
+    queryKey: ['guest-search-accueil', hotel?.id, debouncedGuestSearch],
     queryFn: async () => {
-      if (guestSearch.length < 1) return [];
-      
-      const searchTerm = guestSearch.trim().toLowerCase();
+      if (debouncedGuestSearch.length < 1) return [];
+
+      const searchTerm = debouncedGuestSearch.trim().toLowerCase();
       const searchWords = searchTerm.split(/\s+/).filter(Boolean);
       
       // Fetch all guests for the hotel and filter client-side for flexible matching
@@ -122,7 +125,7 @@ const AccueilClientPage = () => {
         return aFullName.localeCompare(bFullName, 'fr');
       });
     },
-    enabled: !!hotel?.id && guestSearch.length >= 1,
+    enabled: !!hotel?.id && debouncedGuestSearch.length >= 1,
   });
 
   const { data: categories } = useQuery({
@@ -135,14 +138,14 @@ const AccueilClientPage = () => {
   });
 
   const { data: availableRooms } = useQuery({
-    queryKey: ['rooms-available-accueil', hotel?.id, selectedCategoryId],
+    queryKey: ['rooms-available-accueil', hotel?.id, selectedCategoryId, roomsLoadMore],
     queryFn: async () => {
       let q = supabase.from('rooms').select('id, room_number, floor, category_id, status').eq('hotel_id', hotel!.id).eq('status', 'available');
       if (selectedCategoryId) q = q.eq('category_id', selectedCategoryId);
-      const { data } = await q.order('room_number');
+      const limit = roomsLoadMore ? 1000 : 10;
+      const { data } = await q.order('room_number').limit(limit);
       let rooms = data || [];
 
-      // Keep preselected reservation room visible even if it is not currently "available"
       if (selectedRoomId && !rooms.some((r: any) => r.id === selectedRoomId)) {
         const { data: selectedRoomData } = await supabase
           .from('rooms')
@@ -627,7 +630,7 @@ const AccueilClientPage = () => {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {categories?.map(cat => (
-                    <button key={cat.id} onClick={() => { setSelectedCategoryId(cat.id); setSelectedRoomId(null); }}
+                    <button key={cat.id} onClick={() => { setSelectedCategoryId(cat.id); setSelectedRoomId(null); setRoomsLoadMore(false); }}
                       className={`border-2 rounded-lg p-3 text-left transition-all ${selectedCategoryId === cat.id ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground/30'}`}
                       style={{ borderLeftColor: cat.color || undefined, borderLeftWidth: 4 }}>
                       <p className="font-semibold text-sm">{cat.name}</p>
@@ -645,14 +648,21 @@ const AccueilClientPage = () => {
                     {!availableRooms?.length ? (
                       <p className="text-sm text-muted-foreground mt-2">Aucune chambre disponible dans cette catégorie</p>
                     ) : (
-                      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mt-2">
-                        {availableRooms.map(r => (
-                          <button key={r.id} onClick={() => setSelectedRoomId(r.id)}
-                            className={`border-2 rounded-lg p-2 text-center transition-all ${selectedRoomId === r.id ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground/30'}`}>
-                            <p className="font-bold">{r.room_number}</p>
-                            <p className="text-[10px] text-muted-foreground">Étage {r.floor}</p>
-                          </button>
-                        ))}
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mt-2">
+                          {availableRooms.map(r => (
+                            <button key={r.id} onClick={() => setSelectedRoomId(r.id)}
+                              className={`border-2 rounded-lg p-2 text-center transition-all ${selectedRoomId === r.id ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground/30'}`}>
+                              <p className="font-bold">{r.room_number}</p>
+                              <p className="text-[10px] text-muted-foreground">Étage {r.floor}</p>
+                            </button>
+                          ))}
+                        </div>
+                        {availableRooms.length >= 10 && !roomsLoadMore && (
+                          <Button variant="outline" size="sm" onClick={() => setRoomsLoadMore(true)} className="w-full">
+                            Charger plus de chambres
+                          </Button>
+                        )}
                       </div>
                     )}
                   </div>

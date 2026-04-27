@@ -1,4 +1,36 @@
-# SPA fallback (VERY IMPORTANT)
+# Build configuration for Netlify
+[build]
+  command = "bun run build"
+  publish = "dist"
+
+# Asset caching headers
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+    Content-Type = "application/javascript; charset=utf-8"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Content-Type = "application/javascript; charset=utf-8"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Content-Type = "text/css; charset=utf-8"
+
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Content-Type = "application/javascript; charset=utf-8"
+
+# SPA routing - serve index.html for all routes that don't match files
 [[redirects]]
   from = "/*"
   to = "/index.html"

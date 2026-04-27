@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useI18n } from '@/contexts/I18nContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -13,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollText, Search } from 'lucide-react';
 
 const AuditLogPage = () => {
+  const { t } = useI18n();
   useRoleGuard(['admin', 'manager']);
   const { hotel } = useHotel();
   const [search, setSearch] = useState('');
@@ -37,25 +39,25 @@ const AuditLogPage = () => {
 
   return (
     <div className="page-container space-y-6">
-      <PageHeader title="Journal d'audit" subtitle={`${filtered.length} entrée(s)`} />
+      <PageHeader title={t('audit.title')} subtitle={`${filtered.length} entrée(s)`} />
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Rechercher une action..." className="pl-10" value={search} onChange={e => setSearch(e.target.value)} />
+        <Input placeholder={t('audit.search')} className="pl-10" value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
       {isLoading ? <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div> : filtered.length === 0 ? (
-        <EmptyState icon={ScrollText} title="Aucune entrée" description="Les actions des utilisateurs seront enregistrées ici" />
+        <EmptyState icon={ScrollText} title={t('audit.empty.title')} description={t('audit.empty.description')} />
       ) : (
         <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Utilisateur</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead>Table</TableHead>
-                <TableHead>Détails</TableHead>
+                <TableHead>{t('audit.table.date')}</TableHead>
+                <TableHead>{t('audit.table.user')}</TableHead>
+                <TableHead>{t('audit.table.action')}</TableHead>
+                <TableHead>{t('audit.table.table')}</TableHead>
+                <TableHead>{t('audit.table.details')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

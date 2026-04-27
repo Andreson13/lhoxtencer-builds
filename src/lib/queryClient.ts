@@ -10,7 +10,7 @@ export const queryClient = new QueryClient({
       staleTime: 1000 * 30, // 30 seconds - data is considered stale quickly
       gcTime: 1000 * 60 * 60 * 24 * 7,
       refetchOnWindowFocus: true, // Re-fetch when window regains focus
-      networkMode: 'always', // Always prefer online data
+      networkMode: 'offlineFirst', // Serve cached data offline, pause mutations
       refetchOnReconnect: true, // Re-fetch when connection restored
       refetchOnMount: 'stale', // Re-fetch stale data on component mount
     },
