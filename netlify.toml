@@ -30,8 +30,9 @@
   [headers.values]
     Content-Type = "application/javascript; charset=utf-8"
 
-# SPA routing - serve index.html for all routes that don't match files
+# SPA routing - redirect all non-file requests to index.html
+# This pattern excludes routes with file extensions
 [[redirects]]
-  from = "/*"
+  from = "/[^.]*"
   to = "/index.html"
   status = 200
