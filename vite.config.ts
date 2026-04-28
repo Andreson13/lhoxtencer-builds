@@ -21,7 +21,7 @@ export default defineConfig(({ mode }) => ({
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["robots.txt", "pwa-192.svg", "pwa-512.svg"],
-      manifest: {
+      manifest: { 
         name: "Hotel Harmony",
         short_name: "Harmony",
         description: "Gestion hôtelière sur desktop, mobile et tablette.",

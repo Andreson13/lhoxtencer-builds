@@ -15,3 +15,4 @@ VALUES (
 
 -- Get the hotel ID
 SELECT id, name, slug FROM public.hotels WHERE slug = 'test-hotel';
+ 
