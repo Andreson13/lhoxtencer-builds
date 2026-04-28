@@ -1,11 +1,13 @@
-# Serve static files as-is
-/assets/*     200
-/manifest.webmanifest  200
-/sw.js        200
-/robots.txt   200
-/*.svg        200
-/*.css        200
-/*.js         200
+# Static assets - serve directly
+/assets/*                 200!
+/manifest.webmanifest     200!
+/sw.js                    200!
+/workbox-*.js             200!
+/robots.txt               200!
+/*.svg                    200!
+/*.css                    200!
+/*.js                     200!
+/*.json                   200!
 
-# SPA routing: redirect all other requests to index.html
-/*  /index.html  200
+# SPA fallback - serve index.html for all routes not matching above
+/*                        /index.html   200
