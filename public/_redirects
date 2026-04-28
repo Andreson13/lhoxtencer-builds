@@ -1,13 +1,3 @@
-# Static assets - serve directly
-/assets/*                 200!
-/manifest.webmanifest     200!
-/sw.js                    200!
-/workbox-*.js             200!
-/robots.txt               200!
-/*.svg                    200!
-/*.css                    200!
-/*.js                     200!
-/*.json                   200!
-
-# SPA fallback - serve index.html for all routes not matching above
-/*                        /index.html   200
+# SPA routing - serve index.html for all routes
+# Netlify automatically serves existing files, so we only need the catch-all
+/*  /index.html  200
