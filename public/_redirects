@@ -1,9 +1,11 @@
-# Don't redirect these static files and directories
+# Serve static files as-is
 /assets/*     200
 /manifest.webmanifest  200
 /sw.js        200
 /robots.txt   200
 /*.svg        200
+/*.css        200
+/*.js         200
 
-# All other routes go to index.html (SPA routing)
+# SPA routing: redirect all other requests to index.html
 /*  /index.html  200

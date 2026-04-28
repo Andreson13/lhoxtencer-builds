@@ -38,8 +38,12 @@ import './BookingPortalPage.css';
 const featureIcons: Record<string, any> = { WiFi: Wifi, TV: Tv, AC: Wind };
 
 const BookingPortalPage = () => {
-  const { t } = useI18n();
+  const { t, setLang } = useI18n();
   const { slug, hotelId } = useParams<{ slug?: string; hotelId?: string }>();
+
+  useEffect(() => {
+    setLang('fr');
+  }, [setLang]);
   const hotelKey = slug || hotelId;
   const [submitted, setSubmitted] = useState(false);
   const [resNumber, setResNumber] = useState('');

@@ -18,8 +18,12 @@ import { toast } from 'sonner';
 import { Star, Send, UtensilsCrossed, Check, ShoppingCart, Plus, Minus, Bell, User } from 'lucide-react';
 
 const MenuPortalPage = () => {
-  const { t } = useI18n();
+  const { t, setLang } = useI18n();
   const params = useParams<{ slug?: string; room?: string; hotelSlug?: string; roomNumber?: string; hotelId?: string }>();
+
+  React.useEffect(() => {
+    setLang('fr');
+  }, [setLang]);
   const slug = params.slug || params.hotelSlug || params.hotelId;
   const room = params.room || params.roomNumber;
   const [feedbackRating, setFeedbackRating] = useState(0);
