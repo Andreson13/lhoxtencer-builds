@@ -71,7 +71,7 @@ const DrinksPage = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('inventory_items' as any)
-        .select('id, name, unit, buying_price, selling_price, current_stock, minimum_stock, category, is_minibar, hotel_id, created_at, updated_at')
+        .select('id, name, unit, buying_price, selling_price, current_stock, minimum_stock, is_minibar, hotel_id, created_at, updated_at')
         .eq('hotel_id', hotel!.id)
         .eq('is_minibar', true)
         .order('name');
@@ -83,7 +83,7 @@ const DrinksPage = () => {
 
   const saveMutation = useMutation({
     mutationFn: async (values: any) => {
-      const payload = { ...values, hotel_id: hotel!.id, is_minibar: true };
+      const { category, ...payload } = { ...values, hotel_id: hotel!.id, is_minibar: true };
       if (editing) {
         const { error } = await supabase.from('inventory_items' as any).update(payload).eq('id', editing.id);
         if (error) throw error;
