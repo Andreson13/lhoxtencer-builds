@@ -16,7 +16,8 @@
       "Bash(npx tsc *)",
       "Bash(curl -s \"http://localhost:8089/portal/test-hotel\")",
       "Bash(npx ts-node -e ' *)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(grep -E \"manifest|\\\\.js$|\\\\.css$\")"
     ]
   }
 }
