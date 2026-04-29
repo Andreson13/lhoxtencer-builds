@@ -1,38 +1,20 @@
-# Build configuration for Netlify
 [build]
   command = "bun run build"
   publish = "dist"
 
-
-# Asset caching headers
-[[headers]]
-  for = "/assets/*"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-    Content-Type = "application/javascript; charset=utf-8"
-
-[[headers]]
-  for = "/*.js"
-  [headers.values]
-    Content-Type = "application/javascript; charset=utf-8"
-
-[[headers]]
-  for = "/*.css"
-  [headers.values]
-    Content-Type = "text/css; charset=utf-8"
-
-[[headers]]
-  for = "/manifest.webmanifest"
-  [headers.values]
-    Content-Type = "application/manifest+json"
-
-[[headers]]
-  for = "/sw.js"
-  [headers.values]
-    Content-Type = "application/javascript; charset=utf-8"
-# FIRST: Preserve actual files
+# IMPORTANT: Exclude static files BEFORE catch-all
 [[redirects]]
   from = "/assets/*"
+  to = "/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/pwa-*.svg"
+  to = "/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/placeholder.svg"
   to = "/:splat"
   status = 200
 
@@ -41,11 +23,44 @@
   to = "/:splat"
   status = 200
 
-# LAST: Redirect everything else to index.html
+[[redirects]]
+  from = "/robots.txt"
+  to = "/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/sw.js"
+  to = "/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/workbox-*.js"
+  to = "/:splat"
+  status = 200
+
+# SPA routing - catch-all LAST
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
-# SPA routing handled by public/_redirects file
-# Routes not matching files are redirected to index.html there
+# Headers
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/*.webmanifest"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
