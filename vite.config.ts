@@ -48,6 +48,21 @@ export default defineConfig(({ mode }) => ({
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png,ico,json}"],
         navigateFallback: "index.html",
+        // CRITICAL FIX: Prevent service worker from serving index.html for assets
+        // Only serve index.html for actual navigation routes (like /guests, /guests/123)
+        // But NOT for static files (JS, CSS, images, manifest, etc.)
+        navigateFallbackDenylist: [
+          /^\/assets\//,        // Exclude /assets/* - these are bundled JS/CSS
+          /^\/api\//,           // Exclude API calls
+          /\.js$/,              // Exclude all JS files
+          /\.css$/,             // Exclude all CSS files
+          /\.svg$/,             // Exclude all SVG files
+          /\.json$/,            // Exclude all JSON files
+          /\.webmanifest$/,     // Exclude web app manifest
+          /\.woff2?$/,          // Exclude font files
+          /\.png$/,             // Exclude PNG images
+          /\.ico$/,             // Exclude favicon
+        ],
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
@@ -65,7 +80,6 @@ export default defineConfig(({ mode }) => ({
             },
           },
         ],
-        cleanupOutdatedCaches: true,
       },
       devOptions: {
         enabled: true,
