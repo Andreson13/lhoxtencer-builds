@@ -24,7 +24,9 @@
       "Bash(python3 *)",
       "PowerShell(ConvertFrom-Json *)",
       "Bash(chmod +x verify_netlify_config.sh)",
-      "Bash(./verify_netlify_config.sh)"
+      "Bash(./verify_netlify_config.sh)",
+      "Bash(chmod +x verify_service_worker.sh)",
+      "Bash(./verify_service_worker.sh)"
     ]
   }
 }

@@ -49,6 +49,20 @@ export default defineConfig(({ mode }) => ({
         globPatterns: ["**/*.{js,css,html,svg,png,ico,json}"],
         navigateFallback: "index.html",
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/.*/i,
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "http-cache",
+              expiration: {
+                maxEntries: 200,
+                maxAgeSeconds: 86400 * 3,
+              },
+            },
+          },
+        ],
+        cleanupOutdatedCaches: true,
       },
       devOptions: {
         enabled: true,
