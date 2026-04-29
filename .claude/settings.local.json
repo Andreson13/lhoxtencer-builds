@@ -22,7 +22,9 @@
       "Bash(chmod +x verify_fix.sh)",
       "Bash(./verify_fix.sh)",
       "Bash(python3 *)",
-      "PowerShell(ConvertFrom-Json *)"
+      "PowerShell(ConvertFrom-Json *)",
+      "Bash(chmod +x verify_netlify_config.sh)",
+      "Bash(./verify_netlify_config.sh)"
     ]
   }
 }
