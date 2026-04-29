@@ -2,7 +2,7 @@
   command = "bun run build"
   publish = "dist"
 
-# IMPORTANT: Exclude static files BEFORE catch-all
+# CRITICAL: File exclusions BEFORE catch-all
 [[redirects]]
   from = "/assets/*"
   to = "/:splat"
@@ -44,23 +44,85 @@
   to = "/index.html"
   status = 200
 
-# Headers
+# ============================================
+# HEADERS - MIME TYPES AND CACHING
+# ============================================
+
+# Assets folder - long cache (hashed filenames)
 [[headers]]
   for = "/assets/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
+# JavaScript files - CRITICAL: Correct MIME type for modules
 [[headers]]
-  for = "/index.html"
+  for = "/*.js"
   [headers.values]
-    Cache-Control = "public, max-age=0, must-revalidate"
+    Content-Type = "application/javascript; charset=utf-8"
+    Cache-Control = "public, max-age=3600"
 
 [[headers]]
-  for = "/sw.js"
+  for = "/assets/*.js"
   [headers.values]
-    Cache-Control = "public, max-age=0, must-revalidate"
+    Content-Type = "application/javascript; charset=utf-8"
+    Cache-Control = "public, max-age=31536000, immutable"
 
+# CSS files
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Content-Type = "text/css; charset=utf-8"
+    Cache-Control = "public, max-age=3600"
+
+[[headers]]
+  for = "/assets/*.css"
+  [headers.values]
+    Content-Type = "text/css; charset=utf-8"
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Manifest - CRITICAL: Correct MIME type
 [[headers]]
   for = "/*.webmanifest"
   [headers.values]
+    Content-Type = "application/manifest+json"
     Cache-Control = "public, max-age=3600"
+
+# Service worker - NO cache, always fresh
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Content-Type = "application/javascript; charset=utf-8"
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# index.html - NO cache, always check for updates
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Content-Type = "text/html; charset=utf-8"
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# SVG assets
+[[headers]]
+  for = "/*.svg"
+  [headers.values]
+    Content-Type = "image/svg+xml"
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/assets/*.svg"
+  [headers.values]
+    Content-Type = "image/svg+xml"
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Fonts
+[[headers]]
+  for = "/assets/*.woff2"
+  [headers.values]
+    Content-Type = "font/woff2"
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/assets/*.woff"
+  [headers.values]
+    Content-Type = "font/woff"
+    Cache-Control = "public, max-age=31536000, immutable"
