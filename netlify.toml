@@ -3,10 +3,6 @@
   command = "bun run build"
   publish = "dist"
 
-  [[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
 
 # Asset caching headers
 [[headers]]
@@ -34,6 +30,22 @@
   for = "/sw.js"
   [headers.values]
     Content-Type = "application/javascript; charset=utf-8"
+# FIRST: Preserve actual files
+[[redirects]]
+  from = "/assets/*"
+  to = "/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/*.webmanifest"
+  to = "/:splat"
+  status = 200
+
+# LAST: Redirect everything else to index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
 
 # SPA routing handled by public/_redirects file
 # Routes not matching files are redirected to index.html there
