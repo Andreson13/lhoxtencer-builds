@@ -3,6 +3,11 @@
   command = "bun run build"
   publish = "dist"
 
+  [[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
 # Asset caching headers
 [[headers]]
   for = "/assets/*"
