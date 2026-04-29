@@ -1,6 +1,6 @@
 import { app, BrowserWindow, shell } from 'electron';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
@@ -42,7 +42,9 @@ const createMainWindow = () => {
     return;
   }
 
-  mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+  const indexPath = path.join(__dirname, '..', 'dist', 'index.html');
+  const fileUrl = pathToFileURL(indexPath).href;
+  mainWindow.loadURL(fileUrl);
 };
 
 app.whenReady().then(() => {

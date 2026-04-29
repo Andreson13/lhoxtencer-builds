@@ -5,7 +5,9 @@ import App from "./App.tsx";
 import { queryClient, queryPersister, queryPersistMaxAge } from "./lib/queryClient";
 import "./index.css";
 
-if (import.meta.env.PROD) {
+const isElectron = !!(window as any).electronApp?.isDesktop;
+
+if (import.meta.env.PROD && !isElectron) {
 	registerSW({ immediate: true });
 } else if ("serviceWorker" in navigator) {
 	navigator.serviceWorker.getRegistrations().then((registrations) => {

@@ -17,7 +17,12 @@
       "Bash(curl -s \"http://localhost:8089/portal/test-hotel\")",
       "Bash(npx ts-node -e ' *)",
       "Bash(npx vite *)",
-      "Bash(grep -E \"manifest|\\\\.js$|\\\\.css$\")"
+      "Bash(grep -E \"manifest|\\\\.js$|\\\\.css$\")",
+      "Bash(npm start *)",
+      "Bash(chmod +x verify_fix.sh)",
+      "Bash(./verify_fix.sh)",
+      "Bash(python3 *)",
+      "PowerShell(ConvertFrom-Json *)"
     ]
   }
 }
