@@ -3,7 +3,7 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/:path((?!assets/|manifest\.webmanifest|sw\.js|robots\.txt|pwa-.*\.svg|placeholder\.svg).*)",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ],
