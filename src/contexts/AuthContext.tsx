@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
+import { useVisibilityRefresh } from '@/hooks/useVisibilityRefresh';
 
 const PROFILE_STORAGE_KEY = 'hotel-harmony-auth-profile';
 
@@ -165,9 +166,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     persistProfile(null);
   };
 
-  const refreshProfile = async () => {
-    if (user) await fetchProfile(user.id);
-  };
+  const refreshProfile = useCallback(async () => {
+    if (user) {
+      try {
+        await fetchProfile(user.id);
+      } catch (error) {
+        // Silently ignore abort/lock errors from concurrent requests
+        if (error instanceof Error) {
+          if (error.message.includes('AbortError') || error.message.includes('Lock broken')) {
+            console.debug('ℹ️  Database request aborted (overlapping refresh attempt)');
+            return;
+          }
+        }
+        console.error('Error refreshing profile:', error);
+      }
+    }
+  }, [user]);
+
+  // Refresh profile when app comes back into focus
+  useVisibilityRefresh(refreshProfile);
 
   return (
     <AuthContext.Provider value={{ user, session, profile, loading, signIn, signOut, refreshProfile }}>

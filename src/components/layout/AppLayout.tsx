@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { useI18n } from '@/contexts/I18nContext';
 import { useHotel } from '@/contexts/HotelContext';
 import { useStayAccrualSync } from '@/hooks/useStayAccrualSync';
+import { useQueryRefresh } from '@/hooks/useQueryRefresh';
 import { processOfflineSubmissionQueue, getOfflineSubmissionQueueSize } from '@/services/offlineSubmissionQueue';
 import { toast } from 'sonner';
 import { Sidebar } from './Sidebar';
@@ -18,6 +19,7 @@ export const AppLayout = () => {
   const [queueSize, setQueueSize] = useState(() => getOfflineSubmissionQueueSize());
 
   useStayAccrualSync(hotel?.id);
+  useQueryRefresh(); // Refresh React Query cache when app regains focus
 
   useEffect(() => {
     const markOnline = () => {

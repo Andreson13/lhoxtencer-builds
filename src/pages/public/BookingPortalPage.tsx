@@ -32,23 +32,36 @@ import {
   Star,
   ChevronLeft,
   ChevronRight,
+  MessageCircle,
+  ExternalLink,
+  Navigation,
+  Copy,
+  X,
+  Footprints,
+  Bus,
+  Award,
 } from 'lucide-react';
 import './BookingPortalPage.css';
 
 const featureIcons: Record<string, any> = { WiFi: Wifi, TV: Tv, AC: Wind };
 
 const BookingPortalPage = () => {
-  const { t, setLang } = useI18n();
+  const { t, setLang, lang } = useI18n();
   const { slug, hotelId } = useParams<{ slug?: string; hotelId?: string }>();
 
   useEffect(() => {
     setLang('fr');
   }, [setLang]);
+
   const hotelKey = slug || hotelId;
   const [submitted, setSubmitted] = useState(false);
   const [resNumber, setResNumber] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [heroIndex, setHeroIndex] = useState(0);
+  const [pinOpen, setPinOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [travelMode, setTravelMode] = useState<'driving' | 'walking' | 'transit'>('driving');
+
   const [form, setForm] = useState({
     guest_name: '', guest_phone: '', guest_email: '',
     check_in_date: '', check_out_date: '',
@@ -81,7 +94,6 @@ const BookingPortalPage = () => {
     enabled: !!hotel?.id,
   });
 
-  // Count available rooms per category
   const { data: roomCounts } = useQuery({
     queryKey: ['room-counts-public', hotel?.id],
     queryFn: async () => {
@@ -184,6 +196,15 @@ const BookingPortalPage = () => {
     setHeroIndex(0);
   }, [selectedCategoryId]);
 
+  useEffect(() => {
+    if (!pinOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPinOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pinOpen]);
+
   const reservationMetrics = useMemo(() => {
     const data = reservationStats || [];
     const now = new Date();
@@ -209,6 +230,23 @@ const BookingPortalPage = () => {
     return Sparkles;
   };
 
+  async function copyCoords() {
+    if (!hotel?.latitude || !hotel?.longitude) return;
+    const text = `${hotel.latitude.toFixed(6)}, ${hotel.longitude.toFixed(6)}`;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch { }
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  }
+
   const submitMutation = useMutation({
     mutationFn: async () => {
       const rn = generateReservationNumber();
@@ -228,6 +266,12 @@ const BookingPortalPage = () => {
     onSuccess: (rn) => { setResNumber(rn); setSubmitted(true); },
     onError: (e: any) => toast.error(e.message),
   });
+
+  const travelModes = [
+    { id: 'driving' as const, icon: Car, label: { fr: 'Voiture', en: 'Driving' } },
+    { id: 'walking' as const, icon: Footprints, label: { fr: 'Marche', en: 'Walking' } },
+    { id: 'transit' as const, icon: Bus, label: { fr: 'Transports', en: 'Transit' } },
+  ];
 
   if (!hotel) return <div className="min-h-screen flex items-center justify-center bg-background"><p>{t('portal.loading')}</p></div>;
 
@@ -259,8 +303,17 @@ const BookingPortalPage = () => {
     </div>
   );
 
+  const mapsUrl = hotel?.latitude && hotel?.longitude ? `https://www.google.com/maps/search/?api=1&query=${hotel.latitude},${hotel.longitude}` : '';
+  const directionsUrl = hotel?.latitude && hotel?.longitude ? `https://www.google.com/maps/dir/?api=1&destination=${hotel.latitude},${hotel.longitude}&travelmode=${travelMode}` : '';
+  const whatsappNumber = hotel?.phone?.replace(/[^\d+]/g, '') || '237600000000';
+  const whatsappMessage = lang === 'fr'
+    ? `Bonjour ${hotel.name}, j'aimerais avoir l'itinéraire et plus d'informations sur votre hôtel.`
+    : `Hello ${hotel.name}, I'd like to get directions and more information about your hotel.`;
+  const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappMessage)}`;
+
   return (
     <div className="booking-portal min-h-screen">
+      {/* Hero Section */}
       <section className="portal-hero px-4 md:px-8 py-10 md:py-14">
         <div className="max-w-6xl mx-auto grid lg:grid-cols-12 gap-6 items-stretch">
           <div className="lg:col-span-8 portal-hero-panel">
@@ -321,6 +374,7 @@ const BookingPortalPage = () => {
             </div>
           </div>
 
+          {/* Trust Card */}
           <div className="lg:col-span-4 portal-trust-card">
             <p className="portal-kicker">{t('portal.trust.title')}</p>
             <div className="space-y-3 mt-3">
@@ -329,11 +383,9 @@ const BookingPortalPage = () => {
               <div className="flex items-center gap-3"><Sparkles className="h-5 w-5 text-indigo-500" /><span>{t('portal.trust.support')}</span></div>
             </div>
             <div className="portal-rating mt-6">
-              <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-              <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-              <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-              <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-              <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+              {[...Array(5)].map((_, i) => (
+                <Star key={i} className="h-4 w-4 fill-amber-400 text-amber-400" />
+              ))}
               <span>{t('portal.trust.rating')}</span>
             </div>
           </div>
@@ -341,6 +393,7 @@ const BookingPortalPage = () => {
       </section>
 
       <div className="max-w-6xl mx-auto px-4 md:px-8 pb-12">
+        {/* Stats Strip */}
         <section className="portal-stats-strip mb-8">
           <div className="portal-stat">
             <p className="portal-stat-label">{t('portal.stats.available')}</p>
@@ -360,6 +413,7 @@ const BookingPortalPage = () => {
           </div>
         </section>
 
+        {/* Gallery */}
         {galleryPhotos.length > 1 && (
           <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
             {galleryPhotos.map((p: any) => (
@@ -370,7 +424,29 @@ const BookingPortalPage = () => {
           </section>
         )}
 
+        {/* Highlights */}
+        {services && services.length > 0 && (
+          <section className="mb-8">
+            <div className="grid grid-cols-3 gap-4 mb-8">
+              {[
+                { icon: Award, title: 'Service 5 étoiles', desc: 'Conciergerie 24/7 et équipe attentionnée.' },
+                { icon: Utensils, title: 'Gastronomie', desc: 'Restaurant signature et room service raffiné.' },
+                { icon: Sparkles, title: 'Spa & bien-être', desc: 'Soins exclusifs et piscine privée.' },
+              ].map((item) => (
+                <div key={item.title} className="rounded-xl border border-border bg-card p-4 shadow-sm">
+                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                    <item.icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="mt-3 font-semibold text-sm">{item.title}</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">{item.desc}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         <div className="grid lg:grid-cols-12 gap-8">
+          {/* Services & Rooms */}
           <section className="lg:col-span-7 space-y-8">
             {services && services.length > 0 && (
               <Card className="portal-section-card border-0 shadow-sm">
@@ -400,13 +476,13 @@ const BookingPortalPage = () => {
               </div>
 
               <div className="space-y-4">
-                {categories?.map((cat: any, idx: number) => {
+                {categories?.map((cat: any) => {
                   const avail = roomCounts?.[cat.id] || 0;
                   const catPhoto = categoryPhotoById[cat.id] || coverPhoto;
                   return (
                     <Card
                       key={cat.id}
-                      className={`portal-room-card ${selectedCategoryId === cat.id ? 'selected' : ''}`}
+                      className={`portal-room-card ${selectedCategoryId === cat.id ? 'selected' : ''} cursor-pointer`}
                       onClick={() => setSelectedCategoryId(cat.id)}
                     >
                       <div className="portal-room-media">
@@ -458,6 +534,7 @@ const BookingPortalPage = () => {
             </section>
           </section>
 
+          {/* Booking Form */}
           <aside className="lg:col-span-5">
             <Card className="portal-booking-card sticky top-4 border-0 shadow-xl">
               <CardHeader>
@@ -520,10 +597,169 @@ const BookingPortalPage = () => {
             </Card>
           </aside>
         </div>
+
+        {/* Location Section */}
+        {hotel?.latitude && hotel?.longitude && (
+          <section className="bg-navy text-navy-foreground rounded-2xl p-8 my-12">
+            <div className="grid lg:grid-cols-[1.1fr_1fr] gap-8 items-start">
+              {/* Location Info */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold mb-2">
+                  {lang === 'fr' ? 'Nous trouver' : 'Find us'}
+                </p>
+                <h2 className="text-3xl font-semibold text-white mb-4">
+                  {lang === 'fr' ? 'Au cœur de ' : 'In the heart of '}{hotel.city || ''}
+                </h2>
+                <p className="text-navy-foreground/80 mb-5">
+                  {hotel.address || `${hotel.city}, ${hotel.country}`}
+                </p>
+
+                <div className="flex flex-wrap gap-3 mb-5">
+                  <Button asChild variant="default" className="bg-gold text-gold-foreground hover:bg-gold/90">
+                    <a href={mapsUrl} target="_blank" rel="noreferrer noopener">
+                      <MapPin className="h-4 w-4" />
+                      {lang === 'fr' ? 'Google Maps' : 'Google Maps'}
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </Button>
+                  <Button asChild variant="outline" className="border-gold/40 text-gold hover:bg-gold/10">
+                    <a href={directionsUrl} target="_blank" rel="noreferrer noopener">
+                      <Navigation className="h-4 w-4" />
+                      {lang === 'fr' ? 'Itinéraire' : 'Directions'}
+                    </a>
+                  </Button>
+                  <Button asChild className="bg-[#25D366] text-white hover:bg-[#1ebe57]">
+                    <a href={whatsappUrl} target="_blank" rel="noreferrer noopener">
+                      <MessageCircle className="h-4 w-4" />
+                      WhatsApp
+                    </a>
+                  </Button>
+                </div>
+
+                {/* Travel Mode Selector */}
+                <div role="radiogroup" className="inline-flex rounded-full border border-gold/30 bg-navy-foreground/10 p-1 mt-4">
+                  {travelModes.map((m) => {
+                    const active = travelMode === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => setTravelMode(m.id)}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                          active
+                            ? 'bg-gold text-gold-foreground'
+                            : 'text-navy-foreground/70 hover:text-navy-foreground'
+                        }`}
+                      >
+                        <m.icon className="h-3.5 w-3.5" />
+                        {m.label[lang as 'fr' | 'en']}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Map */}
+              <div className="relative overflow-hidden rounded-2xl border border-gold/30 shadow-lg">
+                <iframe
+                  title={`${hotel.name} map`}
+                  src={`https://www.google.com/maps?q=${hotel.latitude},${hotel.longitude}&z=17&output=embed`}
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  className="h-72 w-full border-0"
+                />
+
+                {/* Pin */}
+                <button
+                  type="button"
+                  onClick={() => setPinOpen((v) => !v)}
+                  aria-expanded={pinOpen}
+                  className="absolute left-1/2 top-1/2 z-10 inline-flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-full bg-gold px-3 py-1.5 text-xs font-bold text-gold-foreground shadow-lg transition-transform hover:-translate-y-[110%]"
+                >
+                  <MapPin className="h-3.5 w-3.5" />
+                  {hotel.name}
+                </button>
+
+                {/* Pin Details */}
+                {pinOpen && (
+                  <div className="absolute left-1/2 top-1/2 z-20 w-72 -translate-x-1/2 -translate-y-[calc(100%+2.5rem)] rounded-xl border border-gold/30 bg-card p-4 shadow-lg">
+                    <button
+                      type="button"
+                      onClick={() => setPinOpen(false)}
+                      className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                    <div className="font-semibold text-navy">{hotel.name}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {hotel.address || `${hotel.city}, ${hotel.country}`}
+                    </div>
+                    <dl className="mt-3 grid grid-cols-2 gap-2 rounded-lg bg-muted/60 p-2 text-xs">
+                      <div>
+                        <dt className="font-semibold uppercase tracking-wide text-muted-foreground">Lat</dt>
+                        <dd className="font-mono text-navy">{hotel.latitude.toFixed(6)}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-semibold uppercase tracking-wide text-muted-foreground">Lng</dt>
+                        <dd className="font-mono text-navy">{hotel.longitude.toFixed(6)}</dd>
+                      </div>
+                    </dl>
+                    <button
+                      type="button"
+                      onClick={copyCoords}
+                      className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-navy hover:underline"
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="h-3.5 w-3.5 text-success" />
+                          <span className="text-success">{lang === 'fr' ? 'Copiées' : 'Copied'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3.5 w-3.5" />
+                          <span>{lang === 'fr' ? 'Copier les coordonnées' : 'Copy coordinates'}</span>
+                        </>
+                      )}
+                    </button>
+                    <div className="mt-3 flex gap-2">
+                      <Button asChild size="sm" className="flex-1">
+                        <a href={directionsUrl} target="_blank" rel="noreferrer noopener">
+                          <Navigation className="h-3.5 w-3.5" />
+                          {lang === 'fr' ? 'Itinéraire' : 'Directions'}
+                        </a>
+                      </Button>
+                      <Button asChild size="sm" variant="outline" className="flex-1">
+                        <a href={mapsUrl} target="_blank" rel="noreferrer noopener">
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          {lang === 'fr' ? 'Ouvrir' : 'Open'}
+                        </a>
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* WhatsApp Button */}
+        <a
+          href={whatsappUrl}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="fixed bottom-5 right-5 z-40 inline-flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg transition-transform hover:scale-105"
+        >
+          <MessageCircle className="h-7 w-7" />
+        </a>
       </div>
 
-      <footer className="portal-footer">
-        <p>© {new Date().getFullYear()} {hotel.name}. {t('portal.footer')}</p>
+      {/* Footer */}
+      <footer className="portal-footer border-t bg-gray-50 py-8">
+        <div className="max-w-6xl mx-auto px-4 md:px-8 text-center text-sm text-muted-foreground">
+          <p>© {new Date().getFullYear()} {hotel.name}. {lang === 'fr' ? 'Tous droits réservés.' : 'All rights reserved.'}</p>
+        </div>
       </footer>
     </div>
   );

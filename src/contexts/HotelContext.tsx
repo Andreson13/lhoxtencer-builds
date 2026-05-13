@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
+import { useVisibilityRefresh } from '@/hooks/useVisibilityRefresh';
 
 export interface Hotel {
   id: string;
@@ -165,17 +166,29 @@ export const HotelProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [profile?.id, profile?.hotel_id, profile?.is_super_admin]);
 
-  const refreshHotel = async () => {
+  const refreshHotel = useCallback(async () => {
     if (!profile?.id) return;
-    setLoading(true);
-    await fetchManagedHotels(profile.id, profile.hotel_id || null, Boolean(profile.is_super_admin));
-    if (profile.hotel_id) {
-      await fetchHotel(profile.hotel_id);
-    } else {
-      setHotel(null);
+    try {
+      await fetchManagedHotels(profile.id, profile.hotel_id || null, Boolean(profile.is_super_admin));
+      if (profile.hotel_id) {
+        await fetchHotel(profile.hotel_id);
+      } else {
+        setHotel(null);
+      }
+    } catch (error) {
+      // Silently ignore abort/lock errors from concurrent requests
+      if (error instanceof Error) {
+        if (error.message.includes('AbortError') || error.message.includes('Lock broken')) {
+          console.debug('ℹ️  Database request aborted (overlapping refresh attempt)');
+          return;
+        }
+      }
+      console.error('Error refreshing hotel:', error);
     }
-    setLoading(false);
-  };
+  }, [profile?.id, profile?.hotel_id]);
+
+  // Refresh data when app comes back into focus
+  useVisibilityRefresh(refreshHotel);
 
   const switchHotel = async (hotelId: string) => {
     if (!profile?.id) return;
