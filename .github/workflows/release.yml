@@ -7,6 +7,10 @@ on:
     paths:
       - 'package.json'
 
+permissions:
+  contents: write
+  repository-projects: write
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -38,11 +42,13 @@ jobs:
 
       - name: Create tag in private repo
         if: steps.check_tag.outputs.exists == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git tag -a v${{ steps.version.outputs.version }} -m "Release version ${{ steps.version.outputs.version }}"
-          git push origin v${{ steps.version.outputs.version }}
+          git push -u origin v${{ steps.version.outputs.version }}
 
       - name: Install dependencies
         if: steps.check_tag.outputs.exists == 'false'
