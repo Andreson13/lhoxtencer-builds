@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { GlobalMutationOverlay } from "@/components/shared/GlobalMutationOverlay";
+import { AppResumeBridge } from "@/components/shared/AppResumeBridge";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { HotelProvider, useHotel } from "@/contexts/HotelContext";
 import { I18nProvider } from "@/contexts/I18nContext";
@@ -65,6 +66,7 @@ const App = () => (
     <AuthProvider>
       <HotelProvider>
         <TooltipProvider>
+          <AppResumeBridge />
           <Toaster />
           <Sonner />
           <GlobalMutationOverlay />

@@ -5,7 +5,7 @@ import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 /**
  * Subscribe to Postgres changes on multiple tables via Supabase Realtime.
  * Automatically refetches data when any of the tables change.
- * Includes visibility/focus handlers for background app refresh.
+ * Self-heals on visibility change by recreating channels.
  */
 export function useRealtimeTables(
   tables: string[],
@@ -15,6 +15,8 @@ export function useRealtimeTables(
   const callbackRef = useRef(onAnyChange);
   const timeoutRef = useRef<NodeJS.Timeout>();
   const isRefreshingRef = useRef(false);
+  const channelsRef = useRef<any[]>([]);
+  const channelSuffixRef = useRef<string>(Math.random().toString(36).slice(2, 8));
 
   // Keep callback ref updated
   useEffect(() => {
@@ -22,9 +24,16 @@ export function useRealtimeTables(
   }, [onAnyChange]);
 
   // Subscribe to realtime changes
-  useEffect(() => {
+  const subscribeToRealtime = () => {
+    // Clean up old channels
+    channelsRef.current.forEach((ch) => supabase.removeChannel(ch));
+    channelsRef.current = [];
+
+    // Generate new suffix for this subscription cycle
+    channelSuffixRef.current = Math.random().toString(36).slice(2, 8);
+
     const channels = tables.map((table) => {
-      const channelName = `realtime-${table}-${shopId || 'all'}`;
+      const channelName = `realtime-${table}-${shopId || 'all'}-${channelSuffixRef.current}`;
 
       return supabase
         .channel(channelName)
@@ -43,8 +52,17 @@ export function useRealtimeTables(
         .subscribe();
     });
 
+    channelsRef.current = channels;
+  };
+
+  useEffect(() => {
+    subscribeToRealtime();
+
     return () => {
-      channels.forEach((ch) => supabase.removeChannel(ch));
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      channelsRef.current.forEach((ch) => supabase.removeChannel(ch));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tables.join(','), shopId]);
@@ -53,6 +71,8 @@ export function useRealtimeTables(
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (!document.hidden) {
+        // Recreate channels and schedule refresh on visibility return
+        subscribeToRealtime();
         scheduleRefresh('visibilitychange');
       }
     };
