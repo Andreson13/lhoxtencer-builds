@@ -48,3 +48,4 @@ latest-linux.yml
 *.njsproj
 *.sln
 *.sw?
+.vercel

@@ -1,0 +1,12 @@
+node_modules/
+.git/
+release/
+dev-dist/
+build/
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.msi
+electron_output.log

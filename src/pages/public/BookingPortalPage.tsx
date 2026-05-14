@@ -49,6 +49,8 @@ const BookingPortalPage = () => {
   const { t, setLang, lang } = useI18n();
   const { slug, hotelId } = useParams<{ slug?: string; hotelId?: string }>();
 
+  console.log('BookingPortalPage mounted', { slug, hotelId, hotelKey: slug || hotelId });
+
   useEffect(() => {
     setLang('fr');
   }, [setLang]);
