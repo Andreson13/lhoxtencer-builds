@@ -16,9 +16,10 @@ import { toast } from 'sonner';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
+  mobileMenuOpen?: boolean;
 }
 
-export const Header = ({ onToggleSidebar }: HeaderProps) => {
+export const Header = ({ onToggleSidebar, mobileMenuOpen = false }: HeaderProps) => {
   const { profile, signOut } = useAuth();
   const { hotel, managedHotels, switchHotel } = useHotel();
   const { t } = useI18n();

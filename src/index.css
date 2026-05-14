@@ -74,6 +74,12 @@
   }
   body {
     @apply bg-background text-foreground;
+    padding-bottom: max(env(safe-area-inset-bottom), 0);
+  }
+  html, body, #root {
+    width: 100%;
+    height: 100%;
+    position: relative;
   }
 }
 
@@ -103,7 +109,17 @@
     @apply text-sm font-medium text-muted-foreground uppercase tracking-wide;
   }
   .page-container {
-    @apply p-6 max-w-full;
+    @apply max-w-full;
+  }
+  @media (max-width: 768px) {
+    .page-container {
+      @apply p-4;
+    }
+  }
+  @media (min-width: 769px) {
+    .page-container {
+      @apply p-6;
+    }
   }
   .fcfa {
     font-variant-numeric: tabular-nums;

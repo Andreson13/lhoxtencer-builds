@@ -9,17 +9,20 @@ import { toast } from 'sonner';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { Badge } from '@/components/ui/badge';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 export const AppLayout = () => {
   const { t } = useI18n();
   const { hotel } = useHotel();
   const location = useLocation();
+  const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(() => window.navigator.onLine);
   const [queueSize, setQueueSize] = useState(() => getOfflineSubmissionQueueSize());
 
   useStayAccrualSync(hotel?.id);
-  useQueryRefresh(); // Refresh React Query cache when app regains focus
+  useQueryRefresh();
 
   useEffect(() => {
     const markOnline = () => {
@@ -61,15 +64,44 @@ export const AppLayout = () => {
     document.title = section ? `${hotelName} - ${section}` : hotelName;
   }, [hotel?.name, location.pathname]);
 
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
   return (
-    <div className="min-h-screen flex w-full">
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+    <div className="min-h-screen flex flex-col md:flex-row w-full bg-background">
+      {/* Desktop Sidebar - Hidden on mobile */}
+      <div className="hidden md:block md:sticky md:top-0 md:h-screen md:w-auto">
+        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+      </div>
+
+      {/* Main Content Area */}
       <div
-        className={`flex-1 flex flex-col transition-all duration-300 ${
-          collapsed ? 'ml-16' : 'ml-[260px]'
+        className={`flex-1 flex flex-col min-h-screen transition-all duration-300 md:ml-0 ${
+          !isMobile ? (collapsed ? 'md:ml-16' : 'md:ml-[260px]') : ''
         }`}
       >
-        <Header onToggleSidebar={() => setCollapsed(!collapsed)} />
+        <Header
+          onToggleSidebar={() => {
+            if (isMobile) {
+              setMobileMenuOpen(!mobileMenuOpen);
+            } else {
+              setCollapsed(!collapsed);
+            }
+          }}
+          mobileMenuOpen={mobileMenuOpen}
+        />
+
+        {/* Mobile Navigation Drawer */}
+        {isMobile && mobileMenuOpen && (
+          <div className="fixed inset-0 top-14 z-40 bg-black/50" onClick={() => setMobileMenuOpen(false)}>
+            <div className="bg-sidebar text-sidebar-foreground w-80 h-full shadow-lg overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <Sidebar collapsed={false} onToggle={() => setMobileMenuOpen(false)} isDrawer />
+            </div>
+          </div>
+        )}
+
         {!isOnline && (
           <div className="offline-banner flex items-center justify-between px-4 py-2">
             <span>{t('common.offlineBanner')}</span>
@@ -78,7 +110,8 @@ export const AppLayout = () => {
             )}
           </div>
         )}
-        <main className="flex-1 overflow-auto bg-background">
+
+        <main className="flex-1 overflow-auto bg-background px-4 py-6 md:px-6">
           <Outlet />
         </main>
       </div>

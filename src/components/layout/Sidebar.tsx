@@ -69,9 +69,10 @@ const navGroups = [
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  isDrawer?: boolean;
 }
 
-export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
+export const Sidebar = ({ collapsed, onToggle, isDrawer = false }: SidebarProps) => {
   const { profile } = useAuth();
   const { hotel } = useHotel();
   const { t, lang, setLang } = useI18n();
@@ -79,8 +80,10 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
 
   return (
     <aside
-      className={`fixed left-0 top-0 h-screen bg-sidebar text-sidebar-foreground flex flex-col z-50 transition-all duration-300 ${
-        collapsed ? 'w-16' : 'w-[260px]'
+      className={`bg-sidebar text-sidebar-foreground flex flex-col z-50 transition-all duration-300 ${
+        isDrawer
+          ? `relative h-full ${collapsed ? 'w-16' : 'w-[260px]'}`
+          : `fixed left-0 top-0 h-screen ${collapsed ? 'w-16' : 'w-[260px]'}`
       }`}
     >
       {/* Logo */}
