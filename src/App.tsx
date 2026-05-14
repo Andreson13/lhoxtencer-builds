@@ -77,14 +77,14 @@ const App = () => (
                 <Route path="/onboarding" element={<OnboardingPage />} />
                 <Route path="/invite/join" element={<InviteJoinPage />} />
                 <Route path="/access-denied" element={<AccessDeniedPage />} />
-                <Route path="/portal/:slug" element={<BookingPortalPage />} />
                 <Route path="/portal/hotel/:hotelId" element={<BookingPortalPage />} />
-                <Route path="/booking/:slug" element={<BookingPortalPage />} />
+                <Route path="/portal/:slug" element={<BookingPortalPage />} />
                 <Route path="/booking/hotel/:hotelId" element={<BookingPortalPage />} />
-                <Route path="/menu/:slug" element={<MenuPortalPage />} />
-                <Route path="/menu/:slug/:room" element={<MenuPortalPage />} />
-                <Route path="/menu/:hotelSlug/:roomNumber" element={<MenuPortalPage />} />
+                <Route path="/booking/:slug" element={<BookingPortalPage />} />
                 <Route path="/menu/hotel/:hotelId/:roomNumber" element={<MenuPortalPage />} />
+                <Route path="/menu/:hotelSlug/:roomNumber" element={<MenuPortalPage />} />
+                <Route path="/menu/:slug/:room" element={<MenuPortalPage />} />
+                <Route path="/menu/:slug" element={<MenuPortalPage />} />
 
                 {/* Protected routes */}
                 <Route path="/" element={<Navigate to="/accueil" replace />} />
