@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useI18n } from '@/contexts/I18nContext';
 
@@ -34,8 +35,20 @@ const LoginPage = () => {
     try {
       await signIn(data.email, data.password);
       toast.success('Connexion réussie');
-      const nextPath = searchParams.get('next');
-      navigate(nextPath || '/dashboard');
+
+      // Check for pending invitations
+      const { data: invitations } = await (supabase as any)
+        .from('invitations')
+        .select('id')
+        .eq('email', data.email.toLowerCase())
+        .eq('status', 'pending');
+
+      if (invitations && invitations.length > 0) {
+        navigate('/pending-invitations');
+      } else {
+        const nextPath = searchParams.get('next');
+        navigate(nextPath || '/dashboard');
+      }
     } catch (error: any) {
       toast.error(error.message || 'Erreur de connexion');
     } finally {
@@ -69,6 +82,19 @@ const LoginPage = () => {
               {loading ? 'Connexion...' : 'Se connecter'}
             </Button>
           </form>
+
+          <div className="mt-4 text-center text-sm">
+            <span className="text-muted-foreground">Vous n'avez pas de compte? </span>
+            <Button
+              variant="link"
+              className="p-0 h-auto"
+              onClick={() => navigate('/signup')}
+              disabled={loading}
+            >
+              Creer un compte
+            </Button>
+          </div>
+
           <div className="flex justify-center mt-4 gap-2">
             <Button variant="ghost" size="sm" className={lang === 'fr' ? 'font-bold' : ''} onClick={() => setLang('fr')}>FR</Button>
             <Button variant="ghost" size="sm" className={lang === 'en' ? 'font-bold' : ''} onClick={() => setLang('en')}>EN</Button>

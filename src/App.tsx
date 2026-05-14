@@ -10,6 +10,8 @@ import { I18nProvider } from "@/contexts/I18nContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 import LoginPage from "@/pages/auth/LoginPage";
 import OnboardingPage from "@/pages/auth/OnboardingPage";
+import SignupPage from "@/pages/auth/SignupPage";
+import PendingInvitationsPage from "@/pages/auth/PendingInvitationsPage";
 import InviteJoinPage from "@/pages/auth/InviteJoinPage";
 import AccueilClientPage from "@/pages/reception/AccueilClientPage";
 import DashboardPage from "@/pages/dashboard/DashboardPage";
@@ -92,7 +94,9 @@ const App = () => (
             <Routes>
                 {/* Public routes */}
                 <Route path="/login" element={<LoginPage />} />
+                <Route path="/signup" element={<SignupPage />} />
                 <Route path="/onboarding" element={<OnboardingPage />} />
+                <Route path="/pending-invitations" element={<PendingInvitationsPage />} />
                 <Route path="/invite/join" element={<InviteJoinPage />} />
                 <Route path="/access-denied" element={<AccessDeniedPage />} />
                 <Route path="/portal/hotel/:hotelId" element={<BookingPortalPage />} />

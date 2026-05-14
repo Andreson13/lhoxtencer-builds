@@ -72,6 +72,20 @@ const SettingsPage = () => {
     enabled: !!hotel?.id,
   });
 
+  const { data: pendingInvitations } = useQuery({
+    queryKey: ['invitations', hotel?.id],
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from('invitations')
+        .select('*')
+        .eq('hotel_id', hotel!.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+      return data || [];
+    },
+    enabled: !!hotel?.id,
+  });
+
   useEffect(() => {
     if (!permDialogOpen || !hotel?.id || !permTargetStaff?.id) return;
     (async () => {
@@ -250,6 +264,57 @@ const SettingsPage = () => {
           </div>
             </CardContent>
           </Card>
+
+          {pendingInvitations && pendingInvitations.length > 0 && (
+            <Card className="border-border/60 shadow-sm border-l-4 border-l-blue-500">
+              <CardHeader>
+                <CardTitle className="text-lg">Invitations en attente</CardTitle>
+                <p className="text-sm text-muted-foreground">Les utilisateurs suivants ont ete invites et attendent votre confirmation</p>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="rounded-md border-x-0 border-b-0">
+                  <Table>
+                    <TableHeader><TableRow><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead>Date d'invitation</TableHead><TableHead>Statut</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {pendingInvitations.map((inv: any) => (
+                        <TableRow key={inv.id}>
+                          <TableCell className="font-medium">{inv.email}</TableCell>
+                          <TableCell><Badge>{inv.role}</Badge></TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {new Date(inv.created_at).toLocaleDateString('fr-FR', { month: 'short', day: 'numeric' })}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className="bg-blue-100 text-blue-800">En attente</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={async () => {
+                                try {
+                                  await (supabase as any)
+                                    .from('invitations')
+                                    .delete()
+                                    .eq('id', inv.id);
+                                  qc.invalidateQueries({ queryKey: ['invitations'] });
+                                  toast.success('Invitation annulee');
+                                } catch (e: any) {
+                                  toast.error('Erreur lors de l\'annulation');
+                                }
+                              }}
+                              className="text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="permissions" className="mt-4 space-y-4">
@@ -325,7 +390,7 @@ const SettingsPage = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setInviteDialogOpen(false)}>{t('common.cancel')}</Button>
             <Button onClick={async () => {
-              if (!hotel?.id) return;
+              if (!hotel?.id || !profile?.id) return;
               const email = inviteEmail.trim().toLowerCase();
               if (!email) {
                 toast.error('Email requis');
@@ -357,22 +422,34 @@ const SettingsPage = () => {
                       is_hotel_owner: false,
                     }, { onConflict: 'hotel_id,user_id' });
 
-                  toast.success(`Membre ajouté: ${existingProfile.full_name || email}`);
-                  qc.invalidateQueries({ queryKey: ['staff'] });
+                  toast.success(`Membre ajoute: ${existingProfile.full_name || email}`);
+                  qc.invalidateQueries({ queryKey: ['staff', 'invitations'] });
                   setInviteDialogOpen(false);
                   setInviteEmail('');
                   setInviteRole('receptionist');
                   return;
                 }
 
-                const inviteUrl = `${window.location.origin}/invite/join?email=${encodeURIComponent(email)}&hotelId=${encodeURIComponent(hotel.id)}&hotelName=${encodeURIComponent(hotel.name || '')}&role=${encodeURIComponent(inviteRole)}`;
-                await navigator.clipboard.writeText(inviteUrl);
-                toast.success('Lien d\'invitation copié. Envoyez-le au membre pour finaliser son compte.');
+                const { error: inviteError } = await (supabase as any)
+                  .from('invitations')
+                  .upsert({
+                    hotel_id: hotel.id,
+                    email: email,
+                    role: inviteRole,
+                    is_hotel_owner: false,
+                    invited_by: profile.id,
+                    status: 'pending',
+                  }, { onConflict: 'hotel_id,email,status' });
+
+                if (inviteError) throw inviteError;
+
+                toast.success(`Invitation envoyee a ${email}. Ils pourront accepter apres connexion.`);
+                qc.invalidateQueries({ queryKey: ['invitations'] });
                 setInviteDialogOpen(false);
                 setInviteEmail('');
                 setInviteRole('receptionist');
               } catch (e: any) {
-                toast.error(e.message || 'Impossible d\'ajouter ce membre');
+                toast.error(e.message || 'Impossible d\'envoyer l\'invitation');
               }
             }}>{t('settings.invite.send')}</Button>
           </DialogFooter>
