@@ -52,29 +52,16 @@ jobs:
         if: steps.check_tag.outputs.exists == 'false'
         run: npm run build
 
-      - name: Create release in lhoxtencer-builds (public repo - artifacts only)
+      - name: Push tag to lhoxtencer-builds
         if: steps.check_tag.outputs.exists == 'false'
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const path = require('path');
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
 
-            try {
-              // Create release on lhoxtencer-builds with artifacts
-              const release = await github.rest.repos.createRelease({
-                owner: 'Andreson13',
-                repo: 'lhoxtencer-builds',
-                tag_name: 'v${{ steps.version.outputs.version }}',
-                name: 'Version ${{ steps.version.outputs.version }}',
-                body: `## Lhoxtencer Build Release v${{ steps.version.outputs.version }}\n\nAutomatic release with built artifacts only.\n\n**Features:**\n- 🏨 Hotel Management System\n- 📱 Progressive Web App\n- 🔄 Automatic Updates\n- 🌐 Offline Support`,
-                draft: false,
-                prerelease: false
-              });
+          # Add builds repo as remote using token
+          git remote add releases https://x-access-token:${{ secrets.RELEASE_REPO_TOKEN }}@github.com/Andreson13/lhoxtencer-builds.git || git remote set-url releases https://x-access-token:${{ secrets.RELEASE_REPO_TOKEN }}@github.com/Andreson13/lhoxtencer-builds.git
 
-              console.log('✅ Release created:', release.data.html_url);
-            } catch (error) {
-              console.error('Release creation failed:', error.message);
-              // Continue anyway - manual release can be created
-            }
+          # Push tag only (not full source)
+          git push releases v${{ steps.version.outputs.version }}
+
+          echo "✅ Tag v${{ steps.version.outputs.version }} pushed to lhoxtencer-builds"
