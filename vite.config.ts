@@ -31,13 +31,13 @@ export default defineConfig(({ mode }) => ({
         scope: "./",
         icons: [
           {
-            src: "pwa-192.png",
+            src: "logo-192x192.png",
             sizes: "192x192",
             type: "image/png",
             purpose: "any",
           },
           {
-            src: "pwa-512.png",
+            src: "logo-512x512.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "any maskable",

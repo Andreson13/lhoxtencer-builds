@@ -29,17 +29,7 @@ export function SiteHeader() {
     <header className="sticky top-0 z-40 border-b border-border/60 bg-navy/95 backdrop-blur supports-[backdrop-filter]:bg-navy/85">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <Link to="/" className="flex items-center gap-2 text-navy-foreground">
-          <svg className="h-6 w-6" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
-            <rect x="50" y="40" width="50" height="210" rx="15" fill="currentColor"/>
-            <rect x="50" y="235" width="135" height="35" rx="10" fill="currentColor"/>
-            <rect x="170" y="95" width="50" height="175" rx="12" fill="#b8860b"/>
-            <g fill="currentColor" opacity="0.8">
-              <rect x="180" y="130" width="25" height="25" rx="3"/>
-              <rect x="215" y="130" width="25" height="25" rx="3"/>
-              <rect x="180" y="165" width="25" height="25" rx="3"/>
-              <rect x="215" y="165" width="25" height="25" rx="3"/>
-            </g>
-          </svg>
+          <img src="/logo-64x64.png" alt="Lhoxtencer" className="h-6 w-6 rounded" />
           <span className="font-display text-lg font-semibold tracking-wide">
             Lhoxtencer
           </span>

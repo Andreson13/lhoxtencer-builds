@@ -47,7 +47,9 @@ const MinibarPage = () => {
   const sellMutation = useMutation({
     mutationFn: async () => {
       if (!sellItem || !sellQuantity || !hotel) throw new Error('Missing data');
-      const newStock = Math.max(0, sellItem.current_stock - sellQuantity);
+      if (sellQuantity > sellItem.current_stock) throw new Error(`Insufficient stock! Only ${sellItem.current_stock} available.`);
+      if (sellQuantity <= 0) throw new Error('Quantity must be greater than 0');
+      const newStock = sellItem.current_stock - sellQuantity;
       const { error } = await supabase
         .from('inventory_items' as any)
         .update({ current_stock: newStock })
@@ -224,6 +226,9 @@ const MinibarPage = () => {
                 value={sellQuantity}
                 onChange={e => setSellQuantity(Number(e.target.value))}
               />
+              {sellQuantity > (sellItem?.current_stock || 0) && (
+                <p className="text-sm text-destructive mt-2">⚠️ Quantity exceeds available stock!</p>
+              )}
             </div>
             <p className="text-lg font-semibold">
               Total: {formatFCFA((sellItem?.selling_price || 0) * sellQuantity)}
@@ -233,7 +238,7 @@ const MinibarPage = () => {
             <Button variant="outline" onClick={() => setSellDialogOpen(false)}>Cancel</Button>
             <Button
               onClick={() => sellMutation.mutate()}
-              disabled={sellMutation.isPending || !sellQuantity}
+              disabled={sellMutation.isPending || !sellQuantity || sellQuantity > (sellItem?.current_stock || 0)}
             >
               Confirm Sale
             </Button>

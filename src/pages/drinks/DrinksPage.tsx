@@ -18,7 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { Wine, Plus, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import { Wine, Plus, Pencil, Trash2, AlertTriangle, Plus as PlusIcon } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -60,10 +60,23 @@ const DrinksPage = () => {
   const [sellDialogOpen, setSellDialogOpen] = useState(false);
   const [sellItem, setSellItem] = useState<any>(null);
   const [sellQuantity, setSellQuantity] = useState(1);
+  const [restockDialogOpen, setRestockDialogOpen] = useState(false);
+  const [restockItem, setRestockItem] = useState<any>(null);
+  const [restockQuantity, setRestockQuantity] = useState(0);
 
   const { register, handleSubmit, reset, setValue, control, formState: { errors } } = useForm<DrinkForm>({
     resolver: zodResolver(schema),
     defaultValues: { unit: 'unité', minimum_stock: 3, current_stock: 0, buying_price: 0, selling_price: 0, name: '', category: 'other' }
+  });
+
+  const { data: profile } = useQuery({
+    queryKey: ['profile'],
+    queryFn: async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (error || !data.user) return null;
+      const { data: p } = await supabase.from('profiles' as any).select('*').eq('id', data.user.id).single();
+      return p;
+    },
   });
 
   const { data: drinks, isLoading } = useQuery({
@@ -120,7 +133,9 @@ const DrinksPage = () => {
   const sellMutation = useMutation({
     mutationFn: async () => {
       if (!sellItem || !sellQuantity || !hotel) throw new Error('Données manquantes');
-      const newStock = Math.max(0, sellItem.current_stock - sellQuantity);
+      if (sellQuantity > sellItem.current_stock) throw new Error(`Stock insuffisant! Seulement ${sellItem.current_stock} disponible.`);
+      if (sellQuantity <= 0) throw new Error('Quantité doit être supérieure à 0');
+      const newStock = sellItem.current_stock - sellQuantity;
       const { error } = await supabase.from('inventory_items' as any).update({ current_stock: newStock }).eq('id', sellItem.id);
       if (error) throw error;
     },
@@ -130,6 +145,35 @@ const DrinksPage = () => {
       setSellDialogOpen(false);
       setSellItem(null);
       setSellQuantity(1);
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const restockMutation = useMutation({
+    mutationFn: async () => {
+      if (!restockItem || !restockQuantity || !hotel || !profile) throw new Error('Données manquantes');
+      if (restockQuantity <= 0) throw new Error('Quantité doit être supérieure à 0');
+      const newStock = restockItem.current_stock + restockQuantity;
+      const { error: updateError } = await supabase.from('inventory_items' as any).update({ current_stock: newStock }).eq('id', restockItem.id);
+      if (updateError) throw updateError;
+      const { error: logError } = await supabase.from('audit_logs' as any).insert({
+        hotel_id: hotel.id,
+        user_id: profile.id,
+        user_name: profile.full_name || profile.email,
+        action: 'restock',
+        table_name: 'inventory_items',
+        record_id: restockItem.id,
+        old_values: { current_stock: restockItem.current_stock },
+        new_values: { current_stock: newStock },
+      });
+      if (logError) throw logError;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['drinks', hotel?.id] });
+      toast.success(`${restockQuantity} unité(s) ajoutée(s) - ${restockItem.name}`);
+      setRestockDialogOpen(false);
+      setRestockItem(null);
+      setRestockQuantity(0);
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -224,6 +268,13 @@ const DrinksPage = () => {
                       >
                         Vendre
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => { setRestockItem(item); setRestockQuantity(0); setRestockDialogOpen(true); }}
+                      >
+                        <PlusIcon className="h-4 w-4 mr-1" />Restock
+                      </Button>
                       <Button variant="ghost" size="icon" onClick={() => openEdit(item)}><Pencil className="h-4 w-4" /></Button>
                       <Button variant="ghost" size="icon" onClick={() => setDeleteItem(item)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                     </TableCell>
@@ -293,12 +344,53 @@ const DrinksPage = () => {
                 value={sellQuantity}
                 onChange={e => setSellQuantity(Number(e.target.value))}
               />
+              {sellQuantity > (sellItem?.current_stock || 0) && (
+                <p className="text-sm text-destructive mt-2">⚠️ Quantité dépasse le stock disponible!</p>
+              )}
             </div>
             <p className="text-lg font-semibold">Total: {formatFCFA((sellItem?.selling_price || 0) * sellQuantity)}</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSellDialogOpen(false)}>Annuler</Button>
-            <Button onClick={() => sellMutation.mutate()} disabled={sellMutation.isPending || !sellQuantity}>Confirmer vente</Button>
+            <Button
+              onClick={() => sellMutation.mutate()}
+              disabled={sellMutation.isPending || !sellQuantity || sellQuantity > (sellItem?.current_stock || 0)}
+            >
+              Confirmer vente
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Restock Dialog */}
+      <Dialog open={restockDialogOpen} onOpenChange={setRestockDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Restock - {restockItem?.name}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm text-muted-foreground">Stock actuel: {restockItem?.current_stock}</p>
+              <p className="text-sm text-muted-foreground">Unité: {restockItem?.unit}</p>
+            </div>
+            <div>
+              <Label>Quantité à ajouter</Label>
+              <Input
+                type="number"
+                min="1"
+                value={restockQuantity}
+                onChange={e => setRestockQuantity(Number(e.target.value))}
+                placeholder="0"
+              />
+            </div>
+            <p className="text-lg font-semibold">Nouveau stock: {(restockItem?.current_stock || 0) + (restockQuantity || 0)}</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRestockDialogOpen(false)}>Annuler</Button>
+            <Button
+              onClick={() => restockMutation.mutate()}
+              disabled={restockMutation.isPending || !restockQuantity || restockQuantity <= 0}
+            >
+              Confirmer Restock
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

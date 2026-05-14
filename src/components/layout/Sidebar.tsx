@@ -36,7 +36,6 @@ const navGroups = [
       { key: 'nav.kitchen', path: '/kitchen', icon: ChefHat, roles: ['admin','manager','kitchen'] },
       { key: 'nav.inventory', path: '/inventory', icon: Package, roles: ['admin','manager','receptionist'] },
       { key: 'nav.drinks', path: '/drinks', icon: Wine, roles: ['admin','manager','receptionist','restaurant'] },
-      { key: 'nav.minibar', path: '/minibar', icon: Wine, roles: ['admin','manager','receptionist','restaurant'] },
       { key: 'nav.housekeeping', path: '/housekeeping', icon: Sparkles, roles: ['admin','manager','housekeeping'] },
     ],
   },
@@ -86,17 +85,7 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
     >
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border">
-        <svg className="h-8 w-8 shrink-0" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
-          <rect x="50" y="40" width="50" height="210" rx="15" fill="currentColor" opacity="0.9"/>
-          <rect x="50" y="235" width="135" height="35" rx="10" fill="currentColor" opacity="0.9"/>
-          <rect x="170" y="95" width="50" height="175" rx="12" fill="#b8860b"/>
-          <g fill="currentColor" opacity="0.8">
-            <rect x="180" y="130" width="25" height="25" rx="3"/>
-            <rect x="215" y="130" width="25" height="25" rx="3"/>
-            <rect x="180" y="165" width="25" height="25" rx="3"/>
-            <rect x="215" y="165" width="25" height="25" rx="3"/>
-          </g>
-        </svg>
+        <img src="/logo-64x64.png" alt="Lhoxtencer" className="h-8 w-8 shrink-0 rounded" />
         {!collapsed && (
           <div className="overflow-hidden">
             <h1 className="text-lg font-semibold truncate">Lhoxtencer</h1>
