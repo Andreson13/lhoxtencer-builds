@@ -31,6 +31,15 @@ export function useAppResume() {
     debounceRef.current = setTimeout(async () => {
       isRecoveringRef.current = true;
       try {
+        // Skip recovery if there are active mutations in progress
+        const mutationCache = queryClient.getMutationCache();
+        const activeMutations = mutationCache.getAll().filter(m => m.state.status === 'pending');
+        if (activeMutations.length > 0) {
+          console.log(`⏳ Skipping recovery, ${activeMutations.length} mutations in progress`);
+          isRecoveringRef.current = false;
+          return;
+        }
+
         console.log(`🔄 App resume triggered (${reason})`);
 
         // 1. Direct REST health ping to wake the network stack
@@ -85,10 +94,14 @@ export function useAppResume() {
         // 4. Dispatch global resume event for realtime channels to self-heal
         window.dispatchEvent(new Event('hotelmanager:app-resume'));
 
-        // 5. Invalidate and refetch active queries
-        console.log('📡 Refetching active queries...');
-        queryClient.setQueryData([], (prev: any) => prev, { updatedAt: Date.now() });
-        await queryClient.refetchQueries({ type: 'active' });
+        // 5. Invalidate queries to trigger refetch on next access
+        console.log('📡 Invalidating queries...');
+        queryClient.invalidateQueries();
+
+        // 6. Refetch active queries with timeout (async, don't wait)
+        queryClient.refetchQueries({ type: 'active' }).catch(() => {
+          console.warn('Query refetch had errors, will retry on next focus');
+        });
 
       } catch (error) {
         console.error('Error during app resume:', error);
@@ -117,8 +130,8 @@ export function useAppResume() {
     if (idleTimeoutRef.current) {
       clearTimeout(idleTimeoutRef.current);
     }
-    // Trigger recovery every 60 seconds of inactivity
-    idleTimeoutRef.current = setTimeout(handleIdleTimeout, 60_000);
+    // Trigger recovery every 2 minutes of inactivity (allows time for slow operations)
+    idleTimeoutRef.current = setTimeout(handleIdleTimeout, 2 * 60 * 1000);
   };
 
   const startHeartbeat = () => {
