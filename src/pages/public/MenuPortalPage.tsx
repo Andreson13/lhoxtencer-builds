@@ -16,6 +16,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { Star, Send, UtensilsCrossed, Check, ShoppingCart, Plus, Minus, Bell, User } from 'lucide-react';
+import './MenuPortalPage.css';
 
 const MenuPortalPage = () => {
   const { t, setLang } = useI18n();
@@ -239,14 +240,14 @@ const MenuPortalPage = () => {
       : availableTodayItems.filter((item: any) => item.category_id === selectedCategory);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 to-background">
-      <div className="bg-primary text-primary-foreground py-8 px-4">
-        <div className="max-w-2xl mx-auto text-center">
-          {hotel.logo_url && <img src={hotel.logo_url} alt="" className="h-12 mx-auto mb-2 rounded" />}
-          <h1 className="text-2xl font-bold">{hotel.name}</h1>
-          {room && <p className="mt-1 text-primary-foreground/80">{t('menu.room')} {room}</p>}
+    <div className="menu-portal min-h-screen bg-gradient-to-br from-primary/5 to-background">
+      <div className="menu-header">
+        <div className="max-w-2xl mx-auto text-center relative z-10">
+          {hotel.logo_url && <img src={hotel.logo_url} alt="" className="menu-header-logo" />}
+          <h1 className="menu-header-title">{hotel.name}</h1>
+          {room && <p className="menu-header-subtitle">{t('menu.room')} {room}</p>}
           {guestName && (
-            <p className="mt-2 text-primary-foreground/90 flex items-center justify-center gap-1">
+            <p className="menu-header-subtitle mt-2 flex items-center justify-center gap-1">
               <User className="h-4 w-4" /> {t('menu.greeting')} {guestName} !
             </p>
           )}
@@ -286,34 +287,34 @@ const MenuPortalPage = () => {
                 </TabsList>
               </Tabs>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                 {filteredItems.map((item: any) => (
-                  <Card key={item.id} className="overflow-hidden border-muted">
+                  <Card key={item.id} className="menu-item-card">
                     {item.image_url ? (
-                      <img src={item.image_url} alt={item.name} className="h-40 w-full object-cover" />
+                      <img src={item.image_url} alt={item.name} />
                     ) : (
-                      <div className="h-40 w-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-slate-400">
+                      <div className="menu-item-fallback h-40 w-full">
                         <UtensilsCrossed className="h-8 w-8" />
                       </div>
                     )}
-                    <CardContent className="pt-4 space-y-2">
+                    <CardContent className="pt-4 space-y-3">
                       <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="font-semibold leading-tight">{item.name}</p>
-                          {item.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{item.description}</p>}
+                        <div className="flex-1">
+                          <p className="menu-item-name">{item.name}</p>
+                          {item.description && <p className="menu-item-description line-clamp-2">{item.description}</p>}
                         </div>
-                        <Badge variant="outline">{formatFCFA(item.price)}</Badge>
+                        <Badge className="menu-badge menu-item-price whitespace-nowrap">{formatFCFA(item.price)}</Badge>
                       </div>
 
-                      <div className="flex flex-wrap gap-1">
-                        {item.preparation_time_minutes ? <Badge variant="secondary">{item.preparation_time_minutes} min</Badge> : null}
-                        {item.calories ? <Badge variant="secondary">{item.calories} kcal</Badge> : null}
-                        {(item.allergens || []).slice(0, 3).map((a: string) => <Badge key={a} variant="outline" className="text-[10px]">{a}</Badge>)}
+                      <div className="flex flex-wrap gap-1.5">
+                        {item.preparation_time_minutes ? <Badge className="menu-badge time">⏱️ {item.preparation_time_minutes} min</Badge> : null}
+                        {item.calories ? <Badge className="menu-badge">🔥 {item.calories} kcal</Badge> : null}
+                        {(item.allergens || []).slice(0, 2).map((a: string) => <Badge key={a} className="menu-badge allergen text-[10px]">⚠️ {a}</Badge>)}
                       </div>
 
-                      <Button size="sm" className="w-full" onClick={() => addToCart(item)}>
-                        <Plus className="h-3 w-3 mr-1" /> {t('menu.addToCart')}
-                      </Button>
+                      <button onClick={() => addToCart(item)} className="add-to-cart-btn">
+                        <Plus className="h-3.5 w-3.5 inline mr-1" /> {t('menu.addToCart')}
+                      </button>
                     </CardContent>
                   </Card>
                 ))}
@@ -380,12 +381,18 @@ const MenuPortalPage = () => {
       </div>
 
       {!orderSent && (
-        <div className="fixed bottom-4 left-0 right-0 z-40 px-4">
-          <div className="max-w-3xl mx-auto flex justify-end">
-            <Button className="rounded-full px-5 shadow-lg" onClick={() => setCartOpen(true)}>
-              <ShoppingCart className="h-4 w-4 mr-2" /> {t('menu.cart.title')} ({cart.length}) {cart.length > 0 ? `• ${formatFCFA(cartTotal)}` : ''}
-            </Button>
-          </div>
+        <div className="floating-cart">
+          <button className="cart-button" onClick={() => setCartOpen(true)}>
+            <ShoppingCart className="h-4 w-4" />
+            <span>{t('menu.cart.title')}</span>
+            {cart.length > 0 && (
+              <>
+                <span className="cart-count">{cart.length}</span>
+                <span className="hidden sm:inline">•</span>
+                <span className="hidden sm:inline">{formatFCFA(cartTotal)}</span>
+              </>
+            )}
+          </button>
         </div>
       )}
 
