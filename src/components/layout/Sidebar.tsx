@@ -88,7 +88,7 @@ export const Sidebar = ({ collapsed, onToggle, isDrawer = false }: SidebarProps)
     >
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border">
-        <img src="/logo-64x64.png" alt="Lhoxtencer" className="h-8 w-8 shrink-0 rounded" />
+        <img src="./logo-64x64.png" alt="Lhoxtencer" className="h-8 w-8 shrink-0 rounded" />
         {!collapsed && (
           <div className="overflow-hidden">
             <h1 className="text-lg font-semibold truncate">Lhoxtencer</h1>

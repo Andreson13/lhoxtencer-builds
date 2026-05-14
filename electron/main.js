@@ -1,14 +1,13 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, nativeTheme } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 
 const getWindowIconPath = () => {
-  if (isDevelopment) {
-    return path.join(__dirname, '..', 'build', 'icon.ico');
-  }
-  return path.join(__dirname, 'assets', 'icon.ico');
+  const iconPath = path.join(__dirname, 'assets', 'icon.ico');
+  console.log('Loading icon from:', iconPath);
+  return iconPath;
 };
 
 const createMainWindow = () => {
@@ -50,6 +49,7 @@ const createMainWindow = () => {
 
 app.whenReady().then(() => {
   app.setAppUserModelId('com.lhoxtencer.desktop');
+  nativeTheme.themeSource = 'dark';
   createMainWindow();
 
   app.on('activate', () => {
