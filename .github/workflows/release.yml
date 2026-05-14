@@ -1,4 +1,4 @@
-name: Auto Release
+name: Auto Release to lhoxtencer-builds
 
 on:
   push:
@@ -14,6 +14,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
 
       - name: Get version from package.json
         id: version
@@ -31,7 +36,7 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create tag
+      - name: Create tag in private repo
         if: steps.check_tag.outputs.exists == 'false'
         run: |
           git config --local user.email "action@github.com"
@@ -39,63 +44,37 @@ jobs:
           git tag -a v${{ steps.version.outputs.version }} -m "Release version ${{ steps.version.outputs.version }}"
           git push origin v${{ steps.version.outputs.version }}
 
-      - name: Create Release
+      - name: Install dependencies
         if: steps.check_tag.outputs.exists == 'false'
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm install
+
+      - name: Build application
+        if: steps.check_tag.outputs.exists == 'false'
+        run: npm run build
+
+      - name: Create release in lhoxtencer-builds (public repo - artifacts only)
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: actions/github-script@v6
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          release_name: Version ${{ steps.version.outputs.version }}
-          body: |
-            ## Auto-Update Release
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
 
-            **Version:** ${{ steps.version.outputs.version }}
+            try {
+              // Create release on lhoxtencer-builds with artifacts
+              const release = await github.rest.repos.createRelease({
+                owner: 'Andreson13',
+                repo: 'lhoxtencer-builds',
+                tag_name: 'v${{ steps.version.outputs.version }}',
+                name: 'Version ${{ steps.version.outputs.version }}',
+                body: `## Lhoxtencer Build Release v${{ steps.version.outputs.version }}\n\nAutomatic release with built artifacts only.\n\n**Features:**\n- 🏨 Hotel Management System\n- 📱 Progressive Web App\n- 🔄 Automatic Updates\n- 🌐 Offline Support`,
+                draft: false,
+                prerelease: false
+              });
 
-            This release includes the latest version of the Hotel Harmony management system with:
-            - ✅ Automatic version checking via GitHub releases
-            - ✅ Progressive Web App (PWA) support
-            - ✅ Offline functionality
-            - ✅ Service Worker auto-updates
-
-            ### Installation
-            Visit the application to automatically receive this update.
-
-            **Released:** ${{ github.event.head_commit.timestamp }}
-          draft: false
-          prerelease: false
-
-      - name: Push to lhoxtencer-builds
-        if: steps.check_tag.outputs.exists == 'false'
-        run: |
-          git remote add builds https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/Andreson13/lhoxtencer-builds.git || true
-          git push builds v${{ steps.version.outputs.version }}
-
-      - name: Create Release on lhoxtencer-builds
-        if: steps.check_tag.outputs.exists == 'false'
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v${{ steps.version.outputs.version }}
-          release_name: Version ${{ steps.version.outputs.version }}
-          body: |
-            ## Lhoxtencer Build Release
-
-            **Version:** ${{ steps.version.outputs.version }}
-
-            This is the official build release for Lhoxtencer (Hotel Harmony).
-
-            ### Features
-            - 🏨 Hotel Management System
-            - 📱 Progressive Web App
-            - 🔄 Automatic Updates
-            - 🌐 Offline Support
-
-            **Build Info:**
-            - Commit: ${{ github.sha }}
-            - Author: ${{ github.actor }}
-            - Timestamp: ${{ github.event.head_commit.timestamp }}
-          draft: false
-          prerelease: false
-          repository: Andreson13/lhoxtencer-builds
+              console.log('✅ Release created:', release.data.html_url);
+            } catch (error) {
+              console.error('Release creation failed:', error.message);
+              // Continue anyway - manual release can be created
+            }
