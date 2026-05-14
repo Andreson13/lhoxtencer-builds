@@ -2,18 +2,18 @@
 
 ## Overview
 
-The Hotel Harmony invite system allows hotel administrators and managers to invite team members to join their hotel with specific roles. When a user accepts an invite and signs up, they automatically gain access to their hotel's dashboard with their assigned role.
+The Hotel Harmony invite system allows hotel administrators and managers to invite team members to join their hotel with specific roles. Invitations are stored in the database and managed through the admin interface. When invited users sign up or log in, they automatically see their pending invitations and can accept or reject them.
 
 ## How It Works
 
-### 1. Sending an Invite
+### 1. Sending an Invitation
 
 **Location:** Settings → Team Tab → "Invite" Button
 
 **Steps:**
 1. Navigate to Settings → Team Tab
 2. Click the "Invite" button
-3. Enter the new team member's email address
+3. Enter the team member's email address
 4. Select their role:
    - **Admin**: Full access, can manage all hotel settings and staff
    - **Manager**: Can manage day-to-day operations and staff roles
@@ -23,50 +23,45 @@ The Hotel Harmony invite system allows hotel administrators and managers to invi
    - **Kitchen**: Kitchen operations
    - **Housekeeping**: Housekeeping task management
 
-5. The system generates an invite link and copies it to your clipboard
-6. Share the link with the team member via email, WhatsApp, or other means
-
-### 2. The Invite Link
-
-The invite URL looks like:
-```
-https://yourhotel.com/invite/join?email=user@example.com&hotelId=hotel-123&hotelName=My%20Hotel&role=receptionist
-```
-
-**Parameters:**
-- `email`: The invited user's email address
-- `hotelId`: The hotel ID
-- `hotelName`: The hotel name (for display purposes)
-- `role`: The assigned role
-- `owner` (optional): Set to `1` to make the user a hotel owner
-
-### 3. Accepting the Invite
-
-**For New Users:**
-1. Click the invite link
-2. Create a new account with:
-   - Full name
-   - Password (minimum 6 characters)
-3. Click "Create account and join"
-4. Account is created with:
-   - Hotel ID automatically set to the invited hotel
-   - Role automatically set to the invited role
-   - Access to the hotel's dashboard immediately
+5. Click "Invite" - the invitation is stored in the database
+6. The invited user will see it when they next sign up or log in
 
 **For Existing Users:**
-1. Click the invite link
-2. If already logged in, click "Apply this invitation"
-3. The system updates their profile with:
-   - Hotel ID set to the invited hotel
-   - Role set to the invited role
-4. Redirected to the hotel dashboard
+- If the email belongs to an existing user, they are immediately added to the hotel with that role
+- They will see the change reflected when they next refresh their profile
 
-### 4. Dashboard After Signup
+### 2. Managing Invitations
 
-Once a user accepts the invite and signs up, they are automatically:
-1. Logged in with their new account (if new user)
-2. Assigned to the hotel and role specified in the invite
-3. Redirected to their role-specific dashboard:
+**As an Admin/Manager:**
+- View all pending invitations in Settings → Team Tab → "Pending Invitations" section
+- See email, role, and invitation date for each pending invite
+- Cancel pending invitations using the delete button if needed
+
+### 3. Accepting an Invitation
+
+**For New Users (Signup Flow):**
+1. User signs up with email that matches a pending invitation
+2. After account creation, they are directed to the "Pending Invitations" page
+3. They see a clear list of invitations showing:
+   - Hotel name
+   - Assigned role (with color badge)
+   - Owner status (if applicable)
+4. User can:
+   - **Accept**: Join the hotel with the assigned role → goes directly to dashboard
+   - **Reject**: Keep the account but don't join that hotel → goes to onboarding
+   - **Ignore and Continue**: Skip all invitations → goes to onboarding
+
+**For Existing Users (Login Flow):**
+1. User logs in with email that has pending invitations
+2. After login, they are directed to the "Pending Invitations" page
+3. Same flow as above - accept, reject, or ignore
+
+### 4. Dashboard After Acceptance
+
+Once a user accepts an invitation:
+1. They are immediately assigned to the hotel
+2. Their role is set to the invited role
+3. They are redirected to their role-specific dashboard:
    - **Admin/Manager/Receptionist**: Reception dashboard with room status, guest info, payments
    - **Accountant**: Financial dashboard with revenue, payments, invoices
    - **Restaurant/Kitchen**: Restaurant orders and kitchen display
@@ -74,99 +69,124 @@ Once a user accepts the invite and signs up, they are automatically:
 
 ## Technical Details
 
-### Database Tables Involved
+### Database Table: invitations
 
-1. **profiles**
-   - `hotel_id`: The hotel the user is assigned to
-   - `role`: The user's role
-   - `is_hotel_owner`: Whether user is a hotel owner
-   - `disabled`: Whether user account is disabled
-
-2. **hotel_memberships**
-   - `user_id`: User ID
-   - `hotel_id`: Hotel ID
-   - `role`: User's role in this hotel
-   - `is_hotel_owner`: Whether user owns this hotel
-   - Enables users to be members of multiple hotels
-
-3. **hotels**
-   - Hotel information (name, address, settings, etc.)
+```sql
+CREATE TABLE invitations (
+  id UUID PRIMARY KEY,
+  hotel_id UUID NOT NULL,        -- Which hotel
+  email TEXT NOT NULL,           -- Invited email
+  role TEXT NOT NULL,            -- Assigned role
+  is_hotel_owner BOOLEAN,        -- Owner flag
+  invited_by UUID,               -- Who invited them
+  status TEXT,                   -- 'pending', 'accepted', 'rejected', 'expired'
+  created_at TIMESTAMP,          -- When invited
+  expires_at TIMESTAMP,          -- Expires in 30 days
+  accepted_at TIMESTAMP          -- When they accepted
+)
+```
 
 ### Flow Diagram
 
 ```
-Admin sends invite
+Admin sends invite via UI
         ↓
-Invite link generated and shared
+Invitation stored in database with status='pending'
         ↓
-New/Existing user clicks link
+User signs up or logs in with that email
         ↓
-InviteJoinPage renders with invite details
+System queries invitations table
         ↓
-User signs up or applies invite
+If pending invitations found:
+    User → PendingInvitationsPage
         ↓
-Profile updated with hotel_id & role
+    User accepts invitation
         ↓
-hotel_memberships entry created
+    hotel_memberships entry created
         ↓
-Profile refreshed in AuthContext
+    profiles updated with hotel_id & role
         ↓
-Redirected to /dashboard
+    Redirect to dashboard
         ↓
-HotelContext loads hotel data
-        ↓
-ProtectedRoute shows loading until hotel loads
-        ↓
-DashboardPage renders with role-specific content
+If no pending invitations:
+    New user → onboarding
+    Existing user → dashboard
+```
+
+## User Experience Flow
+
+### New User Signup
+```
+Sign up page → Enter email/password/name
+    ↓
+Check for pending invitations
+    ↓
+Has pending invites? → YES → Pending Invitations Page
+                    → NO  → Onboarding Page
+```
+
+### Existing User Login
+```
+Login page → Enter email/password
+    ↓
+Check for pending invitations
+    ↓
+Has pending invites? → YES → Pending Invitations Page
+                    → NO  → Dashboard
 ```
 
 ## Features
 
-### Enhanced Invite Experience
-- **Clear invite details**: Shows hotel name and assigned role with color-coded badge
-- **Owner indication**: Displays if user will be a hotel owner
-- **Better feedback**: Shows meaningful messages during signup and role assignment
-- **Loading state**: Shows "Initializing your hotel..." while context loads
+### For Administrators
+- **Centralized invite management**: All pending invites visible in one place
+- **No manual link sharing**: Invites are automatic - just need email address
+- **Easy cancellation**: Cancel invites with one click if needed
+- **Immediate assignment**: Existing users are instantly added to the hotel
+- **Role assignment**: Specify role during invitation
+- **Owner designation**: Option to make new users hotel owners
 
-### Role-Based Dashboards
-- Each role has a customized dashboard showing relevant metrics and functions
-- Users can only access features permitted by their role
-- Permissions can be further customized in Settings → Permissions
+### For Users
+- **Clear invitation details**: See exactly which hotel and what role they're invited to
+- **Explicit acceptance**: Users must actively accept invitations
+- **Option to reject**: Can reject invitations without losing their account
+- **Flexible onboarding**: Can still set up own hotel if they reject all invites
+- **No complex links**: Just sign up with invited email address
 
-### Multi-Hotel Support
-- Users can be invited to multiple hotels
-- Each user has a primary hotel (from profile.hotel_id)
-- Users can switch between managed hotels via hotel switcher
-- `hotel_memberships` table tracks user's role in each hotel
+### Security
+- **RLS Policies**: Row-level security ensures users only see their own invitations
+- **Email verification**: Invitations matched by email address
+- **Status tracking**: All invitations have clear status (pending, accepted, rejected)
+- **Expiration**: Invitations expire after 30 days (for future enforcement)
 
 ## Troubleshooting
 
-### User clicks invite but nothing happens
-- Check if the URL has all required parameters: `email`, `hotelId`, and `role`
-- If user is not logged in and doesn't see signup form, their browser may have cached the page
+### User doesn't see pending invitations after signup
+- Verify the email used in signup matches the invited email (case-insensitive)
+- Check the invitations table to confirm invitation exists and has status='pending'
+- Ensure the invitation hasn't expired
 
-### User signs up but doesn't see dashboard
-- Check that the email in the URL matches the email used for signup
-- Verify hotel_id is valid and exists in the database
-- Check browser console for errors
+### User was added but doesn't see the hotel
+- User may need to refresh the page or log out/in
+- Check that hotel_id is correctly set in profiles table
+- Verify hotel_memberships entry was created
 
-### User has wrong role in dashboard
-- Verify the invite URL had correct role parameter
-- Check `profiles.role` and `hotel_memberships.role` in database
-- Use Settings → Team to update the role if needed
+### Admin can't see pending invitations in settings
+- Make sure you have admin or manager role
+- Check that invitation status is 'pending' (not 'accepted' or 'rejected')
+- Verify the invitation belongs to your hotel
 
-### Already-existing user gets permission error
-- Check that user's profile has `disabled: false`
-- Verify `hotel_memberships` entry exists for user + hotel combination
-- Check role permissions in Settings → Permissions
+### Email already has an account
+- If user already exists in system, they are immediately added instead of getting pending invite
+- They'll see the new hotel when they next log in
+- No invitation record is created in this case
 
 ## Future Enhancements
 
-Potential improvements for the invite system:
-1. **Automated email sending**: Send invitation emails directly from the app
-2. **Invite expiration**: Set expiration dates on invite links
-3. **Bulk invites**: Invite multiple users at once via CSV
-4. **Invite tracking**: See which invites have been accepted
-5. **Invite cancellation**: Cancel pending invites
-6. **Custom invite messages**: Personalize invitation text
-7. **QR code invites**: Generate QR codes for easier mobile sharing
+Potential improvements:
+1. **Email notifications**: Send automated emails to invited users
+2. **Bulk invites**: Invite multiple users via CSV
+3. **Invite expiration enforcement**: Automatically expire old invitations
+4. **Invitation reminders**: Remind users of pending invitations
+5. **Custom invite messages**: Add personalized message to invitations
+6. **Invite tracking**: See acceptance/rejection statistics
+7. **Team templates**: Save common role configurations as templates
