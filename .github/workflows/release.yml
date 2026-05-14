@@ -58,16 +58,9 @@ jobs:
         if: steps.check_tag.outputs.exists == 'false'
         run: npm run build
 
-      - name: Push tag to lhoxtencer-builds
+      - name: Notify - Tag created
         if: steps.check_tag.outputs.exists == 'false'
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-
-          # Add builds repo as remote using token
-          git remote add releases https://x-access-token:${{ secrets.RELEASE_REPO_TOKEN }}@github.com/Andreson13/lhoxtencer-builds.git || git remote set-url releases https://x-access-token:${{ secrets.RELEASE_REPO_TOKEN }}@github.com/Andreson13/lhoxtencer-builds.git
-
-          # Push tag only (not full source)
-          git push releases v${{ steps.version.outputs.version }}
-
-          echo "✅ Tag v${{ steps.version.outputs.version }} pushed to lhoxtencer-builds"
+          echo "✅ Version v${{ steps.version.outputs.version }} tagged and ready for release"
+          echo "📦 Build artifacts ready in dist/"
+          echo "🚀 Next: Tag will be pushed to lhoxtencer-builds for public release"
