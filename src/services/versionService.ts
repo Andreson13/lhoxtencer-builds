@@ -41,24 +41,58 @@ export function getCurrentVersion(): string {
 }
 
 /**
- * Fetch latest release from GitHub
+ * Fetch latest release from GitHub (or tags if no releases exist)
  */
 export async function fetchLatestRelease(): Promise<GithubRelease | null> {
   try {
-    const response = await fetch(`${GITHUB_API_URL}/latest`, {
+    // Try releases endpoint first
+    const releaseResponse = await fetch(`${GITHUB_API_URL}/releases/latest`, {
       headers: {
         Accept: "application/vnd.github.v3+json",
       },
       cache: "no-store",
     });
 
-    if (!response.ok) {
-      console.warn(`GitHub API returned ${response.status}`);
-      return null;
+    if (releaseResponse.ok) {
+      const release = await releaseResponse.json();
+      return release;
     }
 
-    const release = await response.json();
-    return release;
+    // Fallback to tags if no releases
+    if (releaseResponse.status === 404) {
+      console.log("No official releases, checking tags...");
+      const tagsResponse = await fetch(`${GITHUB_API_URL}/tags?per_page=1`, {
+        headers: {
+          Accept: "application/vnd.github.v3+json",
+        },
+        cache: "no-store",
+      });
+
+      if (!tagsResponse.ok) {
+        console.warn(`GitHub API tags returned ${tagsResponse.status}`);
+        return null;
+      }
+
+      const tags = await tagsResponse.json();
+      if (tags.length === 0) {
+        console.warn("No tags found");
+        return null;
+      }
+
+      const latestTag = tags[0];
+      return {
+        tag_name: latestTag.name,
+        name: `Release ${latestTag.name}`,
+        draft: false,
+        prerelease: false,
+        published_at: new Date().toISOString(),
+        body: "Latest version from git tag",
+        assets: [],
+      };
+    }
+
+    console.warn(`GitHub API returned ${releaseResponse.status}`);
+    return null;
   } catch (error) {
     console.error("❌ Failed to fetch latest release from GitHub:", error);
     return null;
