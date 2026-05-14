@@ -39,6 +39,10 @@ const SettingsPage = () => {
   const [permTargetStaff, setPermTargetStaff] = useState<any>(null);
   const [staffPermissions, setStaffPermissions] = useState<Record<string, boolean>>({});
 
+  // Delete staff state
+  const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false);
+  const [staffToDelete, setStaffToDelete] = useState<any>(null);
+
   // Hotel form state
   const [hotelName, setHotelName] = useState(hotel?.name || '');
   const [hotelPhone, setHotelPhone] = useState(hotel?.phone || '');
@@ -130,6 +134,28 @@ const SettingsPage = () => {
       if (error) throw error;
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['staff'] }); toast.success(t('settings.team.roleUpdated')); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const deleteStaffMember = useMutation({
+    mutationFn: async (userId: string) => {
+      const { error: memberError } = await (supabase as any)
+        .from('hotel_memberships')
+        .delete()
+        .eq('hotel_id', hotel!.id)
+        .eq('user_id', userId);
+      if (memberError) throw memberError;
+
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ hotel_id: null, disabled: true })
+        .eq('id', userId);
+      if (profileError) throw profileError;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['staff'] });
+      toast.success('Membre supprimé avec succès');
+    },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -248,13 +274,26 @@ const SettingsPage = () => {
                     <TableCell><Badge variant={s.disabled ? 'destructive' : 'default'}>{s.disabled ? t('common.disabled') : t('common.active')}</Badge></TableCell>
                     <TableCell>
                       {s.id !== profile?.id && (
-                        <Button size="sm" variant="outline" onClick={() => {
-                          setPermTargetStaff(s);
-                          setStaffPermissions({});
-                          setPermDialogOpen(true);
-                        }}>
-                          <ShieldCheck className="h-4 w-4 mr-1" />Permissions
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => {
+                            setPermTargetStaff(s);
+                            setStaffPermissions({});
+                            setPermDialogOpen(true);
+                          }}>
+                            <ShieldCheck className="h-4 w-4 mr-1" />Permissions
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => {
+                              setStaffToDelete(s);
+                              setDeleteConfirmDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       )}
                     </TableCell>
                   </TableRow>
@@ -495,6 +534,44 @@ const SettingsPage = () => {
                 setPermDialogOpen(false);
               } catch (e: any) { toast.error(e.message); }
             }}>Sauvegarder</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Staff Confirmation Dialog */}
+      <Dialog open={deleteConfirmDialogOpen} onOpenChange={setDeleteConfirmDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Supprimer le membre</DialogTitle>
+            <DialogDescription>
+              Êtes-vous sûr de vouloir supprimer {staffToDelete?.full_name || staffToDelete?.email} de votre équipe ?
+              Cette action ne peut pas être annulée.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 text-sm text-destructive">
+            ⚠️ Le membre sera supprimé de votre hôtel et ne pourra plus accéder à l'application.
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteConfirmDialogOpen(false)}
+              disabled={deleteStaffMember.isPending}
+            >
+              Annuler
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (staffToDelete?.id) {
+                  deleteStaffMember.mutate(staffToDelete.id, {
+                    onSuccess: () => setDeleteConfirmDialogOpen(false),
+                  });
+                }
+              }}
+              disabled={deleteStaffMember.isPending}
+            >
+              {deleteStaffMember.isPending ? 'Suppression...' : 'Supprimer'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
