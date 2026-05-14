@@ -17,11 +17,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { Building2, Users, CreditCard, Plus, Lock, Sparkles, MapPin, Phone, Mail, Pencil, Receipt, Award, ShieldCheck, Trash2 } from 'lucide-react';
+import { Building2, Users, CreditCard, Plus, Lock, Sparkles, MapPin, Phone, Mail, Pencil, Receipt, Award, ShieldCheck, Trash2, Info } from 'lucide-react';
 import { getHotelSetting, setHotelSetting, FixedCharge, DEFAULT_FIXED_CHARGES } from '@/services/taxService';
 import { DEFAULT_TIER_THRESHOLDS, TierThresholds } from '@/services/tierService';
 import { PERMISSIONS, PERMISSION_CATEGORIES } from '@/hooks/usePermission';
 import { TierBadge } from '@/components/shared/TierBadge';
+import { VersionSettings } from './VersionSettings';
 
 const SettingsPage = () => {
   useRoleGuard(['admin', 'manager']);
@@ -199,6 +200,7 @@ const SettingsPage = () => {
           <TabsTrigger value="taxes" className="rounded-xl"><Receipt className="h-4 w-4 mr-2" />Taxes & Frais</TabsTrigger>
           <TabsTrigger value="fidelite" className="rounded-xl"><Award className="h-4 w-4 mr-2" />Fidélité</TabsTrigger>
           <TabsTrigger value="subscription" className="rounded-xl"><CreditCard className="h-4 w-4 mr-2" />{t('settings.tabs.subscription')}</TabsTrigger>
+          <TabsTrigger value="version" className="rounded-xl"><Info className="h-4 w-4 mr-2" />Version</TabsTrigger>
         </TabsList>
 
         <TabsContent value="hotel" className="mt-4">
@@ -366,6 +368,10 @@ const SettingsPage = () => {
 
         <TabsContent value="fidelite" className="mt-4 space-y-4">
           <FideliteTab hotelId={hotel?.id || ''} />
+        </TabsContent>
+
+        <TabsContent value="version" className="mt-4">
+          <VersionSettings />
         </TabsContent>
 
         <TabsContent value="subscription" className="mt-4">
