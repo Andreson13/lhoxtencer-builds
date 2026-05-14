@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { addChargeToInvoice, getOrCreateInvoice, isSiesteInvoiceItem } from '@/services/transactionService';
 
-const QUEUE_KEY = 'hotel-harmony-offline-submit-queue';
+const QUEUE_KEY = 'lhoxtencer-offline-submit-queue';
 
 type GuestUpsertItem = {
   type: 'guest-upsert';

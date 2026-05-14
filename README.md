@@ -1,6 +1,6 @@
-# Hotel Harmony
+# Lhoxtencer
 
-Hotel Harmony now supports three delivery modes from the same codebase:
+Lhoxtencer now supports three delivery modes from the same codebase:
 
 1. Web SPA with installable PWA support for phones and tablets.
 2. Desktop shell via Electron for Windows installation.

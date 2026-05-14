@@ -2,7 +2,7 @@ import { QueryClient } from '@tanstack/react-query';
 import type { Persister, PersistedClient } from '@tanstack/react-query-persist-client';
 import { del, get, set } from 'idb-keyval';
 
-const QUERY_CACHE_KEY = 'hotel-harmony-react-query-cache';
+const QUERY_CACHE_KEY = 'lhoxtencer-react-query-cache';
 
 export const queryClient = new QueryClient({
   defaultOptions: {

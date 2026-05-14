@@ -57,7 +57,7 @@ export const AppLayout = () => {
       .filter(Boolean)
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
       .join(' / ');
-    const hotelName = hotel?.name || 'Hotel Harmony';
+    const hotelName = hotel?.name || 'Lhoxtencer';
     document.title = section ? `${hotelName} - ${section}` : hotelName;
   }, [hotel?.name, location.pathname]);
 

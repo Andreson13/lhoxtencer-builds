@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "=== Hotel Harmony Production Build Verification ==="
+echo "=== Lhoxtencer Production Build Verification ==="
 echo ""
 
 # Color codes

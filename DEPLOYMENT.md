@@ -1,6 +1,6 @@
-# Hotel Harmony - Universal Deployment Guide
+# Lhoxtencer - Universal Deployment Guide
 
-This guide explains how to deploy Hotel Harmony to any hosting platform and fix the QR code/asset loading issues.
+This guide explains how to deploy Lhoxtencer to any hosting platform and fix the QR code/asset loading issues.
 
 ## The Problem
 
@@ -302,7 +302,7 @@ Create `.env` if you need to configure for production:
 ```bash
 # .env
 VITE_API_URL=https://your-api.example.com
-VITE_APP_NAME=Hotel Harmony
+VITE_APP_NAME=Lhoxtencer
 ```
 
 Reference in code:

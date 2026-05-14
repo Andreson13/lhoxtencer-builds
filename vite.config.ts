@@ -21,9 +21,9 @@ export default defineConfig(({ mode }) => ({
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["robots.txt", "pwa-192.svg", "pwa-512.svg"],
-      manifest: { 
-        name: "Hotel Harmony",
-        short_name: "Harmony",
+      manifest: {
+        name: "Lhoxtencer",
+        short_name: "Lhoxtencer",
         description: "Gestion hôtelière sur desktop, mobile et tablette.",
         theme_color: "#0f172a",
         background_color: "#f8fafc",

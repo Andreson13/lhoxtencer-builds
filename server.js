@@ -1,7 +1,7 @@
 /**
- * Universal Express Server for Hotel Harmony
+ * Universal Express Server for Lhoxtencer
  * Works with any Node.js hosting (Heroku, Railway, Render, custom servers, etc)
- * 
+ *
  * Usage: node server.js
  * Port: 3000 (or process.env.PORT)
  */
@@ -79,6 +79,6 @@ app.use((err, req, res, next) => {
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🏨 Hotel Harmony running at http://0.0.0.0:${PORT}`);
+  console.log(`🏨 Lhoxtencer running at http://0.0.0.0:${PORT}`);
   console.log(`   Local: http://localhost:${PORT}`);
 });

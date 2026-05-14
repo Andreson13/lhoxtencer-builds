@@ -2,7 +2,7 @@
 
 ## Problem
 
-When users backgrounded the Hotel Harmony app and returned after a few minutes, the data remained stale:
+When users backgrounded the Lhoxtencer app and returned after a few minutes, the data remained stale:
 - Data was cached by React Query
 - No mechanism to refresh when app regained focus
 - Users had to manually refresh the page to see updated data
@@ -167,7 +167,7 @@ User returns to app
 
 ## Testing
 
-1. Open Hotel Harmony → go to any data page (Reservations, Rooms, etc.)
+1. Open Lhoxtencer → go to any data page (Reservations, Rooms, etc.)
 2. Minimize the browser window (or open another tab)
 3. Wait 30+ seconds
 4. Return to the app

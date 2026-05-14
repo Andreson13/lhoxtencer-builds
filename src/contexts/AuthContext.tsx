@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
 import { useVisibilityRefresh } from '@/hooks/useVisibilityRefresh';
 
-const PROFILE_STORAGE_KEY = 'hotel-harmony-auth-profile';
+const PROFILE_STORAGE_KEY = 'lhoxtencer-auth-profile';
 
 export interface Profile {
   id: string;

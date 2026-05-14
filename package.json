@@ -1,9 +1,9 @@
 {
-  "name": "hotel-harmony",
+  "name": "lhoxtencer",
   "private": true,
   "version": "1.0.0",
-  "description": "Hotel Harmony desktop, web, and PWA application for hotel operations.",
-  "author": "Hotel Harmony",
+  "description": "Lhoxtencer desktop, web, and PWA application for hotel operations.",
+  "author": "Lhoxtencer",
   "type": "module",
   "main": "electron/main.mjs",
   "scripts": {
@@ -115,8 +115,8 @@
     "wait-on": "^8.0.3"
   },
   "build": {
-    "appId": "com.hotelharmony.desktop",
-    "productName": "Hotel Harmony",
+    "appId": "com.lhoxtencer.desktop",
+    "productName": "Lhoxtencer",
     "asar": true,
     "directories": {
       "output": "release"
@@ -130,7 +130,7 @@
       "target": [
         "nsis"
       ],
-      "artifactName": "HotelHarmony-Setup-${version}.${ext}",
+      "artifactName": "Lhoxtencer-Setup-${version}.${ext}",
       "icon": "build/icon.ico",
       "signAndEditExecutable": false
     },
@@ -139,14 +139,14 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Hotel Harmony",
+      "shortcutName": "Lhoxtencer",
       "deleteAppDataOnUninstall": false,
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerHeaderIcon": "build/icon.ico",
       "installerSidebar": "build/installerSidebar.bmp",
       "uninstallerSidebar": "build/installerSidebar.bmp",
-      "artifactName": "HotelHarmony-Installer-${version}.${ext}"
+      "artifactName": "Lhoxtencer-Installer-${version}.${ext}"
     }
   }
 }

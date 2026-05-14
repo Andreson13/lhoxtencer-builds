@@ -21,7 +21,7 @@ const createMainWindow = () => {
     minHeight: 760,
     backgroundColor: '#0f172a',
     autoHideMenuBar: true,
-    title: 'Hotel Harmony',
+    title: 'Lhoxtencer',
     icon: getWindowIconPath(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
@@ -48,7 +48,7 @@ const createMainWindow = () => {
 };
 
 app.whenReady().then(() => {
-  app.setAppUserModelId('com.hotelharmony.desktop');
+  app.setAppUserModelId('com.lhoxtencer.desktop');
   createMainWindow();
 
   app.on('activate', () => {

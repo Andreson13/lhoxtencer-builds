@@ -899,13 +899,13 @@ const I18nContext = createContext<I18nContextType>({
 export const I18nProvider = ({ children }: { children: ReactNode }) => {
   const [lang, setLang] = useState<Lang>(() => {
     if (typeof window === 'undefined') return 'fr';
-    const stored = window.localStorage.getItem('hotel-harmony-lang');
+    const stored = window.localStorage.getItem('lhoxtencer-lang');
     return stored === 'en' ? 'en' : 'fr';
   });
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem('hotel-harmony-lang', lang);
+      window.localStorage.setItem('lhoxtencer-lang', lang);
     }
   }, [lang]);
 

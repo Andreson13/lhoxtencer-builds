@@ -14,7 +14,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/admin-rooms")({
   head: () => ({
     meta: [
-      { title: "Room Management — Hotel Harmony" },
+      { title: "Room Management — Lhoxtencer" },
       { name: "description", content: "Manage room categories, images, and pricing." },
     ],
   }),
