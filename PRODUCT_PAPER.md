@@ -1,11 +1,11 @@
-# HôtelManager Pro — Product Paper
+# Lhoxtencer — Product Paper
 ### The All-in-One Hotel Management Platform for African & Emerging-Market Hotels
 
 ---
 
-## What is HôtelManager Pro?
+## What is Lhoxtencer?
 
-**HôtelManager Pro** is a complete, cloud-based hotel management system built for independent hotels, small chains, and hospitality groups. It replaces paper logs, spreadsheets, and disconnected tools with a single platform that connects every department — Reception, Restaurant, Housekeeping, Accounting, and Management — in real time.
+**Lhoxtencer** is a complete, cloud-based hotel management system built for independent hotels, small chains, and hospitality groups. It replaces paper logs, spreadsheets, and disconnected tools with a single platform that connects every department — Reception, Restaurant, Housekeeping, Accounting, and Management — in real time.
 
 Designed from the ground up for the realities of West and Central African hotel operations, it works in **French and English**, handles **FCFA currency** natively, and is resilient enough to operate through unstable internet connections.
 
@@ -414,4 +414,4 @@ Full traceability for compliance and fraud prevention.
 
 ---
 
-*HôtelManager Pro — Built for Africa. Ready for the World.*
+*Lhoxtencer — Built for Africa. Ready for the World.*

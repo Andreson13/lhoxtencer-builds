@@ -12,7 +12,7 @@ export function SiteFooter() {
             </span>
           </div>
           <p className="mt-3 max-w-md text-sm text-navy-foreground/70">
-            Une expérience hôtelière d'exception, propulsée par HôtelManager Pro.
+            Une expérience hôtelière d'exception, propulsée par Lhoxtencer.
             Réservez en quelques clics, vivez l'inoubliable.
           </p>
         </div>
@@ -35,7 +35,7 @@ export function SiteFooter() {
         </div>
       </div>
       <div className="border-t border-navy-foreground/10 py-4 text-center text-xs text-navy-foreground/60">
-        © {new Date().getFullYear()} Maison Royale · Powered by HôtelManager Pro
+        © {new Date().getFullYear()} Maison Royale · Powered by Lhoxtencer
       </div>
     </footer>
   );

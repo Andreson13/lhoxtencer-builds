@@ -50,7 +50,7 @@ const LoginPage = () => {
           <div className="mx-auto mb-4 p-3 rounded-xl bg-primary/10">
             <Building2 className="h-10 w-10 text-primary" />
           </div>
-          <CardTitle className="text-2xl font-semibold">HôtelManager Pro</CardTitle>
+          <CardTitle className="text-2xl font-semibold">Lhoxtencer</CardTitle>
           <CardDescription>Connectez-vous à votre espace</CardDescription>
         </CardHeader>
         <CardContent>

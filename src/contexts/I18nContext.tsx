@@ -543,7 +543,7 @@ const translations: Record<string, Record<Lang, string>> = {
   // Receptionist
   'receptionist.label': { fr: 'Réceptionniste', en: 'Receptionist' },
   // Onboarding
-  'onboarding.welcome': { fr: 'Bienvenue sur HôtelManager Pro', en: 'Welcome to HôtelManager Pro' },
+  'onboarding.welcome': { fr: 'Bienvenue sur Lhoxtencer', en: 'Welcome to Lhoxtencer' },
   'onboarding.step1': { fr: 'Créez votre hôtel', en: 'Create your hotel' },
   'onboarding.step2': { fr: 'Ajoutez une chambre', en: 'Add a room' },
   'onboarding.done': { fr: 'Vous êtes prêt !', en: "You're all set!" },

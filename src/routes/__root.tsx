@@ -36,7 +36,7 @@ export const Route = createRootRoute({
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Maison Royale — Luxury Hotel Booking" },
       { name: "description", content: "Reserve your stay at Maison Royale. Premium suites, concierge service, and a seamless guest experience." },
-      { name: "author", content: "HôtelManager Pro" },
+      { name: "author", content: "Lhoxtencer" },
       { property: "og:title", content: "Maison Royale — Luxury Hotel Booking" },
       { property: "og:description", content: "Reserve your stay at Maison Royale. Premium suites, concierge service, and a seamless guest experience." },
       { property: "og:type", content: "website" },

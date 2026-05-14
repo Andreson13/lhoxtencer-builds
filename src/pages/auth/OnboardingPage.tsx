@@ -39,7 +39,7 @@ const OnboardingPage = () => {
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 p-3 rounded-xl bg-primary/10"><Building2 className="h-10 w-10 text-primary" /></div>
           <CardTitle className="text-2xl font-semibold">
-            {step === 1 ? 'Bienvenue sur HôtelManager Pro' : step === 2 ? 'Créez votre hôtel' : 'Vous êtes prêt !'}
+            {step === 1 ? 'Bienvenue sur Lhoxtencer' : step === 2 ? 'Créez votre hôtel' : 'Vous êtes prêt !'}
           </CardTitle>
           <CardDescription>
             {step === 1 ? 'Configurons votre établissement' : step === 2 ? 'Informations de votre hôtel' : 'Votre hôtel est configuré'}

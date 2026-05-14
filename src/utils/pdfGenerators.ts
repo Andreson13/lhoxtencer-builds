@@ -160,7 +160,7 @@ const addFooter = (doc: jsPDF) => {
     doc.setDrawColor(200, 200, 200);
     doc.setLineWidth(0.3);
     doc.line(14, pageHeight - 12, pageWidth - 14, pageHeight - 12);
-    doc.text('HôtelManager Pro', pageWidth / 2, pageHeight - 8, { align: 'center' });
+    doc.text('Lhoxtencer', pageWidth / 2, pageHeight - 8, { align: 'center' });
     doc.text(`Page ${i}/${pageCount}`, pageWidth - 14, pageHeight - 8, { align: 'right' });
     doc.setTextColor(0, 0, 0);
   }

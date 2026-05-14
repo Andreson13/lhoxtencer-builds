@@ -88,7 +88,7 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
         <Building2 className="h-8 w-8 text-sidebar-primary shrink-0" />
         {!collapsed && (
           <div className="overflow-hidden">
-            <h1 className="text-lg font-semibold truncate">HôtelManager Pro</h1>
+            <h1 className="text-lg font-semibold truncate">Lhoxtencer</h1>
             {hotel && <p className="text-xs text-sidebar-foreground/60 truncate">{hotel.name}</p>}
           </div>
         )}
