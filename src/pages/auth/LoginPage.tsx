@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Building2 } from 'lucide-react';
+import { Building2, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,6 +26,7 @@ const LoginPage = () => {
   const [searchParams] = useSearchParams();
   const { lang, setLang } = useI18n();
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
   });
@@ -75,7 +76,22 @@ const LoginPage = () => {
             </div>
             <div>
               <Label htmlFor="password">Mot de passe</Label>
-              <Input id="password" type="password" {...register('password')} placeholder="••••••••" />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  {...register('password')}
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  disabled={loading}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               {errors.password && <p className="text-sm text-destructive mt-1">{errors.password.message}</p>}
             </div>
             <Button type="submit" className="w-full" disabled={loading}>

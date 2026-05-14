@@ -19,7 +19,18 @@ export default defineConfig(({ mode }) => ({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["robots.txt", "pwa-192.svg", "pwa-512.svg"],
+      includeAssets: [
+        "robots.txt",
+        "pwa-192.svg",
+        "pwa-512.svg",
+        "logo-64x64.png",
+        "logo-96x96.png",
+        "logo-128x128.png",
+        "logo-192x192.png",
+        "logo-256x256.png",
+        "logo-384x384.png",
+        "logo-512x512.png"
+      ],
       manifest: {
         name: "Lhoxtencer",
         short_name: "Lhoxtencer",
