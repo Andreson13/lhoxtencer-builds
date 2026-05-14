@@ -25,6 +25,13 @@
     <!-- PWA Manifest -->
     <link rel="manifest" href="./manifest.webmanifest" />
 
+    <!-- Stylesheet - no crossorigin needed for same-origin stylesheet -->
+    <style>
+      /* Inline styles to avoid eval() issues */
+      body { margin: 0; padding: 0; }
+      #root { width: 100%; height: 100vh; }
+    </style>
+
     <!-- Open Graph -->
     <meta property="og:title" content="Lhoxtencer" />
     <meta property="og:description" content="Lhoxtencer - Gestion hôtelière sur desktop, mobile et tablette." />
