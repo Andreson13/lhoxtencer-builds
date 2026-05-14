@@ -1,0 +1,101 @@
+name: Auto Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'package.json'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from package.json
+        id: version
+        run: |
+          VERSION=$(grep '"version"' package.json | head -1 | sed 's/.*"version": "\(.*\)".*/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check if tag exists
+        id: check_tag
+        run: |
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create tag
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git tag -a v${{ steps.version.outputs.version }} -m "Release version ${{ steps.version.outputs.version }}"
+          git push origin v${{ steps.version.outputs.version }}
+
+      - name: Create Release
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          release_name: Version ${{ steps.version.outputs.version }}
+          body: |
+            ## Auto-Update Release
+
+            **Version:** ${{ steps.version.outputs.version }}
+
+            This release includes the latest version of the Hotel Harmony management system with:
+            - ✅ Automatic version checking via GitHub releases
+            - ✅ Progressive Web App (PWA) support
+            - ✅ Offline functionality
+            - ✅ Service Worker auto-updates
+
+            ### Installation
+            Visit the application to automatically receive this update.
+
+            **Released:** ${{ github.event.head_commit.timestamp }}
+          draft: false
+          prerelease: false
+
+      - name: Push to lhoxtencer-builds
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          git remote add builds https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/Andreson13/lhoxtencer-builds.git || true
+          git push builds v${{ steps.version.outputs.version }}
+
+      - name: Create Release on lhoxtencer-builds
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          release_name: Version ${{ steps.version.outputs.version }}
+          body: |
+            ## Lhoxtencer Build Release
+
+            **Version:** ${{ steps.version.outputs.version }}
+
+            This is the official build release for Lhoxtencer (Hotel Harmony).
+
+            ### Features
+            - 🏨 Hotel Management System
+            - 📱 Progressive Web App
+            - 🔄 Automatic Updates
+            - 🌐 Offline Support
+
+            **Build Info:**
+            - Commit: ${{ github.sha }}
+            - Author: ${{ github.actor }}
+            - Timestamp: ${{ github.event.head_commit.timestamp }}
+          draft: false
+          prerelease: false
+          repository: Andreson13/lhoxtencer-builds
