@@ -43,17 +43,17 @@ export function useAppResume() {
         console.log(`🔄 App resume triggered (${reason})`);
 
         // 1. Direct REST health ping to wake the network stack
+        // (no auth header needed — 401 response still proves connectivity)
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 5000);
           await fetch(`${supabase.supabaseUrl}/rest/v1/?`, {
             method: 'HEAD',
-            headers: { 'Authorization': `Bearer ${(await supabase.auth.getSession()).data?.session?.access_token || ''}` },
             signal: controller.signal,
           }).catch(() => null);
           clearTimeout(timeoutId);
         } catch (err) {
-          console.warn('Health ping failed:', err);
+          console.warn('[auth] Health ping failed:', err);
         }
 
         // 2. Refresh auth session if JWT is near expiry
@@ -68,40 +68,36 @@ export function useAppResume() {
             const nowSeconds = Math.floor(Date.now() / 1000);
             const secondsUntilExpiry = expiresAt - nowSeconds;
 
+            console.log(`[auth] session check: ${secondsUntilExpiry}s until expiry`);
             if (secondsUntilExpiry < 300) {
-              console.log('🔑 Refreshing auth session...');
+              console.log('[auth] proactively refreshing session (< 5 minutes remaining)...');
               await Promise.race([
                 supabase.auth.refreshSession(),
                 new Promise((_, reject) => setTimeout(() => reject(new Error('Refresh timeout')), 5000))
               ]);
+              console.log('[auth] session refresh complete');
             }
           }
         } catch (err) {
-          console.warn('Auth refresh failed:', err);
+          console.warn('[auth] Auth refresh failed:', err);
         }
 
-        // 3. Reconnect realtime
-        try {
-          await Promise.race([
-            supabase.realtime.reconnect(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Realtime timeout')), 5000))
-          ]);
-          console.log('🔌 Realtime reconnected');
-        } catch (err) {
-          console.warn('Realtime reconnect failed:', err);
-        }
+        // 3. Realtime reconnection is handled automatically by Supabase
+        // No manual reconnect call needed
 
         // 4. Dispatch global resume event for realtime channels to self-heal
         window.dispatchEvent(new Event('hotelmanager:app-resume'));
 
         // 5. Invalidate queries to trigger refetch on next access
-        console.log('📡 Invalidating queries...');
+        console.log('[auth] 📡 Invalidating queries...');
         queryClient.invalidateQueries();
 
         // 6. Refetch active queries with timeout (async, don't wait)
         queryClient.refetchQueries({ type: 'active' }).catch(() => {
-          console.warn('Query refetch had errors, will retry on next focus');
+          console.warn('[auth] Query refetch had errors, will retry on next focus');
         });
+
+        console.log('[auth] ✅ App resume complete');
 
       } catch (error) {
         console.error('Error during app resume:', error);

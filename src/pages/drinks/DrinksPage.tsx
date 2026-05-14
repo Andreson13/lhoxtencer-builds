@@ -71,19 +71,21 @@ const DrinksPage = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('inventory_items' as any)
-        .select('id, name, unit, buying_price, selling_price, current_stock, minimum_stock, category, is_minibar, hotel_id, created_at, updated_at')
+        .select('id, name, category, unit, buying_price, selling_price, current_stock, minimum_stock, is_minibar, hotel_id, created_at')
         .eq('hotel_id', hotel!.id)
         .eq('is_minibar', true)
-        .order('name');
+        .order('category, name');
       if (error) throw error;
-      return data;
+      return data || [];
     },
     enabled: !!hotel?.id,
   });
 
   const saveMutation = useMutation({
     mutationFn: async (values: any) => {
-      const payload = { ...values, hotel_id: hotel!.id, is_minibar: true };
+      if (!hotel?.id) throw new Error('Hotel ID not available');
+      const { category, ...rest } = values;
+      const payload = { ...rest, hotel_id: hotel.id, is_minibar: true };
       if (editing) {
         const { error } = await supabase.from('inventory_items' as any).update(payload).eq('id', editing.id);
         if (error) throw error;
@@ -93,7 +95,7 @@ const DrinksPage = () => {
       }
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['drinks'] });
+      qc.invalidateQueries({ queryKey: ['drinks', hotel?.id] });
       toast.success(editing ? 'Boisson mise à jour' : 'Boisson ajoutée');
       setDialogOpen(false);
       setEditing(null);
@@ -108,7 +110,7 @@ const DrinksPage = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['drinks'] });
+      qc.invalidateQueries({ queryKey: ['drinks', hotel?.id] });
       toast.success('Boisson supprimée');
       setDeleteItem(null);
     },
@@ -123,7 +125,7 @@ const DrinksPage = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['drinks'] });
+      qc.invalidateQueries({ queryKey: ['drinks', hotel?.id] });
       toast.success(`${sellQuantity}x ${sellItem.name} vendu(s)`);
       setSellDialogOpen(false);
       setSellItem(null);
@@ -134,7 +136,11 @@ const DrinksPage = () => {
 
   const openEdit = (item: any) => {
     setEditing(item);
-    Object.entries(item).forEach(([k, v]) => { if (v != null && k !== 'is_minibar') setValue(k as any, v); });
+    Object.entries(item).forEach(([k, v]) => {
+      if (v != null && k !== 'is_minibar' && k !== 'category_id') {
+        setValue(k as any, v);
+      }
+    });
     setDialogOpen(true);
   };
 
@@ -196,14 +202,13 @@ const DrinksPage = () => {
             </TableHeader>
             <TableBody>
               {filtered.map(item => {
-                const category = DRINK_CATEGORIES.find(c => c.id === item.category);
                 return (
                   <TableRow key={item.id}>
                     <TableCell className="font-medium flex items-center gap-2">
                       {item.current_stock <= (item.minimum_stock || 3) && <AlertTriangle className="h-4 w-4 text-destructive" />}
                       {item.name}
                     </TableCell>
-                    <TableCell><Badge variant="outline">{category?.label || item.category || 'Autre'}</Badge></TableCell>
+                    <TableCell><Badge variant="outline">{item.category ? item.category.charAt(0).toUpperCase() + item.category.slice(1) : 'Other'}</Badge></TableCell>
                     <TableCell>{item.unit}</TableCell>
                     <TableCell className="text-right">{formatFCFA(item.buying_price)}</TableCell>
                     <TableCell className="text-right font-semibold text-green-600">{formatFCFA(item.selling_price)}</TableCell>

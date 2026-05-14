@@ -1,19 +1,21 @@
-import { app, BrowserWindow, shell } from 'electron';
-import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+const { app, BrowserWindow, shell } = require('electron');
+const path = require('path');
+const { pathToFileURL } = require('url');
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 
 const getWindowIconPath = () => {
   if (isDevelopment) {
     return path.join(__dirname, '..', 'build', 'icon.ico');
   }
-
   return path.join(__dirname, 'assets', 'icon.ico');
 };
 
 const createMainWindow = () => {
+  const iconPath = getWindowIconPath();
+  console.log('Loading icon from:', iconPath);
+  console.log('Is development mode:', isDevelopment);
+
   const mainWindow = new BrowserWindow({
     width: 1480,
     height: 960,
@@ -22,9 +24,8 @@ const createMainWindow = () => {
     backgroundColor: '#0f172a',
     autoHideMenuBar: true,
     title: 'Lhoxtencer',
-    icon: getWindowIconPath(),
+    icon: iconPath,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.mjs'),
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: false,

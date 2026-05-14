@@ -1,9 +1,12 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
 import { useVisibilityRefresh } from '@/hooks/useVisibilityRefresh';
 
 const PROFILE_STORAGE_KEY = 'lhoxtencer-auth-profile';
+
+// Module-level guard to prevent double listener registration (HMR, React StrictMode edge cases)
+let authListenerRegistered = false;
 
 export interface Profile {
   id: string;
@@ -43,6 +46,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const currentUserIdRef = useRef<string | null>(null);
+  const initializedRef = useRef(false);
 
   const persistProfile = (value: Profile | null) => {
     setProfile(value);
@@ -95,12 +100,66 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
-    let initialized = false;
-
-    supabase.auth.getSession()
-      .then(async ({ data: { session } }) => {
+    // Guard against double listener registration (HMR, React StrictMode edge cases)
+    if (authListenerRegistered) {
+      // Prevent double registration, but still sync session state
+      supabase.auth.getSession().then(({ data: { session } }) => {
         setSession(session);
         setUser(session?.user ?? null);
+        setLoading(false);
+      });
+      return;
+    }
+    authListenerRegistered = true;
+
+    // Step 1: Register listener FIRST (Supabase official guidance to prevent missed events)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        console.log(`[auth] event: ${event}`, session?.user?.id ?? 'no user');
+
+        // Skip INITIAL_SESSION — getSession() below handles the initial state
+        if (event === 'INITIAL_SESSION') return;
+
+        // Synchronous state updates ONLY — safe inside the auth lock context
+        setSession(session);
+        setUser(session?.user ?? null);
+        currentUserIdRef.current = session?.user?.id ?? null;
+
+        if (!session?.user) {
+          persistProfile(null);
+          setLoading(false);
+          return;
+        }
+
+        if (!initializedRef.current) {
+          // Still bootstrapping — getSession().then() below handles profile fetch
+          return;
+        }
+
+        // Restore cached profile immediately (synchronous, no Supabase call)
+        const cachedProfile = restoreProfile(session.user.id);
+        if (cachedProfile) {
+          persistProfile(cachedProfile);
+        }
+
+        // Defer ALL Supabase calls until AFTER the auth lock releases
+        const userId = session.user.id;
+        setTimeout(() => {
+          if (currentUserIdRef.current !== userId) return; // User signed out
+          fetchProfile(userId).catch(error => {
+            console.error('[auth] Failed to refresh profile after auth state change', error);
+          });
+        }, 0);
+      }
+    );
+
+    // Step 2: Bootstrap session AFTER listener is registered (prevents missed events)
+    supabase.auth.getSession()
+      .then(async ({ data: { session } }) => {
+        console.log('[auth] getSession resolved', session?.user?.id ?? 'no session');
+        setSession(session);
+        setUser(session?.user ?? null);
+        currentUserIdRef.current = session?.user?.id ?? null;
 
         if (session?.user) {
           const cachedProfile = restoreProfile(session.user.id);
@@ -111,7 +170,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           try {
             await fetchProfile(session.user.id);
           } catch (error) {
-            console.error('Failed to load profile during session bootstrap', error);
+            console.error('[auth] Failed to load profile during session bootstrap', error);
             if (!cachedProfile) {
               persistProfile(null);
             }
@@ -122,38 +181,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       })
       .finally(() => {
         setLoading(false);
-        initialized = true;
+        initializedRef.current = true;
       });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-
-        if (!session?.user) {
-          persistProfile(null);
-          setLoading(false);
-          return;
-        }
-
-        if (!initialized) {
-          return;
-        }
-
-        const cachedProfile = restoreProfile(session.user.id);
-        if (cachedProfile) {
-          persistProfile(cachedProfile);
-        }
-
-        try {
-          await fetchProfile(session.user.id);
-        } catch (error) {
-          console.error('Failed to refresh profile after auth state change', error);
-        }
-      }
-    );
-
-    return () => subscription.unsubscribe();
+    return () => {
+      authListenerRegistered = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {

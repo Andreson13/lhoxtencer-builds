@@ -4,8 +4,7 @@
   "version": "1.0.0",
   "description": "Lhoxtencer desktop, web, and PWA application for hotel operations.",
   "author": "Lhoxtencer",
-  "type": "module",
-  "main": "electron/main.mjs",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
     "dev:web": "vite",

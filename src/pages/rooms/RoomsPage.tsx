@@ -176,6 +176,20 @@ const RoomsPage = () => {
   const housekeepingCount = reconciledRooms.filter((room: any) => room.status === 'housekeeping').length;
   const maintenanceCount = reconciledRooms.filter((room: any) => ['maintenance', 'out_of_order'].includes(room.status)).length;
 
+  const groupedByFloor = filtered.reduce((acc: any, room: any) => {
+    const floor = room.floor;
+    if (!acc[floor]) acc[floor] = [];
+    acc[floor].push(room);
+    return acc;
+  }, {});
+
+  const sortedFloors = Object.keys(groupedByFloor)
+    .map(Number)
+    .sort((a, b) => b - a);
+
+  const floorColors = ['bg-blue-50', 'bg-slate-50', 'bg-amber-50', 'bg-green-50', 'bg-purple-50', 'bg-pink-50', 'bg-indigo-50', 'bg-cyan-50'];
+  const getFloorColor = (floor: number) => floorColors[floor % floorColors.length];
+
   return (
     <div className="page-container space-y-6">
       <PageHeader title={t('rooms.title')} subtitle={`${rooms?.length || 0} ${t('rooms.subtitle')}`}>
@@ -205,25 +219,40 @@ const RoomsPage = () => {
           {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-40 rounded-xl" />)}
         </div>
       ) : filtered && filtered.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map((room: any) => (
-            <Card key={room.id} className={`border-l-4 ${statusColors[room.status] || ''}`}>
-              <CardContent className="pt-6">
-                <div className="flex justify-between items-start mb-3">
-                  <h3 className="text-2xl font-bold">{room.room_number}</h3>
-                  <StatusBadge status={room.status} />
-                </div>
-                <div className="space-y-1 text-sm text-muted-foreground">
-                  <p>{t('rooms.card.floor')} {room.floor} · {room.capacity} {t('rooms.card.capacity')}</p>
-                  {room.room_categories && <p className="text-xs"><span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: room.room_categories.color || '#6366f1' }} />{room.room_categories.name}</p>}
-                  <p className="font-semibold text-foreground">{formatFCFA(room.room_categories?.price_per_night ?? room.price_per_night)}{t('rooms.card.perNight')}</p>
-                </div>
-                <div className="flex gap-2 mt-4">
-                  <Button variant="outline" size="sm" onClick={() => openEdit(room)}><Pencil className="h-3 w-3 mr-1" />{t('common.edit')}</Button>
-                  <Button variant="outline" size="sm" className="text-destructive" onClick={() => setDeleteId(room.id)}><Trash2 className="h-3 w-3" /></Button>
-                </div>
-              </CardContent>
-            </Card>
+        <div className="space-y-8">
+          {sortedFloors.map((floor: number) => (
+            <div key={floor} className={`rounded-lg p-4 -m-4 -mx-6 px-6 pt-6 pb-6`} style={{ backgroundColor: getFloorColor(floor) }}>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-8 w-1 bg-gradient-to-b from-primary to-primary/50 rounded"></div>
+                <h2 className="text-xl font-bold text-foreground">
+                  {t('rooms.card.floor')} {floor}
+                </h2>
+                <span className="text-sm text-muted-foreground font-medium">
+                  ({groupedByFloor[floor]?.length ?? 0} {t('rooms.subtitle')})
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {groupedByFloor[floor]?.map((room: any) => (
+                  <Card key={room.id} className={`border-l-4 ${statusColors[room.status] || ''} hover:shadow-md transition-shadow`}>
+                    <CardContent className="pt-6">
+                      <div className="flex justify-between items-start mb-3">
+                        <h3 className="text-2xl font-bold">{room.room_number}</h3>
+                        <StatusBadge status={room.status} />
+                      </div>
+                      <div className="space-y-1 text-sm text-muted-foreground">
+                        <p>{room.capacity} {t('rooms.card.capacity')}</p>
+                        {room.room_categories && <p className="text-xs"><span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: room.room_categories.color || '#6366f1' }} />{room.room_categories.name}</p>}
+                        <p className="font-semibold text-foreground">{formatFCFA(room.room_categories?.price_per_night ?? room.price_per_night)}{t('rooms.card.perNight')}</p>
+                      </div>
+                      <div className="flex gap-2 mt-4">
+                        <Button variant="outline" size="sm" onClick={() => openEdit(room)}><Pencil className="h-3 w-3 mr-1" />{t('common.edit')}</Button>
+                        <Button variant="outline" size="sm" className="text-destructive" onClick={() => setDeleteId(room.id)}><Trash2 className="h-3 w-3" /></Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       ) : (

@@ -37,6 +37,8 @@ const RoomCategoriesPage = () => {
     name: '', description: '', price_per_night: 0, price_sieste: 0,
     features: [] as string[], color: '#6366f1', portal_visible: true,
     breakfast_included: false, breakfast_price: 0, extra_options: [] as ExtraOption[],
+    enable_day_pricing: true, enable_sieste_pricing: true, sieste_pricing_type: 'fixed' as 'fixed' | 'hourly',
+    price_per_hour_sieste: 0, enable_nuitee_pricing: false, price_nuitee: 0,
   });
   const [newOptionName, setNewOptionName] = useState('');
   const [newOptionPrice, setNewOptionPrice] = useState(0);
@@ -67,6 +69,12 @@ const RoomCategoriesPage = () => {
         features: form.features, color: form.color, portal_visible: form.portal_visible,
         breakfast_included: form.breakfast_included, breakfast_price: form.breakfast_price,
         extra_options: form.extra_options,
+        enable_day_pricing: form.enable_day_pricing,
+        enable_sieste_pricing: form.enable_sieste_pricing,
+        sieste_pricing_type: form.sieste_pricing_type,
+        price_per_hour_sieste: form.price_per_hour_sieste,
+        enable_nuitee_pricing: form.enable_nuitee_pricing,
+        price_nuitee: form.price_nuitee,
       };
       if (editing) {
         const { error } = await supabase.from('room_categories').update(payload).eq('id', editing.id);
@@ -108,13 +116,19 @@ const RoomCategoriesPage = () => {
       breakfast_included: (cat as any).breakfast_included ?? false,
       breakfast_price: (cat as any).breakfast_price ?? 0,
       extra_options: ((cat as any).extra_options as ExtraOption[]) || [],
+      enable_day_pricing: cat.enable_day_pricing ?? true,
+      enable_sieste_pricing: cat.enable_sieste_pricing ?? true,
+      sieste_pricing_type: cat.sieste_pricing_type || 'fixed',
+      price_per_hour_sieste: cat.price_per_hour_sieste || 0,
+      enable_nuitee_pricing: cat.enable_nuitee_pricing ?? false,
+      price_nuitee: cat.price_nuitee || 0,
     });
     setDialogOpen(true);
   };
 
   const openAdd = () => {
     setEditing(null);
-    setForm({ name: '', description: '', price_per_night: 0, price_sieste: 0, features: [], color: '#6366f1', portal_visible: true, breakfast_included: false, breakfast_price: 0, extra_options: [] });
+    setForm({ name: '', description: '', price_per_night: 0, price_sieste: 0, features: [], color: '#6366f1', portal_visible: true, breakfast_included: false, breakfast_price: 0, extra_options: [], enable_day_pricing: true, enable_sieste_pricing: true, sieste_pricing_type: 'fixed', price_per_hour_sieste: 0, enable_nuitee_pricing: false, price_nuitee: 0 });
     setDialogOpen(true);
   };
 
@@ -164,9 +178,17 @@ const RoomCategoriesPage = () => {
               </CardHeader>
               <CardContent className="space-y-3">
                 {cat.description && <p className="text-sm text-muted-foreground">{cat.description}</p>}
-                <div className="flex gap-4">
-                  <div><p className="text-xs text-muted-foreground">Prix/nuit</p><p className="text-lg font-bold">{formatFCFA(cat.price_per_night)}</p></div>
-                  {(cat.price_sieste as number) > 0 && <div><p className="text-xs text-muted-foreground">Prix sieste</p><p className="text-lg font-bold">{formatFCFA(cat.price_sieste)}</p></div>}
+                <div className="space-y-2">
+                  {cat.enable_day_pricing && <div><p className="text-xs text-muted-foreground">Prix/jour</p><p className="text-lg font-bold">{formatFCFA(cat.price_per_night)}</p></div>}
+                  {cat.enable_sieste_pricing && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Prix sieste</p>
+                      <p className="text-lg font-bold">
+                        {cat.sieste_pricing_type === 'fixed' ? formatFCFA(cat.price_sieste) : `${formatFCFA(cat.price_per_hour_sieste)}/h`}
+                      </p>
+                    </div>
+                  )}
+                  {cat.enable_nuitee_pricing && <div><p className="text-xs text-muted-foreground">Prix nuitée</p><p className="text-lg font-bold">{formatFCFA(cat.price_nuitee)}</p></div>}
                 </div>
                 {(cat as any).breakfast_included && <Badge variant="outline" className="text-xs text-green-600 border-green-300">Petit-déjeuner inclus</Badge>}
                 {!(cat as any).breakfast_included && (cat as any).breakfast_price > 0 && <Badge variant="outline" className="text-xs">PDJ: {formatFCFA((cat as any).breakfast_price)}/pers</Badge>}
@@ -190,54 +212,112 @@ const RoomCategoriesPage = () => {
 
       {/* Category Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? 'Modifier la catégorie' : 'Nouvelle catégorie'}</DialogTitle>
             <DialogDescription>Définissez le type de chambre et ses tarifs</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div><Label>Nom *</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
-            <div><Label>Description</Label><Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div><Label>Prix/nuit (FCFA)</Label><Input type="number" value={form.price_per_night} onChange={e => setForm(f => ({ ...f, price_per_night: Number(e.target.value) }))} /></div>
-              <div><Label>Prix sieste (FCFA)</Label><Input type="number" value={form.price_sieste} onChange={e => setForm(f => ({ ...f, price_sieste: Number(e.target.value) }))} /></div>
+          <div className="space-y-5">
+            <div><Label className="font-medium">Nom *</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="mt-1" /></div>
+            <div><Label className="font-medium">Description</Label><Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="mt-1" /></div>
+
+            {/* Pricing Options */}
+            <div className="border-2 rounded-lg p-4 space-y-5 bg-slate-50">
+              <Label className="font-bold text-base block">💰 Options de tarification</Label>
+
+              {/* Full Day Pricing */}
+              <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Switch checked={form.enable_day_pricing} onCheckedChange={v => setForm(f => ({ ...f, enable_day_pricing: v }))} />
+                    <Label className="text-sm font-semibold">Prix à la journée</Label>
+                  </div>
+                  {form.enable_day_pricing && <span className="text-xs text-muted-foreground">Activé</span>}
+                </div>
+                {form.enable_day_pricing && (
+                  <div><Label className="text-xs font-medium text-slate-600">Prix par jour (FCFA)</Label><Input type="number" value={form.price_per_night} onChange={e => setForm(f => ({ ...f, price_per_night: Number(e.target.value) }))} className="mt-1" /></div>
+                )}
+              </div>
+
+              {/* Siesta Pricing */}
+              <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Switch checked={form.enable_sieste_pricing} onCheckedChange={v => setForm(f => ({ ...f, enable_sieste_pricing: v }))} />
+                    <Label className="text-sm font-semibold">Sieste</Label>
+                  </div>
+                  {form.enable_sieste_pricing && <span className="text-xs text-muted-foreground">Activé</span>}
+                </div>
+                {form.enable_sieste_pricing && (
+                  <div className="space-y-3 ml-0 pt-2">
+                    <div className="flex items-center gap-3 border rounded-lg p-3 bg-blue-50 hover:bg-blue-100 cursor-pointer" onClick={() => setForm(f => ({ ...f, sieste_pricing_type: 'fixed' }))}>
+                      <input type="radio" id="sieste-fixed" name="sieste-type" checked={form.sieste_pricing_type === 'fixed'} onChange={() => setForm(f => ({ ...f, sieste_pricing_type: 'fixed' }))} className="w-4 h-4" />
+                      <label htmlFor="sieste-fixed" className="text-sm font-medium cursor-pointer flex-1">Prix fixe</label>
+                      {form.sieste_pricing_type === 'fixed' && <Input type="number" value={form.price_sieste || ''} onChange={e => { e.stopPropagation(); setForm(f => ({ ...f, price_sieste: Number(e.target.value) })); }} placeholder="Prix (FCFA)" className="w-40 h-9 ml-2" onClick={e => e.stopPropagation()} />}
+                    </div>
+                    <div className="flex items-center gap-3 border rounded-lg p-3 bg-amber-50 hover:bg-amber-100 cursor-pointer" onClick={() => setForm(f => ({ ...f, sieste_pricing_type: 'hourly' }))}>
+                      <input type="radio" id="sieste-hourly" name="sieste-type" checked={form.sieste_pricing_type === 'hourly'} onChange={() => setForm(f => ({ ...f, sieste_pricing_type: 'hourly' }))} className="w-4 h-4" />
+                      <label htmlFor="sieste-hourly" className="text-sm font-medium cursor-pointer flex-1">Prix à l'heure</label>
+                      {form.sieste_pricing_type === 'hourly' && <Input type="number" value={form.price_per_hour_sieste || ''} onChange={e => { e.stopPropagation(); setForm(f => ({ ...f, price_per_hour_sieste: Number(e.target.value) })); }} placeholder="Prix/h (FCFA)" className="w-40 h-9 ml-2" onClick={e => e.stopPropagation()} />}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Night Pricing */}
+              <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Switch checked={form.enable_nuitee_pricing} onCheckedChange={v => setForm(f => ({ ...f, enable_nuitee_pricing: v }))} />
+                    <Label className="text-sm font-semibold">Nuitée</Label>
+                  </div>
+                  {form.enable_nuitee_pricing && <span className="text-xs text-muted-foreground">Activé</span>}
+                </div>
+                {form.enable_nuitee_pricing && (
+                  <div><Label className="text-xs font-medium text-slate-600">Prix pour la nuit (FCFA)</Label><Input type="number" value={form.price_nuitee} onChange={e => setForm(f => ({ ...f, price_nuitee: Number(e.target.value) }))} className="mt-1" /></div>
+                )}
+              </div>
             </div>
-            <div><Label>Équipements</Label>
-              <div className="flex flex-wrap gap-2 mt-2">
-                {featureOptions.map(f => <Badge key={f} variant={form.features.includes(f) ? 'default' : 'outline'} className="cursor-pointer" onClick={() => toggleFeature(f)}>{f}</Badge>)}
+            <div>
+              <Label className="font-bold text-base block mb-3">✨ Équipements</Label>
+              <div className="flex flex-wrap gap-2">
+                {featureOptions.map(f => <Badge key={f} variant={form.features.includes(f) ? 'default' : 'outline'} className="cursor-pointer px-3 py-2" onClick={() => toggleFeature(f)}>{f}</Badge>)}
               </div>
             </div>
 
             {/* Breakfast */}
-            <div className="border rounded-lg p-3 space-y-3">
-              <div className="flex items-center gap-2">
-                <Switch checked={form.breakfast_included} onCheckedChange={v => setForm(f => ({ ...f, breakfast_included: v }))} />
-                <Label>Petit-déjeuner inclus</Label>
+            <div className="border-2 rounded-lg p-4 space-y-3 bg-orange-50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Switch checked={form.breakfast_included} onCheckedChange={v => setForm(f => ({ ...f, breakfast_included: v }))} />
+                  <Label className="text-sm font-semibold">Petit-déjeuner inclus</Label>
+                </div>
+                {form.breakfast_included && <span className="text-xs text-muted-foreground">Inclus</span>}
               </div>
               {!form.breakfast_included && (
-                <div><Label>Prix petit-déjeuner par personne (FCFA)</Label><Input type="number" value={form.breakfast_price} onChange={e => setForm(f => ({ ...f, breakfast_price: Number(e.target.value) }))} /></div>
+                <div><Label className="text-xs font-medium text-slate-600">Prix par personne (FCFA)</Label><Input type="number" value={form.breakfast_price} onChange={e => setForm(f => ({ ...f, breakfast_price: Number(e.target.value) }))} className="mt-1" /></div>
               )}
             </div>
 
             {/* Extra Options */}
-            <div className="border rounded-lg p-3 space-y-3">
-              <Label className="font-semibold">Options supplémentaires</Label>
+            <div className="border-2 rounded-lg p-4 space-y-3 bg-purple-50">
+              <Label className="font-bold text-base block">🎁 Options supplémentaires</Label>
               {form.extra_options.map(opt => (
-                <div key={opt.id} className="flex items-center justify-between text-sm bg-muted/50 rounded px-2 py-1">
-                  <span>{opt.name} — {formatFCFA(opt.price)}</span>
-                  <Button variant="ghost" size="sm" onClick={() => removeExtraOption(opt.id)} className="h-6 px-2 text-destructive">×</Button>
+                <div key={opt.id} className="flex items-center justify-between text-sm bg-white rounded px-3 py-2 border border-purple-200">
+                  <span className="font-medium">{opt.name} — {formatFCFA(opt.price)}</span>
+                  <Button variant="ghost" size="sm" onClick={() => removeExtraOption(opt.id)} className="h-6 px-2 text-destructive hover:bg-red-100">×</Button>
                 </div>
               ))}
-              <div className="flex gap-2">
-                <Input placeholder="Nom option" value={newOptionName} onChange={e => setNewOptionName(e.target.value)} className="flex-1" />
-                <Input type="number" placeholder="Prix" value={newOptionPrice || ''} onChange={e => setNewOptionPrice(Number(e.target.value))} className="w-24" />
-                <Button variant="outline" size="sm" onClick={addExtraOption} disabled={!newOptionName}>+</Button>
+              <div className="flex gap-2 pt-2">
+                <Input placeholder="Nom de l'option" value={newOptionName} onChange={e => setNewOptionName(e.target.value)} className="flex-1" />
+                <Input type="number" placeholder="Prix" value={newOptionPrice || ''} onChange={e => setNewOptionPrice(Number(e.target.value))} className="w-28" />
+                <Button variant="outline" size="sm" onClick={addExtraOption} disabled={!newOptionName} className="px-3">+</Button>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div><Label>Couleur</Label><Input type="color" value={form.color} onChange={e => setForm(f => ({ ...f, color: e.target.value }))} /></div>
-              <div className="flex items-center gap-2 mt-6"><Switch checked={form.portal_visible} onCheckedChange={v => setForm(f => ({ ...f, portal_visible: v }))} /><Label>Visible sur le portail</Label></div>
+              <div><Label className="font-medium">Couleur de catégorie</Label><div className="mt-2 flex items-center gap-2"><Input type="color" value={form.color} onChange={e => setForm(f => ({ ...f, color: e.target.value }))} className="w-16 h-10 rounded cursor-pointer" /><span className="text-xs text-muted-foreground">{form.color}</span></div></div>
+              <div className="flex items-center gap-3 mt-6"><Switch checked={form.portal_visible} onCheckedChange={v => setForm(f => ({ ...f, portal_visible: v }))} /><Label className="font-medium">Visible sur le portail</Label></div>
             </div>
           </div>
           <DialogFooter>
