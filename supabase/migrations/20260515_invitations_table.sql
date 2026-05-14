@@ -1,4 +1,4 @@
--- Create invitations table for managing team member invites
+-- Create invitations table
 CREATE TABLE IF NOT EXISTS public.invitations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   hotel_id UUID NOT NULL REFERENCES public.hotels(id) ON DELETE CASCADE,
@@ -9,16 +9,13 @@ CREATE TABLE IF NOT EXISTS public.invitations (
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected', 'expired')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   expires_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() + INTERVAL '30 days',
-  accepted_at TIMESTAMP WITH TIME ZONE,
-
-  CONSTRAINT unique_pending_invite UNIQUE (hotel_id, email, status) WHERE status = 'pending'
+  accepted_at TIMESTAMP WITH TIME ZONE
 );
 
 -- Enable RLS
 ALTER TABLE public.invitations ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Users can view invitations for their hotels
-DROP POLICY IF EXISTS "read_own_hotel_invitations" ON public.invitations;
 CREATE POLICY "read_own_hotel_invitations"
 ON public.invitations FOR SELECT
 USING (
@@ -30,7 +27,6 @@ USING (
 );
 
 -- Policy: Admins/Managers can create invitations
-DROP POLICY IF EXISTS "create_hotel_invitations" ON public.invitations;
 CREATE POLICY "create_hotel_invitations"
 ON public.invitations FOR INSERT
 WITH CHECK (
@@ -44,7 +40,6 @@ WITH CHECK (
 );
 
 -- Policy: Admins/Managers can update invitation status
-DROP POLICY IF EXISTS "update_hotel_invitations" ON public.invitations;
 CREATE POLICY "update_hotel_invitations"
 ON public.invitations FOR UPDATE
 USING (
@@ -66,15 +61,14 @@ WITH CHECK (
   )
 );
 
--- Policy: Users can view and update their own pending invitations
-DROP POLICY IF EXISTS "user_view_own_invitations" ON public.invitations;
+-- Policy: Users can view their own pending invitations
 CREATE POLICY "user_view_own_invitations"
 ON public.invitations FOR SELECT
 USING (
   email = (SELECT email FROM auth.users WHERE auth.users.id = auth.uid())
 );
 
-DROP POLICY IF EXISTS "user_accept_reject_invitations" ON public.invitations;
+-- Policy: Users can accept/reject their own invitations
 CREATE POLICY "user_accept_reject_invitations"
 ON public.invitations FOR UPDATE
 USING (
@@ -84,7 +78,7 @@ WITH CHECK (
   email = (SELECT email FROM auth.users WHERE auth.users.id = auth.uid())
 );
 
--- Create index for faster lookups
+-- Create indexes
 CREATE INDEX idx_invitations_email_status ON public.invitations(email, status);
 CREATE INDEX idx_invitations_hotel_status ON public.invitations(hotel_id, status);
 CREATE INDEX idx_invitations_created_at ON public.invitations(created_at DESC);
