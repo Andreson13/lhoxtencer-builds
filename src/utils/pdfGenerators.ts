@@ -2,43 +2,6 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { formatFCFA, formatDate, formatDateTime } from './formatters';
 
-// ============================================================================
-// IMPROVED PDF UTILITIES & HELPERS
-// ============================================================================
-
-/**
- * Format FCFA values consistently without excessive spacing
- */
-const formatCurrencyPDF = (value: number): string => {
-  if (!value || value === 0) return '0 FCFA';
-  const absVal = Math.abs(Math.round(value));
-  const formatted = absVal.toLocaleString('fr-FR');
-  return `${formatted} FCFA`;
-};
-
-/**
- * Format date in French locale
- */
-const formatDateFR = (dateStr: string | null | undefined): string => {
-  if (!dateStr) return '-';
-  try {
-    return new Date(dateStr).toLocaleDateString('fr-FR');
-  } catch {
-    return '-';
-  }
-};
-
-/**
- * Format date and time in French locale
- */
-const formatDateTimeFR = (date: Date | string): string => {
-  try {
-    return new Date(date).toLocaleString('fr-FR');
-  } catch {
-    return '-';
-  }
-};
-
 /**
  * Format payment method with proper names
  */
@@ -279,10 +242,10 @@ export async function generatePoliceRegister(params: {
   // Period info
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  const periodText = `Période du ${formatDateFR(params.periodStart)} au ${formatDateFR(params.periodEnd)}`;
+  const periodText = `Période du ${formatDate(params.periodStart)} au ${formatDate(params.periodEnd)}`;
   doc.text(periodText, pageWidth / 2, 43, { align: 'center' });
   doc.text(
-    `Généré le ${formatDateTimeFR(new Date())} par ${params.generatedBy}`,
+    `Généré le ${formatDateTime(new Date())} par ${params.generatedBy}`,
     pageWidth / 2,
     47,
     { align: 'center' }
@@ -315,14 +278,14 @@ export async function generatePoliceRegister(params: {
         { content: `${(guest.last_name || '').toUpperCase()} ${guest.first_name || ''}`, styles: { fontStyle: 'bold' } },
         {
           content: guest.date_of_birth
-            ? `${formatDateFR(guest.date_of_birth)}\n${guest.place_of_birth || ''}`
+            ? `${formatDate(guest.date_of_birth)}\n${guest.place_of_birth || ''}`
             : '-',
         },
         { content: guest.nationality || '-' },
         { content: guest.profession || '-' },
         { content: guest.usual_address || '-' },
-        { content: row.check_in_date ? formatDateFR(row.check_in_date) : '-', styles: { halign: 'center' } },
-        { content: row.check_out_date ? formatDateFR(row.check_out_date) : '-', styles: { halign: 'center' } },
+        { content: row.check_in_date ? formatDate(row.check_in_date) : '-', styles: { halign: 'center' } },
+        { content: row.check_out_date ? formatDate(row.check_out_date) : '-', styles: { halign: 'center' } },
         { content: guest.id_number ? `${guest.id_type || ''}\n${guest.id_number}` : '-' },
         { content: row.observation || '' },
       ];
@@ -464,7 +427,7 @@ export async function generateCustomerDossier(params: {
     { label: 'Séjours', value: String(totalStays) },
     { label: 'Siestes', value: String(totalSiestes) },
     { label: 'Nuits totales', value: String(totalNights) },
-    { label: 'Total payé', value: formatCurrencyPDF(totalPaid) },
+    { label: 'Total payé', value: formatFCFA(totalPaid) },
   ];
 
   const boxWidth = (pageWidth - 28 - 12) / 4;
@@ -502,7 +465,7 @@ export async function generateCustomerDossier(params: {
     ['Nom / Last Name', params.guest.last_name?.toUpperCase() || '-'],
     ['Prénoms / Given Names', params.guest.first_name || '-'],
     ['Nom de jeune fille / Maiden Name', params.guest.maiden_name || '-'],
-    ['Date de naissance / Date of Birth', params.guest.date_of_birth ? formatDateFR(params.guest.date_of_birth) : '-'],
+    ['Date de naissance / Date of Birth', params.guest.date_of_birth ? formatDate(params.guest.date_of_birth) : '-'],
     ['Lieu de naissance / Place of Birth', params.guest.place_of_birth || '-'],
     ['Sexe / Gender', params.guest.gender === 'M' ? 'Masculin / Male' : params.guest.gender === 'F' ? 'Féminin / Female' : '-'],
     ['Nationalité / Nationality', params.guest.nationality || '-'],
@@ -547,7 +510,7 @@ export async function generateCustomerDossier(params: {
   const idFields = [
     ["Type de pièce / ID Type", params.guest.id_type || '-'],
     ['Numéro / Number', params.guest.id_number || '-'],
-    ['Délivrée le / Issued on', params.guest.id_issued_on ? formatDateFR(params.guest.id_issued_on) : '-'],
+    ['Délivrée le / Issued on', params.guest.id_issued_on ? formatDate(params.guest.id_issued_on) : '-'],
     ['Délivrée à / Issued at', params.guest.id_issued_at || '-'],
   ];
 
@@ -617,21 +580,21 @@ export async function generateCustomerDossier(params: {
       { content: stay.stay_type === 'sieste' ? 'Sieste' : 'Nuit', styles: { halign: 'center' } },
       { content: stay.rooms?.room_number || '-', styles: { halign: 'center' } },
       { content: stay.room_categories?.name || stay.rooms?.room_categories?.name || '-' },
-      { content: stay.check_in_date ? formatDateFR(stay.check_in_date) : '-', styles: { halign: 'center' } },
+      { content: stay.check_in_date ? formatDate(stay.check_in_date) : '-', styles: { halign: 'center' } },
       {
         content: stay.actual_check_out
-          ? formatDateFR(stay.actual_check_out)
+          ? formatDate(stay.actual_check_out)
           : stay.check_out_date
-            ? formatDateFR(stay.check_out_date)
+            ? formatDate(stay.check_out_date)
             : '-',
         styles: { halign: 'center' },
       },
       { content: String(stay.number_of_nights || 0), styles: { halign: 'center' } },
       { content: String(stay.number_of_adults || 1), styles: { halign: 'center' } },
-      { content: formatCurrencyPDF(stay.invoices?.total_amount || 0), styles: { halign: 'right' } },
-      { content: formatCurrencyPDF(stay.invoices?.amount_paid || 0), styles: { halign: 'right' } },
+      { content: formatFCFA(stay.invoices?.total_amount || 0), styles: { halign: 'right' } },
+      { content: formatFCFA(stay.invoices?.amount_paid || 0), styles: { halign: 'right' } },
       {
-        content: formatCurrencyPDF(stay.invoices?.balance_due || 0),
+        content: formatFCFA(stay.invoices?.balance_due || 0),
         styles: {
           halign: 'right',
           textColor: (stay.invoices?.balance_due || 0) > 0 ? [220, 38, 38] : [16, 185, 129],
@@ -646,15 +609,15 @@ export async function generateCustomerDossier(params: {
       [
         { content: 'TOTAL', colSpan: 8, styles: { halign: 'right', fontStyle: 'bold' } },
         {
-          content: formatCurrencyPDF(params.stays.reduce((s, st) => s + (st.invoices?.total_amount || 0), 0)),
+          content: formatFCFA(params.stays.reduce((s, st) => s + (st.invoices?.total_amount || 0), 0)),
           styles: { halign: 'right', fontStyle: 'bold' },
         },
         {
-          content: formatCurrencyPDF(params.stays.reduce((s, st) => s + (st.invoices?.amount_paid || 0), 0)),
+          content: formatFCFA(params.stays.reduce((s, st) => s + (st.invoices?.amount_paid || 0), 0)),
           styles: { halign: 'right', fontStyle: 'bold' },
         },
         {
-          content: formatCurrencyPDF(params.stays.reduce((s, st) => s + (st.invoices?.balance_due || 0), 0)),
+          content: formatFCFA(params.stays.reduce((s, st) => s + (st.invoices?.balance_due || 0), 0)),
           styles: { halign: 'right', fontStyle: 'bold', textColor: [220, 38, 38] },
         },
         { content: '' },
@@ -691,12 +654,12 @@ export async function generateCustomerDossier(params: {
         ],
         body: params.siestes.map((sieste, i) => [
           { content: String(i + 1), styles: { halign: 'center' } },
-          { content: formatDateFR(sieste.arrival_date), styles: { halign: 'center' } },
+          { content: formatDate(sieste.arrival_date), styles: { halign: 'center' } },
           { content: sieste.rooms?.room_number || '-', styles: { halign: 'center' } },
           { content: sieste.arrival_time || '-', styles: { halign: 'center' } },
           { content: sieste.departure_time || '-', styles: { halign: 'center' } },
           { content: sieste.duration_hours ? `${sieste.duration_hours}h` : '-', styles: { halign: 'center' } },
-          { content: formatCurrencyPDF(sieste.amount_paid || 0), styles: { halign: 'right' } },
+          { content: formatFCFA(sieste.amount_paid || 0), styles: { halign: 'right' } },
           { content: formatPaymentMethod(sieste.payment_method), styles: { halign: 'center' } },
         ]),
         styles: { fontSize: 7.5, cellPadding: 2 },
@@ -729,12 +692,12 @@ export async function generateCustomerDossier(params: {
         ],
         body: params.siestes.map((sieste, i) => [
           { content: String(i + 1), styles: { halign: 'center' } },
-          { content: formatDateFR(sieste.arrival_date), styles: { halign: 'center' } },
+          { content: formatDate(sieste.arrival_date), styles: { halign: 'center' } },
           { content: sieste.rooms?.room_number || '-', styles: { halign: 'center' } },
           { content: sieste.arrival_time || '-', styles: { halign: 'center' } },
           { content: sieste.departure_time || '-', styles: { halign: 'center' } },
           { content: sieste.duration_hours ? `${sieste.duration_hours}h` : '-', styles: { halign: 'center' } },
-          { content: formatCurrencyPDF(sieste.amount_paid || 0), styles: { halign: 'right' } },
+          { content: formatFCFA(sieste.amount_paid || 0), styles: { halign: 'right' } },
           { content: formatPaymentMethod(sieste.payment_method), styles: { halign: 'center' } },
         ]),
         styles: { fontSize: 7.5, cellPadding: 2 },
@@ -760,9 +723,9 @@ export async function generateCustomerDossier(params: {
     doc.setTextColor(255, 255, 255);
     doc.rect(14, currentY, pageWidth - 28, 8, 'F');
     doc.text(
-      `Séjour ${stayIndex + 1} - Chambre ${stay.rooms?.room_number || '?'} - ${formatDateFR(
+      `Séjour ${stayIndex + 1} - Chambre ${stay.rooms?.room_number || '?'} - ${formatDate(
         stay.check_in_date
-      )} au ${formatDateFR(stay.check_out_date)} - Facture ${stay.invoices.invoice_number}`,
+      )} au ${formatDate(stay.check_out_date)} - Facture ${stay.invoices.invoice_number}`,
       16,
       currentY + 5.5
     );
@@ -785,28 +748,28 @@ export async function generateCustomerDossier(params: {
           item.description,
           { content: formatItemType(item.item_type, item.description), styles: { halign: 'center' } },
           { content: String(item.quantity), styles: { halign: 'center' } },
-          { content: formatCurrencyPDF(item.unit_price), styles: { halign: 'right' } },
-          { content: formatCurrencyPDF(item.subtotal), styles: { halign: 'right' } },
+          { content: formatFCFA(item.unit_price), styles: { halign: 'right' } },
+          { content: formatFCFA(item.subtotal), styles: { halign: 'right' } },
         ])),
         [
           { content: 'Sous-total', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } },
-          { content: formatCurrencyPDF(stay.invoices.subtotal), styles: { halign: 'right', fontStyle: 'bold' } },
+          { content: formatFCFA(stay.invoices.subtotal), styles: { halign: 'right', fontStyle: 'bold' } },
         ],
         ...(stay.invoices.tax_percentage > 0
           ? [
               [
                 { content: `TVA (${stay.invoices.tax_percentage}%)`, colSpan: 4, styles: { halign: 'right' } },
-                { content: formatCurrencyPDF(stay.invoices.tax_amount), styles: { halign: 'right' } },
+                { content: formatFCFA(stay.invoices.tax_amount), styles: { halign: 'right' } },
               ],
             ]
           : []),
         [
           { content: 'TOTAL', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold', fillColor: [240, 242, 245] } },
-          { content: formatCurrencyPDF(stay.invoices.total_amount), styles: { halign: 'right', fontStyle: 'bold', fillColor: [240, 242, 245] } },
+          { content: formatFCFA(stay.invoices.total_amount), styles: { halign: 'right', fontStyle: 'bold', fillColor: [240, 242, 245] } },
         ],
         [
           { content: 'Montant payé', colSpan: 4, styles: { halign: 'right', textColor: [16, 185, 129] } },
-          { content: formatCurrencyPDF(stay.invoices.amount_paid), styles: { halign: 'right', textColor: [16, 185, 129] } },
+          { content: formatFCFA(stay.invoices.amount_paid), styles: { halign: 'right', textColor: [16, 185, 129] } },
         ],
         [
           {
@@ -819,7 +782,7 @@ export async function generateCustomerDossier(params: {
             },
           },
           {
-            content: formatCurrencyPDF(stay.invoices.balance_due),
+            content: formatFCFA(stay.invoices.balance_due),
             styles: {
               halign: 'right',
               textColor: stay.invoices.balance_due > 0 ? [220, 38, 38] : [16, 185, 129],
@@ -852,7 +815,7 @@ export async function generateCustomerDossier(params: {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(7.5);
         doc.text(
-          `- ${formatDateTimeFR(payment.created_at)} - ${formatCurrencyPDF(payment.amount)} - ${formatPaymentMethod(payment.payment_method)} - Par: ${payment.recorded_by_name || '-'}`,
+          `- ${formatDateTime(payment.created_at)} - ${formatFCFA(payment.amount)} - ${formatPaymentMethod(payment.payment_method)} - Par: ${payment.recorded_by_name || '-'}`,
           18,
           currentY
         );
@@ -881,7 +844,7 @@ export async function generateCustomerDossier(params: {
   doc.setTextColor(255, 255, 255);
   doc.text('VALEUR TOTALE CLIENT / TOTAL CUSTOMER VALUE', pageWidth / 2, summaryY + 9, { align: 'center' });
   doc.setFontSize(18);
-  doc.text(formatCurrencyPDF(totalPaid), pageWidth / 2, summaryY + 20, { align: 'center' });
+  doc.text(formatFCFA(totalPaid), pageWidth / 2, summaryY + 20, { align: 'center' });
   doc.setTextColor(0, 0, 0);
   summaryY += 32;
 
@@ -892,11 +855,11 @@ export async function generateCustomerDossier(params: {
       ['Nombre de séjours (nuits)', String(totalStays)],
       ['Nombre de siestes', String(totalSiestes)],
       ['Total nuits passées', String(totalNights)],
-      ['Première visite', firstVisit ? formatDateFR(firstVisit.check_in_date || firstVisit.arrival_date) : '-'],
-      ['Dernière visite', params.stays.length > 0 ? formatDateFR(params.stays[0].check_in_date) : '-'],
-      ['Total facturé', formatCurrencyPDF(params.stays.reduce((s, st) => s + (st.invoices?.total_amount || 0), 0))],
-      ['Total payé', formatCurrencyPDF(totalPaid)],
-      ['Solde restant', formatCurrencyPDF(params.stays.reduce((s, st) => s + (st.invoices?.balance_due || 0), 0))],
+      ['Première visite', firstVisit ? formatDate(firstVisit.check_in_date || firstVisit.arrival_date) : '-'],
+      ['Dernière visite', params.stays.length > 0 ? formatDate(params.stays[0].check_in_date) : '-'],
+      ['Total facturé', formatFCFA(params.stays.reduce((s, st) => s + (st.invoices?.total_amount || 0), 0))],
+      ['Total payé', formatFCFA(totalPaid)],
+      ['Solde restant', formatFCFA(params.stays.reduce((s, st) => s + (st.invoices?.balance_due || 0), 0))],
       ['Catégorie préférée', getMostUsedCategory(params.stays)],
       ['Mode de paiement préféré', getMostUsedPaymentMethod(params.payments)],
     ],
@@ -911,7 +874,7 @@ export async function generateCustomerDossier(params: {
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'italic');
   doc.setTextColor(120, 120, 120);
-  doc.text(`Document généré le ${formatDateTimeFR(new Date())} par ${params.generatedBy} - HotelManager Pro`, pageWidth / 2, lastY, {
+  doc.text(`Document généré le ${formatDateTime(new Date())} par ${params.generatedBy} - HotelManager Pro`, pageWidth / 2, lastY, {
     align: 'center',
   });
   doc.text('Document confidentiel - Usage interne uniquement', pageWidth / 2, lastY + 5, { align: 'center' });
@@ -936,7 +899,7 @@ export const generateFicheDePolice = (hotel: any, guest: any, stay?: any) => {
     ['Nom', guest.last_name || ''],
     ['Nom de jeune fille', guest.maiden_name || ''],
     ['Prénom', guest.first_name || ''],
-    ['Date de naissance', formatDateFR(guest.date_of_birth)],
+    ['Date de naissance', formatDate(guest.date_of_birth)],
     ['Lieu de naissance', guest.place_of_birth || ''],
     ['Nationalité', guest.nationality || ''],
     ['Pays de résidence', guest.country_of_residence || ''],
@@ -950,7 +913,7 @@ export const generateFicheDePolice = (hotel: any, guest: any, stay?: any) => {
     ['Sexe', guest.gender === 'M' ? '☑ M  ☐ F' : guest.gender === 'F' ? '☐ M  ☑ F' : '☐ M  ☐ F'],
     ['Type de pièce', guest.id_type || ''],
     ['N° pièce d\'identité', guest.id_number || ''],
-    ['Délivré le', formatDateFR(guest.id_issued_on)],
+    ['Délivré le', formatDate(guest.id_issued_on)],
     ['Délivré à', guest.id_issued_at || ''],
   ];
 
@@ -980,10 +943,10 @@ export const generateFicheDePolice = (hotel: any, guest: any, stay?: any) => {
       body: [
         [
           stay.rooms?.room_number || '-',
-          formatDateFR(stay.check_in_date),
-          formatDateFR(stay.check_out_date),
+          formatDate(stay.check_in_date),
+          formatDate(stay.check_out_date),
           String(stay.number_of_nights || '-'),
-          formatCurrencyPDF(stay.total_price),
+          formatFCFA(stay.total_price),
           stay.receptionist_name || '-',
         ],
       ],
@@ -1017,7 +980,7 @@ export const generateReceipt = (hotel: any, payment: any, invoice: any, guestNam
 
   doc.setFontSize(11);
   const lines = [
-    ['Date', formatDateTimeFR(payment.created_at)],
+    ['Date', formatDateTime(payment.created_at)],
     ['Client', guestName],
     ['N° Facture', invoice.invoice_number],
     ['Mode de paiement', formatPaymentMethod(payment.payment_method || 'Cash')],
@@ -1034,7 +997,7 @@ export const generateReceipt = (hotel: any, payment: any, invoice: any, guestNam
   y += 10;
   doc.setFontSize(24);
   doc.setFont('helvetica', 'bold');
-  doc.text(formatCurrencyPDF(payment.amount), 105, y, { align: 'center' });
+  doc.text(formatFCFA(payment.amount), 105, y, { align: 'center' });
 
   y += 15;
   doc.setFontSize(10);
@@ -1063,7 +1026,7 @@ export const generateInvoicePDF = (
   doc.setFont('helvetica', 'bold');
   doc.text(`N° ${invoice.invoice_number}`, 30, y);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Date: ${formatDateFR(invoice.created_at)}`, 140, y);
+  doc.text(`Date: ${formatDate(invoice.created_at)}`, 140, y);
   y += 8;
   doc.text(`Client: ${guestName}`, 30, y);
   y += 10;
@@ -1079,8 +1042,8 @@ export const generateInvoicePDF = (
       i.description,
       formatItemType(i.item_type, i.description),
       String(i.quantity || 1),
-      formatCurrencyPDF(i.unit_price),
-      formatCurrencyPDF(i.subtotal),
+      formatFCFA(i.unit_price),
+      formatFCFA(i.subtotal),
     ]),
     theme: 'striped',
     styles: { fontSize: 9 },
@@ -1103,8 +1066,8 @@ export const generateInvoicePDF = (
       body: taxItems.map((i) => [
         i.description,
         String(i.quantity || 1),
-        formatCurrencyPDF(i.unit_price),
-        formatCurrencyPDF(i.subtotal),
+        formatFCFA(i.unit_price),
+        formatFCFA(i.subtotal),
       ]),
       theme: 'grid',
       styles: { fontSize: 9 },
@@ -1114,19 +1077,19 @@ export const generateInvoicePDF = (
   }
 
   doc.setFontSize(11);
-  doc.text(`Sous-total: ${formatCurrencyPDF(invoice.subtotal)}`, 140, y);
+  doc.text(`Sous-total: ${formatFCFA(invoice.subtotal)}`, 140, y);
   y += 6;
-  doc.text(`Taxes: ${formatCurrencyPDF(invoice.tax_amount)}`, 140, y);
+  doc.text(`Taxes: ${formatFCFA(invoice.tax_amount)}`, 140, y);
   y += 6;
   doc.setFont('helvetica', 'bold');
-  doc.text(`TOTAL: ${formatCurrencyPDF(invoice.total_amount)}`, 140, y);
+  doc.text(`TOTAL: ${formatFCFA(invoice.total_amount)}`, 140, y);
   y += 6;
   doc.setFont('helvetica', 'normal');
-  doc.text(`Payé: ${formatCurrencyPDF(invoice.amount_paid)}`, 140, y);
+  doc.text(`Payé: ${formatFCFA(invoice.amount_paid)}`, 140, y);
   y += 6;
   const balance = invoice.balance_due || 0;
   doc.setFont('helvetica', 'bold');
-  doc.text(`Solde: ${formatCurrencyPDF(balance)}`, 140, y);
+  doc.text(`Solde: ${formatFCFA(balance)}`, 140, y);
 
   // Payments history
   if (payments.length > 0) {
@@ -1138,8 +1101,8 @@ export const generateInvoicePDF = (
       startY: y,
       head: [['Date', 'Montant', 'Mode', 'Référence']],
       body: payments.map((p) => [
-        formatDateTimeFR(p.created_at),
-        formatCurrencyPDF(p.amount),
+        formatDateTime(p.created_at),
+        formatFCFA(p.amount),
         formatPaymentMethod(p.payment_method || '-'),
         p.reference_number || '-',
       ]),
@@ -1194,11 +1157,11 @@ const renderReportPdf = (
     body: [
       ['Taux occupation', `${data.summary.occupancyRate}%`],
       ['Check-ins', String(data.summary.totalCheckIns)],
-      ['Revenu total', formatCurrencyPDF(data.summary.totalRevenue)],
-      ['Montant payé', formatCurrencyPDF(data.summary.totalPaid)],
-      ['Dépenses', formatCurrencyPDF(data.summary.totalExpenses)],
-      ['Profit net', formatCurrencyPDF(data.summary.netProfit)],
-      ['CA restaurant', formatCurrencyPDF(data.summary.restaurantRevenue)],
+      ['Revenu total', formatFCFA(data.summary.totalRevenue)],
+      ['Montant payé', formatFCFA(data.summary.totalPaid)],
+      ['Dépenses', formatFCFA(data.summary.totalExpenses)],
+      ['Profit net', formatFCFA(data.summary.netProfit)],
+      ['CA restaurant', formatFCFA(data.summary.restaurantRevenue)],
     ],
     theme: 'grid',
     styles: { fontSize: 9 },
@@ -1233,7 +1196,7 @@ const renderReportPdf = (
       head: [['Article', 'Qté', 'CA']],
       body: (data.topFoodItems || [])
         .slice(0, 10)
-        .map((r) => [r.name, String(r.count), formatCurrencyPDF(r.revenue)]),
+        .map((r) => [r.name, String(r.count), formatFCFA(r.revenue)]),
       theme: 'striped',
       styles: { fontSize: 8.5 },
       headStyles: { fillColor: [16, 185, 129] },
@@ -1250,7 +1213,7 @@ const renderReportPdf = (
       head: [['Client', 'Niveau', 'Points', 'Dépenses']],
       body: (data.topGuests || [])
         .slice(0, 10)
-        .map((g) => [g.name, g.tier, String(g.loyalty_points || 0), formatCurrencyPDF(g.total)]),
+        .map((g) => [g.name, g.tier, String(g.loyalty_points || 0), formatFCFA(g.total)]),
       theme: 'striped',
       styles: { fontSize: 8.5 },
       headStyles: { fillColor: [245, 158, 11] },
@@ -1299,3 +1262,288 @@ export const generateMonthlyReport = (
     'rapport-mensuel'
   );
 };
+
+// ============================================================================
+// DATA EXPORT GENERATION
+// ============================================================================
+
+const formatCurrencyForPDF = (value: string | number): string => {
+  if (typeof value === 'string' && value.includes('FCFA')) return value;
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  if (isNaN(num)) return String(value);
+  return new Intl.NumberFormat('fr-FR', {
+    style: 'decimal',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(num) + ' FCFA';
+};
+
+interface ClientData {
+  id?: string;
+  last_name?: string;
+  first_name?: string;
+  phone?: string;
+  email?: string;
+  nationality?: string;
+  total?: number;
+  amount?: number;
+  [key: string]: any;
+}
+
+export async function generateClientDossierPDF(
+  data: ClientData[] | any[] | Array<{ sheetName: string; data: any[] }>,
+  filename: string,
+  title: string
+): Promise<void> {
+  try {
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+    });
+
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 15;
+
+    const isMultiSheet = Array.isArray(data) && data.length > 0 && 'sheetName' in data[0];
+
+    if (isMultiSheet) {
+      const sheets = data as Array<{ sheetName: string; data: any[] }>;
+
+      sheets.forEach((sheet, sheetIndex) => {
+        if (sheetIndex > 0) {
+          pdf.addPage();
+        }
+
+        let yPosition = margin;
+
+        // Header with luxury styling
+        pdf.setFillColor(11, 26, 46);
+        pdf.rect(0, 0, pageWidth, 30, 'F');
+
+        pdf.setFont('Helvetica', 'bold');
+        pdf.setFontSize(18);
+        pdf.setTextColor(201, 168, 76);
+        pdf.text('HOTEL HARMONY', pageWidth / 2, 12, { align: 'center' });
+
+        pdf.setFontSize(10);
+        pdf.setTextColor(201, 168, 76);
+        pdf.text('Export Data Report', pageWidth / 2, 22, { align: 'center' });
+
+        yPosition = 45;
+
+        // Title
+        pdf.setFont('Helvetica', 'bold');
+        pdf.setFontSize(14);
+        pdf.setTextColor(11, 26, 46);
+        pdf.text(`${sheet.sheetName.toUpperCase()}`, pageWidth / 2, yPosition, { align: 'center' });
+        yPosition += 12;
+
+        if (sheet.data.length > 0) {
+          const columns = Object.keys(sheet.data[0]);
+          const displayKeys = columns.filter(k =>
+            !k.includes('id') &&
+            !k.includes('hotel') &&
+            !k.includes('created_at') &&
+            !k.includes('updated_at')
+          ).slice(0, 8);
+
+          const headers = displayKeys.map(k =>
+            k.replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+          );
+
+          const tableData = sheet.data.map(row =>
+            displayKeys.map(key => {
+              const value = row[key];
+              if (typeof value === 'number' && (key.includes('amount') || key.includes('total') || key.includes('price'))) {
+                return formatCurrencyForPDF(value);
+              }
+              if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+                return new Date(value).toLocaleDateString('fr-FR');
+              }
+              return String(value || '—').substring(0, 50);
+            })
+          );
+
+          autoTable(pdf, {
+            head: [headers],
+            body: tableData,
+            startY: yPosition,
+            margin: margin,
+            theme: 'grid',
+            headStyles: {
+              fillColor: [11, 26, 46],
+              textColor: [201, 168, 76],
+              fontStyle: 'bold',
+              fontSize: 9,
+              cellPadding: 5,
+            },
+            bodyStyles: {
+              textColor: [51, 51, 51],
+              fontSize: 8,
+              cellPadding: 4,
+            },
+            alternateRowStyles: {
+              fillColor: [245, 245, 245],
+            },
+            didDrawPage: () => {
+              pdf.setFont('Helvetica', 'normal');
+              pdf.setFontSize(8);
+              pdf.setTextColor(153, 153, 153);
+              pdf.text(
+                `Page ${sheetIndex + 1}`,
+                pageWidth / 2,
+                pageHeight - 10,
+                { align: 'center' }
+              );
+            },
+          });
+        } else {
+          pdf.setFontSize(10);
+          pdf.text('Aucune donnée disponible', pageWidth / 2, yPosition + 20, { align: 'center' });
+        }
+      });
+    } else {
+      const rows = data as ClientData[];
+
+      let yPosition = margin;
+
+      // Header with luxury styling
+      pdf.setFillColor(11, 26, 46);
+      pdf.rect(0, 0, pageWidth, 30, 'F');
+
+      pdf.setFont('Helvetica', 'bold');
+      pdf.setFontSize(18);
+      pdf.setTextColor(201, 168, 76);
+      pdf.text('HOTEL HARMONY', pageWidth / 2, 12, { align: 'center' });
+
+      pdf.setFontSize(10);
+      pdf.setTextColor(201, 168, 76);
+      pdf.text('Export Data Report', pageWidth / 2, 22, { align: 'center' });
+
+      yPosition = 45;
+
+      // Title
+      pdf.setFont('Helvetica', 'bold');
+      pdf.setFontSize(14);
+      pdf.setTextColor(11, 26, 46);
+      pdf.text(`${title.toUpperCase()}`, pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 12;
+
+      // Client info (if available)
+      if (rows.length > 0 && rows[0].last_name) {
+        const client = rows[0];
+        pdf.setFont('Helvetica', 'bold');
+        pdf.setFontSize(12);
+        pdf.setTextColor(11, 26, 46);
+        const clientName = `${client.first_name || ''} ${client.last_name || ''}`.trim();
+        pdf.text(clientName || 'Client', margin, yPosition);
+        yPosition += 10;
+
+        // Personal Info Section
+        pdf.setFont('Helvetica', 'bold');
+        pdf.setFontSize(10);
+        pdf.setTextColor(11, 26, 46);
+        pdf.text('INFORMATIONS PERSONNELLES', margin, yPosition);
+        yPosition += 8;
+
+        pdf.setFont('Helvetica', 'normal');
+        pdf.setFontSize(9);
+        pdf.setTextColor(51, 51, 51);
+
+        const personalInfo = [
+          [`Téléphone: ${client.phone || '—'}`, `Email: ${client.email || '—'}`],
+          [`Nationalité: ${client.nationality || '—'}`, `Créé le: ${client.created_at ? new Date(client.created_at).toLocaleDateString('fr-FR') : '—'}`],
+        ];
+
+        personalInfo.forEach(row => {
+          pdf.text(row[0], margin, yPosition);
+          pdf.text(row[1], pageWidth / 2, yPosition);
+          yPosition += 6;
+        });
+
+        yPosition += 5;
+      }
+
+      if (rows.length > 0) {
+        const columns = Object.keys(rows[0]);
+        const displayKeys = columns.filter(k =>
+          !k.includes('id') &&
+          !k.includes('hotel') &&
+          !k.includes('created_at') &&
+          !k.includes('updated_at')
+        ).slice(0, 8);
+
+        const headers = displayKeys.map(k =>
+          k.replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+        );
+
+        const tableData = rows.map(row =>
+          displayKeys.map(key => {
+            const value = row[key];
+            if (typeof value === 'number' && (key.includes('amount') || key.includes('total') || key.includes('price'))) {
+              return formatCurrencyForPDF(value);
+            }
+            if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+              return new Date(value).toLocaleDateString('fr-FR');
+            }
+            return String(value || '—').substring(0, 50);
+          })
+        );
+
+        autoTable(pdf, {
+          head: [headers],
+          body: tableData,
+          startY: yPosition,
+          margin: margin,
+          theme: 'grid',
+          headStyles: {
+            fillColor: [11, 26, 46],
+            textColor: [201, 168, 76],
+            fontStyle: 'bold',
+            fontSize: 9,
+            cellPadding: 5,
+          },
+          bodyStyles: {
+            textColor: [51, 51, 51],
+            fontSize: 8,
+            cellPadding: 4,
+          },
+          alternateRowStyles: {
+            fillColor: [245, 245, 245],
+          },
+          didDrawPage: () => {
+            pdf.setFont('Helvetica', 'normal');
+            pdf.setFontSize(8);
+            pdf.setTextColor(153, 153, 153);
+            pdf.text(
+              `Document généré le ${new Date().toLocaleDateString('fr-FR')} — HotelManager Pro`,
+              pageWidth / 2,
+              pageHeight - 10,
+              { align: 'center' }
+            );
+          },
+        });
+      } else {
+        pdf.setFontSize(10);
+        pdf.text('Aucune donnée disponible', pageWidth / 2, yPosition + 20, { align: 'center' });
+      }
+    }
+
+    // Add bottom footer with gold accent
+    pdf.setDrawColor(201, 168, 76);
+    pdf.setLineWidth(0.5);
+    pdf.line(margin, pageHeight - 20, pageWidth - margin, pageHeight - 20);
+
+    pdf.setFont('Helvetica', 'italic');
+    pdf.setFontSize(7);
+    pdf.setTextColor(153, 153, 153);
+    pdf.text('Document confidentiel — Usage interne uniquement', pageWidth / 2, pageHeight - 10, { align: 'center' });
+
+    pdf.save(`${filename}.pdf`);
+  } catch (error) {
+    console.error('PDF generation error:', error);
+    throw new Error('Erreur lors de la génération du PDF');
+  }
+}

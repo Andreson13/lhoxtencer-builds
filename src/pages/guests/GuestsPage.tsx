@@ -987,6 +987,53 @@ const GuestsPage = () => {
         {/* Dialogs rendered below */}
         {renderGuestDialog()}
         {renderStayDialog()}
+
+        {/* Tier Change Dialog */}
+        <Dialog open={tierDialogOpen} onOpenChange={setTierDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Changer le niveau — {tierTargetGuest?.last_name} {tierTargetGuest?.first_name}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Nouveau niveau</Label>
+                <Select value={tierForm.tier} onValueChange={v => setTierForm(p => ({ ...p, tier: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="regular">Regular</SelectItem>
+                    <SelectItem value="silver">Silver</SelectItem>
+                    <SelectItem value="gold">Gold</SelectItem>
+                    <SelectItem value="vip">VIP</SelectItem>
+                    <SelectItem value="blacklist">Blacklist</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Notes / Raison</Label>
+                <Textarea value={tierForm.notes} onChange={e => setTierForm(p => ({ ...p, notes: e.target.value }))} placeholder="Raison du changement de niveau..." />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTierDialogOpen(false)}>Annuler</Button>
+              <Button onClick={async () => {
+                if (!tierTargetGuest) return;
+                try {
+                  const { error } = await supabase.from('guests').update({
+                    tier: tierForm.tier,
+                    tier_notes: tierForm.notes || null,
+                    tier_assigned_by: profile?.id,
+                    tier_assigned_at: new Date().toISOString(),
+                  } as any).eq('id', tierTargetGuest.id);
+                  if (error) throw error;
+                  qc.invalidateQueries({ queryKey: ['guests'] });
+                  qc.invalidateQueries({ queryKey: ['guest', tierTargetGuest.id] });
+                  toast.success('Niveau mis à jour');
+                  setTierDialogOpen(false);
+                } catch (e: any) { toast.error(e.message); }
+              }}>Enregistrer</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -1047,20 +1094,6 @@ const GuestsPage = () => {
   }
 
   function renderStayDialog() {
-          <CniScanner
-            open={cniScannerOpen}
-            onClose={() => setCniScannerOpen(false)}
-            hotelId={hotel?.id || ''}
-            onConfirm={(data: CniData) => {
-              if (data.last_name) guestForm.setValue('last_name', data.last_name);
-              if (data.first_name) guestForm.setValue('first_name', data.first_name);
-              if (data.nationality) guestForm.setValue('nationality', data.nationality);
-              if (data.id_number) guestForm.setValue('id_number', data.id_number);
-              if (data.date_of_birth) guestForm.setValue('date_of_birth', data.date_of_birth);
-              if (data.place_of_birth) guestForm.setValue('place_of_birth', data.place_of_birth);
-              toast.success('Données CNI appliquées');
-            }}
-          />
     return (
       <Dialog open={stayDialogOpen} onOpenChange={v => { if (!v) { setStayDialogOpen(false); stayForm.reset(); } }}>
         <DialogContent className="max-w-2xl">
@@ -1197,6 +1230,20 @@ const GuestsPage = () => {
 
       {renderGuestDialog()}
       {renderStayDialog()}
+      <CniScanner
+        open={cniScannerOpen}
+        onClose={() => setCniScannerOpen(false)}
+        hotelId={hotel?.id || ''}
+        onConfirm={(data: CniData) => {
+          if (data.last_name) guestForm.setValue('last_name', data.last_name);
+          if (data.first_name) guestForm.setValue('first_name', data.first_name);
+          if (data.nationality) guestForm.setValue('nationality', data.nationality);
+          if (data.id_number) guestForm.setValue('id_number', data.id_number);
+          if (data.date_of_birth) guestForm.setValue('date_of_birth', data.date_of_birth);
+          if (data.place_of_birth) guestForm.setValue('place_of_birth', data.place_of_birth);
+          toast.success('Données CNI appliquées');
+        }}
+      />
       <ConfirmDialog open={!!deleteGuest} onOpenChange={() => setDeleteGuest(null)} title={t('guests.deleteTitle')} description={`${t('delete.title')} ${deleteGuest?.last_name || ''} ${deleteGuest?.first_name || ''} ?`} onConfirm={() => deleteMutation.mutate(deleteGuest.id)} confirmLabel={t('guests.deleteConfirm')} variant="destructive" />
 
       {/* Tier Change Dialog */}
