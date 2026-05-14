@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, BedDouble } from 'lucide-react';
+import { Plus, Pencil, Trash2, BedDouble, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -38,10 +38,11 @@ const RoomCategoriesPage = () => {
     features: [] as string[], color: '#6366f1', portal_visible: true,
     breakfast_included: false, breakfast_price: 0, extra_options: [] as ExtraOption[],
     enable_day_pricing: true, enable_sieste_pricing: true, sieste_pricing_type: 'fixed' as 'fixed' | 'hourly',
-    price_per_hour_sieste: 0, enable_nuitee_pricing: false, price_nuitee: 0,
+    price_per_hour_sieste: 0, enable_nuitee_pricing: false, price_nuitee: 0, images: [] as string[],
   });
   const [newOptionName, setNewOptionName] = useState('');
   const [newOptionPrice, setNewOptionPrice] = useState(0);
+  const [uploadingImages, setUploadingImages] = useState(false);
 
   const { data: categories, isLoading } = useQuery({
     queryKey: ['room-categories', hotel?.id],
@@ -75,6 +76,7 @@ const RoomCategoriesPage = () => {
         price_per_hour_sieste: form.price_per_hour_sieste,
         enable_nuitee_pricing: form.enable_nuitee_pricing,
         price_nuitee: form.price_nuitee,
+        images: form.images,
       };
       if (editing) {
         const { error } = await supabase.from('room_categories').update(payload).eq('id', editing.id);
@@ -122,13 +124,14 @@ const RoomCategoriesPage = () => {
       price_per_hour_sieste: cat.price_per_hour_sieste || 0,
       enable_nuitee_pricing: cat.enable_nuitee_pricing ?? false,
       price_nuitee: cat.price_nuitee || 0,
+      images: ((cat as any).images as string[]) || [],
     });
     setDialogOpen(true);
   };
 
   const openAdd = () => {
     setEditing(null);
-    setForm({ name: '', description: '', price_per_night: 0, price_sieste: 0, features: [], color: '#6366f1', portal_visible: true, breakfast_included: false, breakfast_price: 0, extra_options: [], enable_day_pricing: true, enable_sieste_pricing: true, sieste_pricing_type: 'fixed', price_per_hour_sieste: 0, enable_nuitee_pricing: false, price_nuitee: 0 });
+    setForm({ name: '', description: '', price_per_night: 0, price_sieste: 0, features: [], color: '#6366f1', portal_visible: true, breakfast_included: false, breakfast_price: 0, extra_options: [], enable_day_pricing: true, enable_sieste_pricing: true, sieste_pricing_type: 'fixed', price_per_hour_sieste: 0, enable_nuitee_pricing: false, price_nuitee: 0, images: [] });
     setDialogOpen(true);
   };
 
@@ -149,6 +152,42 @@ const RoomCategoriesPage = () => {
 
   const removeExtraOption = (id: string) => setForm(f => ({ ...f, extra_options: f.extra_options.filter(o => o.id !== id) }));
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || !hotel) return;
+
+    setUploadingImages(true);
+    try {
+      for (const file of Array.from(files)) {
+        // Sanitize filename: remove spaces and special chars, keep extension
+        const ext = file.name.split('.').pop();
+        const sanitizedName = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${ext}`;
+        const filePath = `categories/${sanitizedName}`;
+
+        const { data, error } = await supabase.storage
+          .from('category-images')
+          .upload(filePath, file);
+
+        if (error) throw error;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('category-images')
+          .getPublicUrl(filePath);
+
+        setForm(f => ({ ...f, images: [...f.images, publicUrl] }));
+      }
+      toast.success('Image(s) uploadée(s)');
+    } catch (err: any) {
+      toast.error(`Erreur upload: ${err.message}`);
+    } finally {
+      setUploadingImages(false);
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setForm(f => ({ ...f, images: f.images.filter((_, i) => i !== index) }));
+  };
+
   const getRoomCount = (catId: string) => rooms?.filter(r => r.category_id === catId).length || 0;
 
   return (
@@ -166,7 +205,15 @@ const RoomCategoriesPage = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {categories.map(cat => (
-            <Card key={cat.id} className="border-l-4" style={{ borderLeftColor: cat.color || '#6366f1' }}>
+            <Card key={cat.id} className="border-l-4 overflow-hidden flex flex-col" style={{ borderLeftColor: cat.color || '#6366f1' }}>
+              {(cat as any).images && ((cat as any).images as string[]).length > 0 && (
+                <div className="relative w-full h-40 bg-gray-100 overflow-hidden">
+                  <img src={((cat as any).images as string[])[0]} alt={cat.name} className="w-full h-full object-cover" />
+                  {((cat as any).images as string[]).length > 1 && (
+                    <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">+{((cat as any).images as string[]).length - 1}</div>
+                  )}
+                </div>
+              )}
               <CardHeader className="pb-2">
                 <div className="flex justify-between items-start">
                   <CardTitle className="text-lg">{cat.name}</CardTitle>
@@ -176,7 +223,7 @@ const RoomCategoriesPage = () => {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-3 flex-1">
                 {cat.description && <p className="text-sm text-muted-foreground">{cat.description}</p>}
                 <div className="space-y-2">
                   {cat.enable_day_pricing && <div><p className="text-xs text-muted-foreground">Prix/jour</p><p className="text-lg font-bold">{formatFCFA(cat.price_per_night)}</p></div>}
@@ -220,6 +267,32 @@ const RoomCategoriesPage = () => {
           <div className="space-y-5">
             <div><Label className="font-medium">Nom *</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="mt-1" /></div>
             <div><Label className="font-medium">Description</Label><Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="mt-1" /></div>
+
+            {/* Image Upload */}
+            <div className="border-2 rounded-lg p-4 space-y-3 bg-blue-50">
+              <Label className="font-bold text-base block">🖼️ Images de la catégorie</Label>
+              <div className="flex items-center justify-center border-2 border-dashed border-blue-300 rounded-lg p-6 bg-white hover:bg-blue-50 cursor-pointer">
+                <label className="flex flex-col items-center cursor-pointer w-full">
+                  <Upload className="h-8 w-8 text-blue-500 mb-2" />
+                  <span className="text-sm font-medium text-blue-600">Cliquez pour importer</span>
+                  <span className="text-xs text-muted-foreground mt-1">ou glissez-déposez</span>
+                  <input type="file" multiple accept="image/*" onChange={handleImageUpload} disabled={uploadingImages} className="hidden" />
+                </label>
+              </div>
+              {form.images.length > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {form.images.map((img, idx) => (
+                    <div key={idx} className="relative group">
+                      <img src={img} alt={`Preview ${idx + 1}`} className="w-full h-24 object-cover rounded border border-blue-200" />
+                      <button onClick={() => removeImage(idx)} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {form.images.length === 0 && <p className="text-xs text-muted-foreground text-center">Aucune image importée</p>}
+            </div>
 
             {/* Pricing Options */}
             <div className="border-2 rounded-lg p-4 space-y-5 bg-slate-50">

@@ -52,12 +52,30 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, profile, loading } = useAuth();
   const { loading: hotelLoading } = useHotel();
 
-  if (loading || (user && !profile) || (profile?.hotel_id && hotelLoading)) {
-    return <div className="min-h-screen flex items-center justify-center"><p className="text-muted-foreground">Chargement...</p></div>;
+  if (loading || (user && !profile)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-muted-foreground">Chargement...</p>
+        </div>
+      </div>
+    );
   }
 
   if (!user) return <Navigate to="/login" replace />;
   if (profile && !profile.hotel_id && !profile.is_super_admin) return <Navigate to="/onboarding" replace />;
+
+  // Show loading while hotel context initializes for users with a hotel_id
+  if (profile?.hotel_id && hotelLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-muted-foreground">Initialisation de votre hôtel...</p>
+        </div>
+      </div>
+    );
+  }
+
   return <>{children}</>;
 };
 
