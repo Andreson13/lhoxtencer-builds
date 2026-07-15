@@ -1,3 +1,0 @@
-# SPA routing - serve index.html for all routes
-# Netlify automatically serves existing files, so we only need the catch-all
-/*  /index.html  200
